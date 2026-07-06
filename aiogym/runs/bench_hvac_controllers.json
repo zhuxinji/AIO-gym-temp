@@ -1,0 +1,3362 @@
+{
+  "created_at": "2026-07-03T07:11:13.585302+00:00",
+  "benchmark": "controller_benchmark",
+  "scenario": "hvac",
+  "objective": "economic",
+  "controllers": [
+    "pid",
+    "mpc"
+  ],
+  "metric": "profit",
+  "protocol": {
+    "scenario": "hvac",
+    "objective": "economic",
+    "reward_mode": "economic",
+    "action_mode": "actuator",
+    "control_dt": 0.5,
+    "episode_steps": 16,
+    "dynamic": true,
+    "randomize": true,
+    "randomize_setpoints": false,
+    "randomize_plant": true,
+    "plant_drift": true,
+    "integral_obs": false,
+    "terminate_on_runaway": false
+  },
+  "rows": [
+    {
+      "name": "PID",
+      "control_structure": "fixed_sp_pid",
+      "metric": "profit",
+      "profit": -476.53550251437053,
+      "profit_std": 0.0,
+      "kpi": 77.81903144346597,
+      "return": -14.296065075431116,
+      "track": 35.48954969045443,
+      "constraint": 0.0,
+      "episodes": 1,
+      "seed": 9000
+    },
+    {
+      "name": "MPC",
+      "control_structure": "fixed_sp_mpc",
+      "metric": "profit",
+      "profit": -491.7251588291292,
+      "profit_std": 0.0,
+      "kpi": 76.50191540217423,
+      "return": -14.751754764873876,
+      "track": 37.596935356521215,
+      "constraint": 0.0,
+      "episodes": 1,
+      "seed": 9000
+    }
+  ],
+  "results": [
+    {
+      "name": "PID",
+      "metric": "profit",
+      "episodes": 1,
+      "seed": 9000,
+      "kpi": 77.81903144346597,
+      "kpi_std": 0.0,
+      "profit": -476.53550251437053,
+      "profit_std": 0.0,
+      "return": -14.296065075431116,
+      "return_std": 0.0,
+      "track": 35.48954969045443,
+      "track_std": 0.0,
+      "constraint": 0.0,
+      "constraint_std": 0.0,
+      "prod": 0.0,
+      "prod_std": 0.0,
+      "protocol": {
+        "scenario": "hvac",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 16,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "PID",
+        "class": "PIDAgent",
+        "kind": "fixed_setpoint_pid",
+        "scenario": "hvac",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_pid",
+        "gains": {
+          "temp": [
+            0.18,
+            0.03,
+            0.0
+          ]
+        },
+        "pairing": {
+          "level": [],
+          "temp": [
+            [
+              0,
+              0,
+              false
+            ],
+            [
+              1,
+              1,
+              false
+            ]
+          ],
+          "demand_valve_index": null,
+          "holds": []
+        },
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      }
+    },
+    {
+      "name": "MPC",
+      "metric": "profit",
+      "episodes": 1,
+      "seed": 9000,
+      "kpi": 76.50191540217423,
+      "kpi_std": 0.0,
+      "profit": -491.7251588291292,
+      "profit_std": 0.0,
+      "return": -14.751754764873876,
+      "return_std": 0.0,
+      "track": 37.596935356521215,
+      "track_std": 0.0,
+      "constraint": 0.0,
+      "constraint_std": 0.0,
+      "prod": 0.0,
+      "prod_std": 0.0,
+      "protocol": {
+        "scenario": "hvac",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 16,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "MPC",
+        "class": "MPCAgent",
+        "kind": "successive_linearization_mpc",
+        "scenario": "hvac",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_mpc",
+        "Ts": 0.5,
+        "horizon": 40,
+        "move_supp": 0.8,
+        "du_max": 0.15,
+        "cv_scale_level": 0.1,
+        "cv_scale_temp": 12.0,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      }
+    }
+  ],
+  "rollouts": [
+    {
+      "name": "PID",
+      "seed": 9000,
+      "steps": 16,
+      "protocol": {
+        "scenario": "hvac",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 16,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "PID",
+        "class": "PIDAgent",
+        "kind": "fixed_setpoint_pid",
+        "scenario": "hvac",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_pid",
+        "gains": {
+          "temp": [
+            0.18,
+            0.03,
+            0.0
+          ]
+        },
+        "pairing": {
+          "level": [],
+          "temp": [
+            [
+              0,
+              0,
+              false
+            ],
+            [
+              1,
+              1,
+              false
+            ]
+          ],
+          "demand_valve_index": null,
+          "holds": []
+        },
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      },
+      "scorer": {
+        "score": 77.81903144346597,
+        "avg_temp_err": 11.09048427826701,
+        "avg_level_err_cm": 0.0,
+        "excess_kwh": 0.0,
+        "interlock_frac": 0.0,
+        "comp_temp": 22.18096855653402,
+        "comp_level": 0.0,
+        "comp_energy": 0.0,
+        "comp_safety": 0.0
+      },
+      "rollout": [
+        {
+          "step": 0,
+          "time": 0.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.440617561340332,
+            10.115249633789062,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.440617154714573,
+            10.115249721635893
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.440617154714573,
+              10.115249721635893
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9776225468114517,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.576982498168945,
+            10.24734115600586,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.576982172023337,
+            10.247340959179647
+          ],
+          "info": {
+            "track": 2.4175676868797016,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -32.58741822704839,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.75265904082035,
+              "temp_trip": -81.75265904082035,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.423017827976663,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.576982172023337,
+              10.247340959179647
+            ],
+            "plant_mult": {
+              "Kc": 0.7991317099717079,
+              "Ko": 0.7069648677197758,
+              "C": 1.150680717333858,
+              "Pmax": 1.004970048780686
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 1,
+          "time": 0.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.576982498168945,
+            10.24734115600586,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.576982172023337,
+            10.247340959179647
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.576982172023337,
+              10.247340959179647
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9663440161848068,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.71277904510498,
+            10.378841400146484,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.712778904213023,
+            10.378841229088648
+          ],
+          "info": {
+            "track": 2.3908379866698333,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -32.21146720616023,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.62115877091135,
+              "temp_trip": -81.62115877091135,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.287221095786977,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.712778904213023,
+              10.378841229088648
+            ],
+            "plant_mult": {
+              "Kc": 0.8076106435727488,
+              "Ko": 0.7207649450214453,
+              "C": 1.1530532140153016,
+              "Pmax": 1.0045683779589276
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 2,
+          "time": 1.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.71277904510498,
+            10.378841400146484,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.712778904213023,
+            10.378841229088648
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.712778904213023,
+              10.378841229088648
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.955115735404174,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.848006248474121,
+            10.509751319885254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.848006125762145,
+            10.50975176797495
+          ],
+          "info": {
+            "track": 2.3642242106262903,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.837191180139136,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.49024823202505,
+              "temp_trip": -81.49024823202505,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.151993874237855,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.848006125762145,
+              10.50975176797495
+            ],
+            "plant_mult": {
+              "Kc": 0.8158352091657585,
+              "Ko": 0.7341510200040646,
+              "C": 1.155354535796302,
+              "Pmax": 1.004178757261822
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 3,
+          "time": 1.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.848006248474121,
+            10.509751319885254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.848006125762145,
+            10.50975176797495
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.848006125762145,
+              10.50975176797495
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9439376358457889,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.98266315460205,
+            10.640073776245117,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.98266291809559,
+            10.640074012815566
+          ],
+          "info": {
+            "track": 2.337726306908884,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.4645878615263,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.35992598718444,
+              "temp_trip": -81.35992598718444,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.01733708190441,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.98266291809559,
+              10.640074012815566
+            ],
+            "plant_mult": {
+              "Kc": 0.8238130377909778,
+              "Ko": 0.7471355127372055,
+              "C": 1.1575868179238722,
+              "Pmax": 1.0038008251856294
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 4,
+          "time": 2.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.98266315460205,
+            10.640073776245117,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.98266291809559,
+            10.640074012815566
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.98266291809559,
+              10.640074012815566
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.932809630369974,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.116748809814453,
+            10.76980972290039,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.116748651051413,
+            10.76980958649433
+          ],
+          "info": {
+            "track": 2.3113441762454254,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.0936543456658,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.23019041350567,
+              "temp_trip": -81.23019041350567,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.883251348948587,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.116748651051413,
+              10.76980958649433
+            ],
+            "plant_mult": {
+              "Kc": 0.8315515315574407,
+              "Ko": 0.759730470688352,
+              "C": 1.1597521315876154,
+              "Pmax": 1.0034342310717226
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 5,
+          "time": 2.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.116748809814453,
+            10.76980972290039,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.116748651051413,
+            10.76980958649433
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.116748651051413,
+              10.76980958649433
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9217316145877167,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.250263214111328,
+            10.89896011352539,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.250262965336805,
+            10.89896028418536
+          ],
+          "info": {
+            "track": 2.2850776750477833,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.724387152923892,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.10103971581464,
+              "temp_trip": -81.10103971581464,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.749737034663195,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.250262965336805,
+              10.89896028418536
+            ],
+            "plant_mult": {
+              "Kc": 0.8390578705109095,
+              "Ko": 0.7719475799009642,
+              "C": 1.1618524858414463,
+              "Pmax": 1.003078634781233
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 6,
+          "time": 3.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.250263214111328,
+            10.89896011352539,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.250262965336805,
+            10.89896028418536
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.250262965336805,
+              10.89896028418536
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9107034680559756,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.38320541381836,
+            11.027527809143066,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.383205755918917,
+            11.027528060528752
+          ],
+          "info": {
+            "track": 2.2589266183552335,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.35678226853252,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.97247193947125,
+              "temp_trip": -80.97247193947125,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.616794244081083,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.383205755918917,
+              11.027528060528752
+            ],
+            "plant_mult": {
+              "Kc": 0.8463390192957744,
+              "Ko": 0.783798175837198,
+              "C": 1.1638898294676623,
+              "Pmax": 1.0027337063794581
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 7,
+          "time": 3.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.38320541381836,
+            11.027527809143066,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.383205755918917,
+            11.027528060528752
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.383205755918917,
+              11.027528060528752
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8997250554057475,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.51557731628418,
+            11.15551471710205,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.515577156299612,
+            11.155515017552442
+          ],
+          "info": {
+            "track": 2.2328907826147946,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.990835180191585,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.84448498244755,
+              "temp_trip": -80.84448498244755,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.484422843700388,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.515577156299612,
+              11.155515017552442
+            ],
+            "plant_mult": {
+              "Kc": 0.8534017336170933,
+              "Ko": 0.7952932538953448,
+              "C": 1.1658660527850917,
+              "Pmax": 1.0023991258297364
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 8,
+          "time": 4.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.51557731628418,
+            11.15551471710205,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.515577156299612,
+            11.155515017552442
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.515577156299612,
+              11.155515017552442
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8887962274066867,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.647377967834473,
+            11.282923698425293,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.647377523626368,
+            11.282923393296976
+          ],
+          "info": {
+            "track": 2.2069699083076655,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.626540913556227,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.71707660670302,
+              "temp_trip": -80.71707660670302,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.352622476373632,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.647377523626368,
+              11.282923393296976
+            ],
+            "plant_mult": {
+              "Kc": 0.8602525665087726,
+              "Ko": 0.8064434796117471,
+              "C": 1.1677829894029983,
+              "Pmax": 1.0020745826965065
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 9,
+          "time": 4.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.647377967834473,
+            11.282923698425293,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.647377523626368,
+            11.282923393296976
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.647377523626368,
+              11.282923393296976
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.877916821971831,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.778607368469238,
+            11.40975570678711,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.778607424594195,
+            11.409755551102748
+          ],
+          "info": {
+            "track": 2.1811637024303057,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.2638940657277,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.59024444889725,
+              "temp_trip": -80.59024444889725,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.221392575405805,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.778607424594195,
+              11.409755551102748
+            ],
+            "plant_mult": {
+              "Kc": 0.8668978744137015,
+              "Ko": 0.8172591985566574,
+              "C": 1.1696424179223677,
+              "Pmax": 1.0017597758572734
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 10,
+          "time": 5.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.778607368469238,
+            11.40975570678711,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.778607424594195,
+            11.409755551102748
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.778607424594195,
+              11.409755551102748
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.86708666510577,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.90926742553711,
+            11.53601360321045,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.909267622096287,
+            11.53601396952178
+          ],
+          "info": {
+            "track": 2.155471840838193,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -28.902888836859002,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.46398603047822,
+              "temp_trip": -80.46398603047822,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.090732377903713,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.909267622096287,
+              11.53601396952178
+            ],
+            "plant_mult": {
+              "Kc": 0.8733438230814825,
+              "Ko": 0.8277504459332204,
+              "C": 1.171446063586156,
+              "Pmax": 1.0014544132232173
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 11,
+          "time": 5.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.90926742553711,
+            11.53601360321045,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.909267622096287,
+            11.53601396952178
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.909267622096287,
+              11.53601396952178
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8548981571490364,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            11.050736427307129,
+            11.683833122253418,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            11.050736753194958,
+            11.683833414834568
+          ],
+          "info": {
+            "track": 2.1265429831970475,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -28.496605238301214,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.31616658516543,
+              "temp_trip": -80.31616658516543,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 8.949263246805042,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              11.050736753194958,
+              11.683833414834568
+            ],
+            "plant_mult": {
+              "Kc": 0.8795963932892301,
+              "Ko": 0.8379269558884865,
+              "C": 1.1731955998800307,
+              "Pmax": 1.0011582114681827
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 12,
+          "time": 6.0,
+          "obs": [
+            0.0,
+            0.0,
+            11.050736427307129,
+            11.683833122253418,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            11.050736753194958,
+            11.683833414834568
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              11.050736753194958,
+              11.683833414834568
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8427940904639627,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            11.19126033782959,
+            11.830615043640137,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            11.191260724290439,
+            11.830614933502057
+          ],
+          "info": {
+            "track": 2.0978124342207503,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -28.093136348798758,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.16938506649794,
+              "temp_trip": -80.16938506649794,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 8.808739275709561,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              11.191260724290439,
+              11.830614933502057
+            ],
+            "plant_mult": {
+              "Kc": 0.8856613863907453,
+              "Ko": 0.8477981705450947,
+              "C": 1.1748926500850891,
+              "Pmax": 1.0008708957657992
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 13,
+          "time": 6.5,
+          "obs": [
+            0.0,
+            0.0,
+            11.19126033782959,
+            11.830615043640137,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            11.191260724290439,
+            11.830614933502057
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              11.191260724290439,
+              11.830614933502057
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8307731969758158,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            11.330853462219238,
+            11.976373672485352,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            11.330853418947994,
+            11.976374011619953
+          ],
+          "info": {
+            "track": 2.0692772569432054,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -27.69243989919386,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.02362598838005,
+              "temp_trip": -80.02362598838005,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 8.669146581052006,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              11.330853418947994,
+              11.976374011619953
+            ],
+            "plant_mult": {
+              "Kc": 0.8915444296992151,
+              "Ko": 0.8573732487620045,
+              "C": 1.1765387887839958,
+              "Pmax": 1.0005921995344873
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 14,
+          "time": 7.0,
+          "obs": [
+            0.0,
+            0.0,
+            11.330853462219238,
+            11.976373672485352,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            11.330853418947994,
+            11.976374011619953
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              11.330853418947994,
+              11.976374011619953
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8188342333070815,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            11.469528198242188,
+            12.121126174926758,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            11.46952845052745,
+            12.1211258421382
+          ],
+          "info": {
+            "track": 2.0409345707334348,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -27.294474443569385,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -67.8788741578618,
+              "temp_trip": -79.8788741578618,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 8.53047154947255,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              11.46952845052745,
+              12.1211258421382
+            ],
+            "plant_mult": {
+              "Kc": 0.8972509817084308,
+              "Ko": 0.866661074632407,
+              "C": 1.1781355433219352,
+              "Pmax": 1.0003218641901148
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 15,
+          "time": 7.5,
+          "obs": [
+            0.0,
+            0.0,
+            11.469528198242188,
+            12.121126174926758,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            11.46952845052745,
+            12.1211258421382
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              11.46952845052745,
+              12.1211258421382
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8069759803852967,
+          "terminated": false,
+          "truncated": true,
+          "next_obs": [
+            0.0,
+            0.0,
+            11.607298851013184,
+            12.264884948730469,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            11.60729916659608,
+            12.264885329045121
+          ],
+          "info": {
+            "track": 2.01278155043588,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -26.89919934617656,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -67.73511467095489,
+              "temp_trip": -79.73511467095489,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 8.39270083340392,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              11.60729916659608,
+              12.264885329045121
+            ],
+            "plant_mult": {
+              "Kc": 0.90278633715737,
+              "Ko": 0.8756702657266976,
+              "C": 1.1796843952237364,
+              "Pmax": 1.0000596389060734
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "MPC",
+      "seed": 9000,
+      "steps": 16,
+      "protocol": {
+        "scenario": "hvac",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 16,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "MPC",
+        "class": "MPCAgent",
+        "kind": "successive_linearization_mpc",
+        "scenario": "hvac",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_mpc",
+        "Ts": 0.5,
+        "horizon": 40,
+        "move_supp": 0.8,
+        "du_max": 0.15,
+        "cv_scale_level": 0.1,
+        "cv_scale_temp": 12.0,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      },
+      "scorer": {
+        "score": 76.50191540217423,
+        "avg_temp_err": 11.749042298912881,
+        "avg_level_err_cm": 0.0,
+        "excess_kwh": 0.0,
+        "interlock_frac": 0.0,
+        "comp_temp": 23.498084597825763,
+        "comp_level": 0.0,
+        "comp_energy": 0.0,
+        "comp_safety": 0.0
+      },
+      "rollout": [
+        {
+          "step": 0,
+          "time": 0.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.440617561340332,
+            10.115249633789062,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.440617154714573,
+            10.115249721635893
+          ],
+          "action": [
+            0.15000000596046448,
+            0.15000000596046448
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.440617154714573,
+              10.115249721635893
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.957235361411851,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.35452938079834,
+            10.024888038635254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.354529176194484,
+            10.024887963350798
+          ],
+          "info": {
+            "track": 2.4620582860454716,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.907845380395035,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.97511203664921,
+              "temp_trip": -81.97511203664921,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.645470823805516,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.354529176194484,
+              10.024887963350798
+            ],
+            "plant_mult": {
+              "Kc": 0.7991317099717079,
+              "Ko": 0.7069648677197758,
+              "C": 1.150680717333858,
+              "Pmax": 1.004970048780686
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 1,
+          "time": 0.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.35452938079834,
+            10.024888038635254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.354529176194484,
+            10.024887963350798
+          ],
+          "action": [
+            0.30000001192092896,
+            0.30000001192092896
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.354529176194484,
+              10.024887963350798
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9222214810844773,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.308103561401367,
+            9.974165916442871,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.308103843810914,
+            9.974166168686535
+          ],
+          "info": {
+            "track": 2.471772998750255,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.740716036149244,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -70.02583383131346,
+              "temp_trip": -82.02583383131346,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.691896156189086,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.308103843810914,
+              9.974166168686535
+            ],
+            "plant_mult": {
+              "Kc": 0.8076106435727488,
+              "Ko": 0.7207649450214453,
+              "C": 1.1530532140153016,
+              "Pmax": 1.0045683779589276
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 2,
+          "time": 1.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.308103561401367,
+            9.974165916442871,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.308103843810914,
+            9.974166168686535
+          ],
+          "action": [
+            0.44999998807907104,
+            0.44999998807907104
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.308103843810914,
+              9.974166168686535
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8839322357723441,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.301054954528809,
+            9.962800025939941,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.301054845852953,
+            9.962800488065756
+          ],
+          "info": {
+            "track": 2.4736144666081294,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.46440785907814,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -70.03719951193425,
+              "temp_trip": -82.03719951193425,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.698945154147047,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.301054845852953,
+              9.962800488065756
+            ],
+            "plant_mult": {
+              "Kc": 0.8158352091657585,
+              "Ko": 0.7341510200040646,
+              "C": 1.155354535796302,
+              "Pmax": 1.004178757261822
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 3,
+          "time": 1.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.301054954528809,
+            9.962800025939941,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.301054845852953,
+            9.962800488065756
+          ],
+          "action": [
+            0.6000000238418579,
+            0.6000000238418579
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.301054845852953,
+              9.962800488065756
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8944267113849762,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.333101272583008,
+            9.99051284790039,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.333101740820169,
+            9.990512835540146
+          ],
+          "info": {
+            "track": 2.4676385423639684,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.81422371283254,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -70.00948716445986,
+              "temp_trip": -82.00948716445986,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.666898259179831,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.333101740820169,
+              9.990512835540146
+            ],
+            "plant_mult": {
+              "Kc": 0.8238130377909778,
+              "Ko": 0.7471355127372055,
+              "C": 1.1575868179238722,
+              "Pmax": 1.0038008251856294
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 4,
+          "time": 2.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.333101272583008,
+            9.99051284790039,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.333101740820169,
+            9.990512835540146
+          ],
+          "action": [
+            0.75,
+            0.75
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.333101740820169,
+              9.990512835540146
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9276605194817432,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.403969764709473,
+            10.05703067779541,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.403969754798831,
+            10.057030690241747
+          ],
+          "info": {
+            "track": 2.453899955495942,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.92201731605811,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.94296930975825,
+              "temp_trip": -81.94296930975825,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.596030245201169,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.403969754798831,
+              10.057030690241747
+            ],
+            "plant_mult": {
+              "Kc": 0.8315515315574407,
+              "Ko": 0.759730470688352,
+              "C": 1.1597521315876154,
+              "Pmax": 1.0034342310717226
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 5,
+          "time": 2.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.403969764709473,
+            10.05703067779541,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.403969754798831,
+            10.057030690241747
+          ],
+          "action": [
+            0.8999999761581421,
+            0.8999999761581421
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.403969754798831,
+              10.057030690241747
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9576291659150331,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.513389587402344,
+            10.162087440490723,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.513389682721561,
+            10.162087001570107
+          ],
+          "info": {
+            "track": 2.4324523315708335,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.92097219716777,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.83791299842989,
+              "temp_trip": -81.83791299842989,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.486610317278439,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.513389682721561,
+              10.162087001570107
+            ],
+            "plant_mult": {
+              "Kc": 0.8390578705109095,
+              "Ko": 0.7719475799009642,
+              "C": 1.1618524858414463,
+              "Pmax": 1.003078634781233
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 6,
+          "time": 3.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.513389587402344,
+            10.162087440490723,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.513389682721561,
+            10.162087001570107
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.513389682721561,
+              10.162087001570107
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9724447077726451,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.648191452026367,
+            10.292512893676758,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.648190997387138,
+            10.29251330199697
+          ],
+          "info": {
+            "track": 2.4059295700615895,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -32.414823592421506,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.70748669800304,
+              "temp_trip": -81.70748669800304,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.351809002612862,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.648190997387138,
+              10.29251330199697
+            ],
+            "plant_mult": {
+              "Kc": 0.8463390192957744,
+              "Ko": 0.783798175837198,
+              "C": 1.1638898294676623,
+              "Pmax": 1.0027337063794581
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 7,
+          "time": 3.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.648191452026367,
+            10.292512893676758,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.648190997387138,
+            10.29251330199697
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.648190997387138,
+              10.29251330199697
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9613085594582716,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.782440185546875,
+            10.422378540039062,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.782440203293374,
+            10.422378064546203
+          ],
+          "info": {
+            "track": 2.3795181732160424,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -32.043618648609055,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.57762193545379,
+              "temp_trip": -81.57762193545379,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.217559796706626,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.782440203293374,
+              10.422378064546203
+            ],
+            "plant_mult": {
+              "Kc": 0.8534017336170933,
+              "Ko": 0.7952932538953448,
+              "C": 1.1658660527850917,
+              "Pmax": 1.0023991258297364
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 8,
+          "time": 4.0,
+          "obs": [
+            0.0,
+            0.0,
+            9.782440185546875,
+            10.422378540039062,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.782440203293374,
+            10.422378064546203
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.782440203293374,
+              10.422378064546203
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9502204573306878,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            9.916136741638184,
+            10.551682472229004,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            9.916136691197785,
+            10.551682560868391
+          ],
+          "info": {
+            "track": 2.353218074793382,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.674015244356262,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.44831743913161,
+              "temp_trip": -81.44831743913161,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 10.083863308802215,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              9.916136691197785,
+              10.551682560868391
+            ],
+            "plant_mult": {
+              "Kc": 0.8602525665087726,
+              "Ko": 0.8064434796117471,
+              "C": 1.1677829894029983,
+              "Pmax": 1.0020745826965065
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 9,
+          "time": 4.5,
+          "obs": [
+            0.0,
+            0.0,
+            9.916136741638184,
+            10.551682472229004,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            9.916136691197785,
+            10.551682560868391
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              9.916136691197785,
+              10.551682560868391
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9391803174911338,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.049280166625977,
+            10.680428504943848,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.049280096983445,
+            10.680428223492001
+          ],
+          "info": {
+            "track": 2.3270291679524555,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -31.306010583037796,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.319571776508,
+              "temp_trip": -81.319571776508,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.950719903016555,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.049280096983445,
+              10.680428223492001
+            ],
+            "plant_mult": {
+              "Kc": 0.8668978744137015,
+              "Ko": 0.8172591985566574,
+              "C": 1.1696424179223677,
+              "Pmax": 1.0017597758572734
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 10,
+          "time": 5.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.049280166625977,
+            10.680428504943848,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.049280096983445,
+            10.680428223492001
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.049280096983445,
+              10.680428223492001
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9281880412566873,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.181870460510254,
+            10.808616638183594,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "next_state": [
+            10.181870286966316,
+            10.808616634391816
+          ],
+          "info": {
+            "track": 2.300951307864187,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.93960137522291,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.19138336560819,
+              "temp_trip": -81.19138336560819,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.818129713033684,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.181870286966316,
+              10.808616634391816
+            ],
+            "plant_mult": {
+              "Kc": 0.8733438230814825,
+              "Ko": 0.8277504459332204,
+              "C": 1.171446063586156,
+              "Pmax": 1.0014544132232173
+            },
+            "hvac_heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 11,
+          "time": 5.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.181870460510254,
+            10.808616638183594,
+            22.0,
+            22.0,
+            8.693034172058105,
+            11.243807792663574
+          ],
+          "state": [
+            10.181870286966316,
+            10.808616634391816
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.181870286966316,
+              10.808616634391816
+            ],
+            "t_amb": 11.243807799885705,
+            "heat_load": [
+              0.0,
+              0.0
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9158361015128477,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.325284957885742,
+            10.958381652832031,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            10.325285034578156,
+            10.958381696217765
+          ],
+          "info": {
+            "track": 2.2716333269204076,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.527870050428255,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -69.04161830378223,
+              "temp_trip": -81.04161830378223,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.674714965421844,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.325285034578156,
+              10.958381696217765
+            ],
+            "plant_mult": {
+              "Kc": 0.8795963932892301,
+              "Ko": 0.8379269558884865,
+              "C": 1.1731955998800307,
+              "Pmax": 1.0011582114681827
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 12,
+          "time": 6.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.325284957885742,
+            10.958381652832031,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            10.325285034578156,
+            10.958381696217765
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.325285034578156,
+              10.958381696217765
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.9035673605031656,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.467769622802734,
+            11.107123374938965,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            10.467769414299928,
+            11.107123623511548
+          ],
+          "info": {
+            "track": 2.2425106962188526,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -30.118912016772185,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.89287637648846,
+              "temp_trip": -80.89287637648846,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.532230585700072,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.467769414299928,
+              11.107123623511548
+            ],
+            "plant_mult": {
+              "Kc": 0.8856613863907453,
+              "Ko": 0.8477981705450947,
+              "C": 1.1748926500850891,
+              "Pmax": 1.0008708957657992
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 13,
+          "time": 6.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.467769622802734,
+            11.107123374938965,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            10.467769414299928,
+            11.107123623511548
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.467769414299928,
+              11.107123623511548
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.891380617469924,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.609336853027344,
+            11.254857063293457,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            10.609336508303853,
+            11.254857100975801
+          ],
+          "info": {
+            "track": 2.2135806390720347,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.71268724899747,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.7451428990242,
+              "temp_trip": -80.7451428990242,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.390663491696147,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.609336508303853,
+              11.254857100975801
+            ],
+            "plant_mult": {
+              "Kc": 0.8915444296992151,
+              "Ko": 0.8573732487620045,
+              "C": 1.1765387887839958,
+              "Pmax": 1.0005921995344873
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 14,
+          "time": 7.0,
+          "obs": [
+            0.0,
+            0.0,
+            10.609336853027344,
+            11.254857063293457,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            10.609336508303853,
+            11.254857100975801
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.609336508303853,
+              11.254857100975801
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8792746938839517,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.749999046325684,
+            11.401597023010254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            10.749999157945666,
+            11.401596549556407
+          ],
+          "info": {
+            "track": 2.1848404292497925,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -29.30915646279839,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.5984034504436,
+              "temp_trip": -80.5984034504436,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.250000842054334,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.749999157945666,
+              11.401596549556407
+            ],
+            "plant_mult": {
+              "Kc": 0.8972509817084308,
+              "Ko": 0.866661074632407,
+              "C": 1.1781355433219352,
+              "Pmax": 1.0003218641901148
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        },
+        {
+          "step": 15,
+          "time": 7.5,
+          "obs": [
+            0.0,
+            0.0,
+            10.749999046325684,
+            11.401597023010254,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "state": [
+            10.749999157945666,
+            11.401596549556407
+          ],
+          "action": [
+            1.0,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0,
+              0.0
+            ],
+            "t_sp": [
+              22.0,
+              22.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              10.749999157945666,
+              11.401596549556407
+            ],
+            "t_amb": 0.0,
+            "heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0,
+            "t_cold": 8.693034324629362,
+            "extra_outflow": 0.0
+          },
+          "reward": -0.8672484331441352,
+          "terminated": false,
+          "truncated": true,
+          "next_obs": [
+            0.0,
+            0.0,
+            10.889769554138184,
+            11.547356605529785,
+            22.0,
+            22.0,
+            8.693034172058105,
+            0.0
+          ],
+          "next_state": [
+            10.889769967086103,
+            11.54735612953513
+          ],
+          "info": {
+            "track": 2.1562873903378765,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -28.90828110480451,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -68.45264387046487,
+              "temp_trip": -80.45264387046487,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "hvac_comfort_low": 9.110230032913897,
+              "hvac_comfort_high": 0.0
+            },
+            "cons_violated": true,
+            "levels": [],
+            "temps": [
+              10.889769967086103,
+              11.54735612953513
+            ],
+            "plant_mult": {
+              "Kc": 0.90278633715737,
+              "Ko": 0.8756702657266976,
+              "C": 1.1796843952237364,
+              "Pmax": 1.0000596389060734
+            },
+            "hvac_heat_load": [
+              584.1949043954562,
+              736.1348404422091
+            ],
+            "hvac_efficiency": 1.0
+          }
+        }
+      ]
+    }
+  ]
+}

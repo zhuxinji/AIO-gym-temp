@@ -1,0 +1,14 @@
+{
+  "name": "SB3-SAC",
+  "action_mode": "setpoint",
+  "control_structure": "sb3_policy",
+  "parameters": {
+    "algo": "sac"
+  },
+  "scenarios": {
+    "cascade": {},
+    "quadruple": {},
+    "cstr": {},
+    "hvac": {}
+  }
+}

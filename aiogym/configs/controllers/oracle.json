@@ -1,0 +1,25 @@
+{
+  "name": "NMPC-oracle",
+  "action_mode": "actuator",
+  "control_structure": "nmpc_oracle",
+  "parameters": {
+    "horizon": 12,
+    "control_dt": 0.5,
+    "mode": "economic",
+    "du_max": 0.4,
+    "q_temp": 1.0,
+    "q_level": 50.0,
+    "r_move": 0.05,
+    "nsub_max": 6,
+    "ipopt_max_iter": 80,
+    "ipopt_tol": 0.0001,
+    "warm_start": false,
+    "solve_every": 1
+  },
+  "scenarios": {
+    "cascade": {},
+    "quadruple": {},
+    "cstr": {},
+    "hvac": {}
+  }
+}

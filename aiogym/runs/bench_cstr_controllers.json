@@ -1,0 +1,6474 @@
+{
+  "created_at": "2026-07-03T07:11:04.861347+00:00",
+  "benchmark": "controller_benchmark",
+  "scenario": "cstr",
+  "objective": "economic",
+  "controllers": [
+    "pid",
+    "mpc",
+    "cstr_grid_mpc"
+  ],
+  "metric": "profit",
+  "protocol": {
+    "scenario": "cstr",
+    "objective": "economic",
+    "reward_mode": "economic",
+    "action_mode": "actuator",
+    "control_dt": 0.5,
+    "episode_steps": 24,
+    "dynamic": true,
+    "randomize": true,
+    "randomize_setpoints": false,
+    "randomize_plant": true,
+    "plant_drift": true,
+    "integral_obs": false,
+    "terminate_on_runaway": false
+  },
+  "rows": [
+    {
+      "name": "PID",
+      "control_structure": "fixed_sp_pid",
+      "metric": "profit",
+      "profit": -251.50145361584927,
+      "profit_std": 0.0,
+      "kpi": 83.35342796661203,
+      "return": -7.545043608475477,
+      "track": 19.97588644006556,
+      "constraint": 0.0,
+      "episodes": 1,
+      "seed": 9000
+    },
+    {
+      "name": "MPC",
+      "control_structure": "fixed_sp_mpc",
+      "metric": "profit",
+      "profit": -391.91199281698977,
+      "profit_std": 0.0,
+      "kpi": 92.09714733694335,
+      "return": -11.757359784509688,
+      "track": 9.483423195667978,
+      "constraint": 0.0,
+      "episodes": 1,
+      "seed": 9000
+    },
+    {
+      "name": "FastGrid-CSTR-MPC",
+      "control_structure": "cstr_grid_mpc",
+      "metric": "profit",
+      "profit": -418.4517983348294,
+      "profit_std": 0.0,
+      "kpi": 95.20221221825668,
+      "return": -12.553553950044881,
+      "track": 5.757345338091986,
+      "constraint": 0.0,
+      "episodes": 1,
+      "seed": 9000
+    }
+  ],
+  "results": [
+    {
+      "name": "PID",
+      "metric": "profit",
+      "episodes": 1,
+      "seed": 9000,
+      "kpi": 83.35342796661203,
+      "kpi_std": 0.0,
+      "profit": -251.50145361584927,
+      "profit_std": 0.0,
+      "return": -7.545043608475477,
+      "return_std": 0.0,
+      "track": 19.97588644006556,
+      "track_std": 0.0,
+      "constraint": 0.0,
+      "constraint_std": 0.0,
+      "prod": 0.14772455588797176,
+      "prod_std": 0.0,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "PID",
+        "class": "PIDAgent",
+        "kind": "fixed_setpoint_pid",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_pid",
+        "gains": {
+          "level_pump": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "level_valve": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "temp": [
+            0.08,
+            0.02,
+            0.0
+          ]
+        },
+        "pairing": {
+          "level": [],
+          "temp": [
+            [
+              0,
+              0,
+              true
+            ]
+          ],
+          "demand_valve_index": null,
+          "holds": [
+            [
+              "pump",
+              0,
+              0.5
+            ]
+          ]
+        },
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      }
+    },
+    {
+      "name": "MPC",
+      "metric": "profit",
+      "episodes": 1,
+      "seed": 9000,
+      "kpi": 92.09714733694335,
+      "kpi_std": 0.0,
+      "profit": -391.91199281698977,
+      "profit_std": 0.0,
+      "return": -11.757359784509688,
+      "return_std": 0.0,
+      "track": 9.483423195667978,
+      "track_std": 0.0,
+      "constraint": 0.0,
+      "constraint_std": 0.0,
+      "prod": 0.16457301798919272,
+      "prod_std": 0.0,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "MPC",
+        "class": "MPCAgent",
+        "kind": "successive_linearization_mpc",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_mpc",
+        "Ts": 0.5,
+        "horizon": 40,
+        "move_supp": 0.8,
+        "du_max": 0.15,
+        "cv_scale_level": 0.1,
+        "cv_scale_temp": 12.0,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      }
+    },
+    {
+      "name": "FastGrid-CSTR-MPC",
+      "metric": "profit",
+      "episodes": 1,
+      "seed": 9000,
+      "kpi": 95.20221221825668,
+      "kpi_std": 0.0,
+      "profit": -418.4517983348294,
+      "profit_std": 0.0,
+      "return": -12.553553950044881,
+      "return_std": 0.0,
+      "track": 5.757345338091986,
+      "track_std": 0.0,
+      "constraint": 0.0,
+      "constraint_std": 0.0,
+      "prod": 0.14020911201822275,
+      "prod_std": 0.0,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "FastGrid-CSTR-MPC",
+        "class": "FastGridCSTRMPC",
+        "kind": "nonlinear_grid_mpc",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "cstr_grid_mpc",
+        "horizon": 4,
+        "grid": 51,
+        "r_move": 0.0,
+        "pump": 0.5,
+        "nsub": 2,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      }
+    }
+  ],
+  "rollouts": [
+    {
+      "name": "PID",
+      "seed": 9000,
+      "steps": 24,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "PID",
+        "class": "PIDAgent",
+        "kind": "fixed_setpoint_pid",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_pid",
+        "gains": {
+          "level_pump": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "level_valve": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "temp": [
+            0.08,
+            0.02,
+            0.0
+          ]
+        },
+        "pairing": {
+          "level": [],
+          "temp": [
+            [
+              0,
+              0,
+              true
+            ]
+          ],
+          "demand_valve_index": null,
+          "holds": [
+            [
+              "pump",
+              0,
+              0.5
+            ]
+          ]
+        },
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      },
+      "scorer": {
+        "score": 83.35342796661203,
+        "avg_temp_err": 8.323286016693983,
+        "avg_level_err_cm": 0.0,
+        "excess_kwh": 0.0,
+        "interlock_frac": 0.0,
+        "comp_temp": 16.646572033387965,
+        "comp_level": 0.0,
+        "comp_energy": 0.0,
+        "comp_safety": 0.0
+      },
+      "rollout": [
+        {
+          "step": 0,
+          "time": 0.0,
+          "obs": [
+            0.0,
+            50.6652946472168,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5205444502912738,
+            50.665296342219776
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              50.665296342219776
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5205444502912738
+            ]
+          },
+          "reward": 0.13091966130568242,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            51.501686096191406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5151123655345096,
+            51.501686878143495
+          ],
+          "info": {
+            "track": 0.8498313121856504,
+            "constraint": 0.0,
+            "prod": 0.004848876344654905,
+            "profit": 4.363988710189414,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -28.498313121856505,
+              "temp_trip": -40.498313121856505,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              51.501686878143495
+            ],
+            "plant_mult": {
+              "Uc": 0.7783609430480396,
+              "k0": 0.7202965535373199,
+              "Hr": 1.072396155399515
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.48488763446549044
+          }
+        },
+        {
+          "step": 1,
+          "time": 0.5,
+          "obs": [
+            0.0,
+            51.501686096191406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5151123655345096,
+            51.501686878143495
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              51.501686878143495
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5151123655345096
+            ]
+          },
+          "reward": 0.13251519712839194,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            52.39714813232422,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5092029735985484,
+            52.39714735353829
+          ],
+          "info": {
+            "track": 0.7602852646461713,
+            "constraint": 0.0,
+            "prod": 0.004907970264014516,
+            "profit": 4.417173237613064,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -27.602852646461713,
+              "temp_trip": -39.60285264646171,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              52.39714735353829
+            ],
+            "plant_mult": {
+              "Uc": 0.7901654681557485,
+              "k0": 0.7319133382938845,
+              "Hr": 1.0707265265708452
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.4907970264014516
+          }
+        },
+        {
+          "step": 2,
+          "time": 1.0,
+          "obs": [
+            0.0,
+            52.39714813232422,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5092029735985484,
+            52.39714735353829
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              52.39714735353829
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5092029735985484
+            ]
+          },
+          "reward": 0.1342524060691779,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            53.35762023925781,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5027688664104522,
+            53.3576216521361
+          ],
+          "info": {
+            "track": 0.6642378347863896,
+            "constraint": 0.0,
+            "prod": 0.004972311335895478,
+            "profit": 4.47508020230593,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -26.642378347863897,
+              "temp_trip": -38.6423783478639,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              53.3576216521361
+            ],
+            "plant_mult": {
+              "Uc": 0.8016158575102261,
+              "k0": 0.7431816195077521,
+              "Hr": 1.0691069866070355
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.49723113358954785
+          }
+        },
+        {
+          "step": 3,
+          "time": 1.5,
+          "obs": [
+            0.0,
+            53.35762023925781,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5027688664104522,
+            53.3576216521361
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              53.3576216521361
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5027688664104522
+            ]
+          },
+          "reward": 0.13614617218239464,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            54.39002227783203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.49575491784298276,
+            54.39002227278096
+          ],
+          "info": {
+            "track": 0.560997772721904,
+            "constraint": 0.0,
+            "prod": 0.0050424508215701725,
+            "profit": 4.538205739413155,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -25.60997772721904,
+              "temp_trip": -37.60997772721904,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              54.39002227278096
+            ],
+            "plant_mult": {
+              "Uc": 0.8127227351840695,
+              "k0": 0.7541118522852036,
+              "Hr": 1.0675360328421402
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5042450821570172
+          }
+        },
+        {
+          "step": 4,
+          "time": 2.0,
+          "obs": [
+            0.0,
+            54.39002227783203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.49575491784298276,
+            54.39002227278096
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              54.39002227278096
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.49575491784298276
+            ]
+          },
+          "reward": 0.13821389357090158,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            55.5024299621582,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.48809669047814236,
+            55.502429792456844
+          ],
+          "info": {
+            "track": 0.44975702075431556,
+            "constraint": 0.0,
+            "prod": 0.005119033095218577,
+            "profit": 4.60712978569672,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -24.497570207543156,
+              "temp_trip": -36.497570207543156,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              55.502429792456844
+            ],
+            "plant_mult": {
+              "Uc": 0.8234964065276975,
+              "k0": 0.7647141780793316,
+              "Hr": 1.0660122076901917
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5119033095218577
+          }
+        },
+        {
+          "step": 5,
+          "time": 2.5,
+          "obs": [
+            0.0,
+            55.5024299621582,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.48809669047814236,
+            55.502429792456844
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              55.502429792456844
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.48809669047814236
+            ]
+          },
+          "reward": 0.14047602204946738,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.704341888427734,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.47971843685382454,
+            56.70434306869894
+          ],
+          "info": {
+            "track": 0.32956569313010603,
+            "constraint": 0.0,
+            "prod": 0.005202815631461755,
+            "profit": 4.682534068315579,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.29565693130106,
+              "temp_trip": -35.29565693130106,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.70434306869894
+            ],
+            "plant_mult": {
+              "Uc": 0.8339468677310167,
+              "k0": 0.7749984340996358,
+              "Hr": 1.0645340972928017
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5202815631461755
+          }
+        },
+        {
+          "step": 6,
+          "time": 3.0,
+          "obs": [
+            0.0,
+            56.704341888427734,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.47971843685382454,
+            56.70434306869894
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.70434306869894
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.47971843685382454
+            ]
+          },
+          "reward": 0.14295674400480005,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.006996154785156,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4705305777599998,
+            58.00699484818288
+          ],
+          "info": {
+            "track": 0.19930051518171227,
+            "constraint": 0.0,
+            "prod": 0.005294694222400003,
+            "profit": 4.765224800160002,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.993005151817123,
+              "temp_trip": -33.99300515181712,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.00699484818288
+            ],
+            "plant_mult": {
+              "Uc": 0.8440838150982363,
+              "k0": 0.7849741624393308,
+              "Hr": 1.0631003302073334
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5294694222400003
+          }
+        },
+        {
+          "step": 7,
+          "time": 3.5,
+          "obs": [
+            0.0,
+            58.006996154785156,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4705305777599998,
+            58.00699484818288
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.00699484818288
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4705305777599998
+            ]
+          },
+          "reward": 0.14568484354928984,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            59.42375183105469,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4604265053730005,
+            59.42375177801185
+          ],
+          "info": {
+            "track": 0.05762482219881519,
+            "constraint": 0.0,
+            "prod": 0.005395734946269995,
+            "profit": 4.856161451642995,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -20.576248221988152,
+              "temp_trip": -32.57624822198815,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              59.42375177801185
+            ],
+            "plant_mult": {
+              "Uc": 0.8539166540444393,
+              "k0": 0.794650618928835,
+              "Hr": 1.061709576134429
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5395734946269994
+          }
+        },
+        {
+          "step": 8,
+          "time": 4.0,
+          "obs": [
+            0.0,
+            59.42375183105469,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4604265053730005,
+            59.42375177801185
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              59.42375177801185
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4604265053730005
+            ]
+          },
+          "reward": 0.14869480035973287,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            60.97062301635742,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4492785171861745,
+            60.97062301164872
+          ],
+          "info": {
+            "track": 0.09706230116487191,
+            "constraint": 0.0,
+            "prod": 0.005507214828138255,
+            "profit": 4.9564933453244295,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -19.02937698835128,
+              "temp_trip": -31.02937698835128,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              60.97062301164872
+            ],
+            "plant_mult": {
+              "Uc": 0.8634545078222562,
+              "k0": 0.8040367817236541,
+              "Hr": 1.0603605446837119
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5507214828138255
+          }
+        },
+        {
+          "step": 9,
+          "time": 4.5,
+          "obs": [
+            0.0,
+            60.97062301635742,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4492785171861745,
+            60.97062301164872
+          ],
+          "action": [
+            0.5,
+            0.0873560681939125
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              60.97062301164872
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4492785171861745
+            ]
+          },
+          "reward": 0.06815341299170914,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            62.562416076660156,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4369805983042031,
+            62.56241547010745
+          ],
+          "info": {
+            "track": 0.2562415470107453,
+            "constraint": 0.0,
+            "prod": 0.005630194016957969,
+            "profit": 2.2717804330569713,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -17.437584529892547,
+              "temp_trip": -29.437584529892547,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              62.56241547010745
+            ],
+            "plant_mult": {
+              "Uc": 0.8727062259867386,
+              "k0": 0.8131413596346286,
+              "Hr": 1.0590519841765162
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5630194016957969
+          }
+        },
+        {
+          "step": 10,
+          "time": 5.0,
+          "obs": [
+            0.0,
+            62.562416076660156,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4369805983042031,
+            62.56241547010745
+          ],
+          "action": [
+            0.5,
+            0.24032361805438995
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              62.56241547010745
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4369805983042031
+            ]
+          },
+          "reward": -0.07505751704441056,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            64.11761474609375,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4235068285636897,
+            64.11761566483632
+          ],
+          "info": {
+            "track": 0.41176156648363216,
+            "constraint": 0.0,
+            "prod": 0.0057649317143631034,
+            "profit": -2.5019172348136856,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -15.882384335163678,
+              "temp_trip": -27.882384335163678,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              64.11761566483632
+            ],
+            "plant_mult": {
+              "Uc": 0.8816803926062866,
+              "k0": 0.8219728002082739,
+              "Hr": 1.0577826804845365
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5764931714363103
+          }
+        },
+        {
+          "step": 11,
+          "time": 5.5,
+          "obs": [
+            0.0,
+            64.11761474609375,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4235068285636897,
+            64.11761566483632
+          ],
+          "action": [
+            0.5,
+            0.4059157967567444
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              64.11761566483632
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4235068285636897
+            ]
+          },
+          "reward": -0.23008402805777298,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            65.60137939453125,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.40890690063443846,
+            65.60137883279951
+          ],
+          "info": {
+            "track": 0.5601378832799512,
+            "constraint": 0.0,
+            "prod": 0.005910930993655615,
+            "profit": -7.669467601925766,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -14.398621167200488,
+              "temp_trip": -26.39862116720049,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              65.60137883279951
+            ],
+            "plant_mult": {
+              "Uc": 0.8903853342272481,
+              "k0": 0.8305392975647098,
+              "Hr": 1.056551455903316
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5910930993655615
+          }
+        },
+        {
+          "step": 12,
+          "time": 6.0,
+          "obs": [
+            0.0,
+            65.60137939453125,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.40890690063443846,
+            65.60137883279951
+          ],
+          "action": [
+            0.5,
+            0.5806306600570679
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              65.60137883279951
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.40890690063443846
+            ]
+          },
+          "reward": -0.39359535344745045,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            66.97438049316406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3932959992320938,
+            66.97438101834047
+          ],
+          "info": {
+            "track": 0.6974381018340466,
+            "constraint": 0.0,
+            "prod": 0.006067040007679062,
+            "profit": -13.119845114915016,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -13.025618981659534,
+              "temp_trip": -25.025618981659534,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              66.97438101834047
+            ],
+            "plant_mult": {
+              "Uc": 0.8988291275995808,
+              "k0": 0.8388488000004526,
+              "Hr": 1.0553571680595322
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6067040007679062
+          }
+        },
+        {
+          "step": 13,
+          "time": 6.5,
+          "obs": [
+            0.0,
+            66.97438049316406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3932959992320938,
+            66.97438101834047
+          ],
+          "action": [
+            0.5,
+            0.760214626789093
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              66.97438101834047
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3932959992320938
+            ]
+          },
+          "reward": -0.5615592262604051,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            68.19409942626953,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.37686364645509596,
+            68.19409635231807
+          ],
+          "info": {
+            "track": 0.819409635231807,
+            "constraint": 0.0,
+            "prod": 0.00623136353544904,
+            "profit": -18.71864087534684,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -11.80590364768193,
+              "temp_trip": -23.80590364768193,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              68.19409635231807
+            ],
+            "plant_mult": {
+              "Uc": 0.9070196071707435,
+              "k0": 0.8469090173631232,
+              "Hr": 1.0541987088510618
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.623136353544904
+          }
+        },
+        {
+          "step": 14,
+          "time": 7.0,
+          "obs": [
+            0.0,
+            68.19409942626953,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.37686364645509596,
+            68.19409635231807
+          ],
+          "action": [
+            0.5,
+            0.9397327899932861
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              68.19409635231807
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.37686364645509596
+            ]
+          },
+          "reward": -0.7293095977746463,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            69.2171859741211,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3598745162262655,
+            69.21718338870785
+          ],
+          "info": {
+            "track": 0.9217183388707852,
+            "constraint": 0.0,
+            "prod": 0.006401254837737345,
+            "profit": -24.310319925821545,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -10.782816611292148,
+              "temp_trip": -22.782816611292148,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              69.21718338870785
+            ],
+            "plant_mult": {
+              "Uc": 0.9149643723547712,
+              "k0": 0.8547274282049137,
+              "Hr": 1.0530750034188456
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6401254837737345
+          }
+        },
+        {
+          "step": 15,
+          "time": 7.5,
+          "obs": [
+            0.0,
+            69.2171859741211,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3598745162262655,
+            69.21718338870785
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              69.21718338870785
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3598745162262655
+            ]
+          },
+          "reward": -0.7824912974397888,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            70.16949462890625,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3425603608881067,
+            70.1694960059382
+          ],
+          "info": {
+            "track": 1.01694960059382,
+            "constraint": 0.0,
+            "prod": 0.006574396391118933,
+            "profit": -26.08304324799296,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -9.8305039940618,
+              "temp_trip": -21.8305039940618,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              70.1694960059382
+            ],
+            "plant_mult": {
+              "Uc": 0.9226707945832782,
+              "k0": 0.8623112867214504,
+              "Hr": 1.051985009149596
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6574396391118933
+          }
+        },
+        {
+          "step": 16,
+          "time": 8.0,
+          "obs": [
+            0.0,
+            70.16949462890625,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3425603608881067,
+            70.1694960059382
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              70.1694960059382
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3425603608881067
+            ]
+          },
+          "reward": -0.7777612308545577,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            71.11795806884766,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.32504159575762104,
+            71.11795978483094
+          ],
+          "info": {
+            "track": 1.1117959784830944,
+            "constraint": 0.0,
+            "prod": 0.00674958404242379,
+            "profit": -25.92537436181859,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -8.882040215169056,
+              "temp_trip": -20.882040215169056,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              71.11795978483094
+            ],
+            "plant_mult": {
+              "Uc": 0.9301460241449299,
+              "k0": 0.869667629482491,
+              "Hr": 1.0509277147084237
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.674958404242379
+          }
+        },
+        {
+          "step": 17,
+          "time": 8.5,
+          "obs": [
+            0.0,
+            71.11795806884766,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.32504159575762104,
+            71.11795978483094
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              71.11795978483094
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.32504159575762104
+            ]
+          },
+          "reward": -0.7730002047841842,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            72.05131530761719,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3074081658673492,
+            72.05131497682281
+          ],
+          "info": {
+            "track": 1.205131497682281,
+            "constraint": 0.0,
+            "prod": 0.006925918341326508,
+            "profit": -25.76667349280614,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -7.948685023177191,
+              "temp_trip": -19.94868502317719,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              72.05131497682281
+            ],
+            "plant_mult": {
+              "Uc": 0.9373969968197321,
+              "k0": 0.8768032819607003,
+              "Hr": 1.0499021391004866
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6925918341326508
+          }
+        },
+        {
+          "step": 18,
+          "time": 9.0,
+          "obs": [
+            0.0,
+            72.05131530761719,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.3074081658673492,
+            72.05131497682281
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              72.05131497682281
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3074081658673492
+            ]
+          },
+          "reward": -0.7682373163687031,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            72.95696258544922,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.289767838402604,
+            72.95696208684511
+          ],
+          "info": {
+            "track": 1.295696208684511,
+            "constraint": 0.0,
+            "prod": 0.00710232161597396,
+            "profit": -25.607910545623437,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -7.04303791315489,
+              "temp_trip": -19.04303791315489,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              72.95696208684511
+            ],
+            "plant_mult": {
+              "Uc": 0.9444304403142902,
+              "k0": 0.8837248648645635,
+              "Hr": 1.0489073307607877
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.710232161597396
+          }
+        },
+        {
+          "step": 19,
+          "time": 9.5,
+          "obs": [
+            0.0,
+            72.95696258544922,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.289767838402604,
+            72.95696208684511
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              72.95696208684511
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.289767838402604
+            ]
+          },
+          "reward": -0.7635062289417947,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            73.82025909423828,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.27224529237701733,
+            73.82025694673212
+          ],
+          "info": {
+            "track": 1.3820256946732115,
+            "constraint": 0.0,
+            "prod": 0.007277547076229827,
+            "profit": -25.450207631393155,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -6.1797430532678845,
+              "temp_trip": -18.179743053267885,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              73.82025694673212
+            ],
+            "plant_mult": {
+              "Uc": 0.9512528805040116,
+              "k0": 0.8904388002813107,
+              "Hr": 1.0479423666712797
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.7277547076229827
+          }
+        },
+        {
+          "step": 20,
+          "time": 10.0,
+          "obs": [
+            0.0,
+            73.82025909423828,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.27224529237701733,
+            73.82025694673212
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              73.82025694673212
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.27224529237701733
+            ]
+          },
+          "reward": -0.75884457537427,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            74.62512969970703,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.25497990879359256,
+            74.62513324496577
+          ],
+          "info": {
+            "track": 1.4625133244965767,
+            "constraint": 0.0,
+            "prod": 0.007450200912064074,
+            "profit": -25.294819179142333,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -5.374866755034233,
+              "temp_trip": -17.374866755034233,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              74.62513324496577
+            ],
+            "plant_mult": {
+              "Uc": 0.9578706474880413,
+              "k0": 0.8969513176355556,
+              "Hr": 1.047006351504457
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.7450200912064074
+          }
+        },
+        {
+          "step": 21,
+          "time": 10.5,
+          "obs": [
+            0.0,
+            74.62512969970703,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.25497990879359256,
+            74.62513324496577
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              74.62513324496577
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.25497990879359256
+            ]
+          },
+          "reward": -0.7542739268289712,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            75.47819519042969,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.23805158084804165,
+            75.47819776577656
+          ],
+          "info": {
+            "track": 1.5478197765776556,
+            "constraint": 0.0,
+            "prod": 0.007619484191519583,
+            "profit": -25.142464227632374,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -4.521802234223443,
+              "temp_trip": -16.521802234223443,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              75.47819776577656
+            ],
+            "plant_mult": {
+              "Uc": 0.9642898814625501,
+              "k0": 0.903268459469173,
+              "Hr": 1.046098416792639
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.7619484191519583
+          }
+        },
+        {
+          "step": 22,
+          "time": 11.0,
+          "obs": [
+            0.0,
+            75.47819519042969,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.23805158084804165,
+            75.47819776577656
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              75.47819776577656
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.23805158084804165
+            ]
+          },
+          "reward": -0.7498176299780842,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            76.25320434570312,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.22154677769660805,
+            76.25320752746956
+          ],
+          "info": {
+            "track": 1.6253207527469555,
+            "constraint": 0.0,
+            "prod": 0.00778453222303392,
+            "profit": -24.993920999269474,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -3.7467924725304442,
+              "temp_trip": -15.746792472530444,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              76.25320752746956
+            ],
+            "plant_mult": {
+              "Uc": 0.9705165384178237,
+              "k0": 0.909396087047782,
+              "Hr": 1.0452177201221755
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.778453222303392
+          }
+        },
+        {
+          "step": 23,
+          "time": 11.5,
+          "obs": [
+            0.0,
+            76.25320434570312,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.22154677769660805,
+            76.25320752746956
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              76.25320752746956
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.22154677769660805
+            ]
+          },
+          "reward": -0.7455186285319849,
+          "terminated": false,
+          "truncated": true,
+          "next_obs": [
+            0.0,
+            76.9326400756836,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.20562455011846284,
+            76.93263996646552
+          ],
+          "info": {
+            "track": 1.6932639966465515,
+            "constraint": 0.0,
+            "prod": 0.007943754498815372,
+            "profit": -24.850620951066166,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -3.0673600335344844,
+              "temp_trip": -15.067360033534484,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              76.93263996646552
+            ],
+            "plant_mult": {
+              "Uc": 0.9765563956644391,
+              "k0": 0.9153398857990326,
+              "Hr": 1.044363444351826
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.7943754498815372
+          }
+        }
+      ]
+    },
+    {
+      "name": "MPC",
+      "seed": 9000,
+      "steps": 24,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "MPC",
+        "class": "MPCAgent",
+        "kind": "successive_linearization_mpc",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "fixed_sp_mpc",
+        "Ts": 0.5,
+        "horizon": 40,
+        "move_supp": 0.8,
+        "du_max": 0.15,
+        "cv_scale_level": 0.1,
+        "cv_scale_temp": 12.0,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      },
+      "scorer": {
+        "score": 92.09714733694335,
+        "avg_temp_err": 3.9514263315283227,
+        "avg_level_err_cm": 0.0,
+        "excess_kwh": 0.0,
+        "interlock_frac": 0.0,
+        "comp_temp": 7.902852663056645,
+        "comp_level": 0.0,
+        "comp_energy": 0.0,
+        "comp_safety": 0.0
+      },
+      "rollout": [
+        {
+          "step": 0,
+          "time": 0.0,
+          "obs": [
+            0.0,
+            50.6652946472168,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5205444502912738,
+            50.665296342219776
+          ],
+          "action": [
+            0.20000000298023224,
+            0.15000000596046448
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              50.665296342219776
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5205444502912738
+            ]
+          },
+          "reward": -0.09147775798361935,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            51.483551025390625,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5136828985575549,
+            51.48355282658653
+          ],
+          "info": {
+            "track": 0.8516447173413468,
+            "constraint": 0.0,
+            "prod": 0.0019452684347565387,
+            "profit": -3.0492585994539785,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -28.516447173413468,
+              "temp_trip": -40.51644717341347,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              51.48355282658653
+            ],
+            "plant_mult": {
+              "Uc": 0.7783609430480396,
+              "k0": 0.7202965535373199,
+              "Hr": 1.072396155399515
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.4863171014424451
+          }
+        },
+        {
+          "step": 1,
+          "time": 0.5,
+          "obs": [
+            0.0,
+            51.483551025390625,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5136828985575549,
+            51.48355282658653
+          ],
+          "action": [
+            0.05000000074505806,
+            0.30000001192092896
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              51.48355282658653
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5136828985575549
+            ]
+          },
+          "reward": -0.27465275114482585,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            52.280399322509766,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5056570333193983,
+            52.280399177835896
+          ],
+          "info": {
+            "track": 0.7719600822164103,
+            "constraint": 0.0,
+            "prod": 0.000494342974046886,
+            "profit": -9.155091704827528,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -27.719600822164104,
+              "temp_trip": -39.719600822164104,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              52.280399177835896
+            ],
+            "plant_mult": {
+              "Uc": 0.7901654681557485,
+              "k0": 0.7319133382938845,
+              "Hr": 1.0707265265708452
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.49434296668060174
+          }
+        },
+        {
+          "step": 2,
+          "time": 1.0,
+          "obs": [
+            0.0,
+            52.280399322509766,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5056570333193983,
+            52.280399177835896
+          ],
+          "action": [
+            0.0,
+            0.44999998807907104
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              52.280399177835896
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5056570333193983
+            ]
+          },
+          "reward": -0.4319999885559082,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            53.01049041748047,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.49696866892072916,
+            53.01049075427204
+          ],
+          "info": {
+            "track": 0.6989509245727958,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -14.399999618530273,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -26.98950924572796,
+              "temp_trip": -38.98950924572796,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              53.01049075427204
+            ],
+            "plant_mult": {
+              "Uc": 0.8016158575102261,
+              "k0": 0.7431816195077521,
+              "Hr": 1.0691069866070355
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5030313310792709
+          }
+        },
+        {
+          "step": 3,
+          "time": 1.5,
+          "obs": [
+            0.0,
+            53.01049041748047,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.49696866892072916,
+            53.01049075427204
+          ],
+          "action": [
+            0.0,
+            0.6000000238418579
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              53.01049075427204
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.49696866892072916
+            ]
+          },
+          "reward": -0.5760000228881835,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            53.64260482788086,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4879113434070333,
+            53.64260565816769
+          ],
+          "info": {
+            "track": 0.6357394341832311,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -19.200000762939453,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -26.35739434183231,
+              "temp_trip": -38.35739434183231,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              53.64260565816769
+            ],
+            "plant_mult": {
+              "Uc": 0.8127227351840695,
+              "k0": 0.7541118522852036,
+              "Hr": 1.0675360328421402
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5120886565929668
+          }
+        },
+        {
+          "step": 4,
+          "time": 2.0,
+          "obs": [
+            0.0,
+            53.64260482788086,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4879113434070333,
+            53.64260565816769
+          ],
+          "action": [
+            0.0,
+            0.75
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              53.64260565816769
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4879113434070333
+            ]
+          },
+          "reward": -0.72,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            54.16207504272461,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.47855144305030867,
+            54.16207343262397
+          ],
+          "info": {
+            "track": 0.583792656737603,
+            "constraint": 0.0,
+            "prod": 0.0,
+            "profit": -24.0,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -25.83792656737603,
+              "temp_trip": -37.83792656737603,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              54.16207343262397
+            ],
+            "plant_mult": {
+              "Uc": 0.8234964065276975,
+              "k0": 0.7647141780793316,
+              "Hr": 1.0660122076901917
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5214485569496914
+          }
+        },
+        {
+          "step": 5,
+          "time": 2.5,
+          "obs": [
+            0.0,
+            54.16207504272461,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.47855144305030867,
+            54.16207343262397
+          ],
+          "action": [
+            0.0014394741738215089,
+            0.8999999761581421
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              54.16207343262397
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.47855144305030867
+            ]
+          },
+          "reward": -0.8635872050969012,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            54.55314254760742,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4689778850397925,
+            54.55314288630549
+          ],
+          "info": {
+            "track": 0.5446857113694513,
+            "constraint": 0.0,
+            "prod": 1.52878524042659e-05,
+            "profit": -28.786240169896708,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -25.446857113694513,
+              "temp_trip": -37.44685711369451,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              54.55314288630549
+            ],
+            "plant_mult": {
+              "Uc": 0.8339468677310167,
+              "k0": 0.7749984340996358,
+              "Hr": 1.0645340972928017
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5310221149602075
+          }
+        },
+        {
+          "step": 6,
+          "time": 3.0,
+          "obs": [
+            0.0,
+            54.55314254760742,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4689778850397925,
+            54.55314288630549
+          ],
+          "action": [
+            0.0795740857720375,
+            0.9311355948448181
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              54.55314288630549
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4689778850397925
+            ]
+          },
+          "reward": -0.8706720054989888,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            54.886375427246094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4596657635839174,
+            54.88637542683292
+          ],
+          "info": {
+            "track": 0.5113624573167079,
+            "constraint": 0.0,
+            "prod": 0.0008599320574828349,
+            "profit": -29.022400183299627,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -25.11362457316708,
+              "temp_trip": -37.11362457316708,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              54.88637542683292
+            ],
+            "plant_mult": {
+              "Uc": 0.8440838150982363,
+              "k0": 0.7849741624393308,
+              "Hr": 1.0631003302073334
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5403342364160826
+          }
+        },
+        {
+          "step": 7,
+          "time": 3.5,
+          "obs": [
+            0.0,
+            54.886375427246094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4596657635839174,
+            54.88637542683292
+          ],
+          "action": [
+            0.18207499384880066,
+            0.8998697996139526
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              54.88637542683292
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4596657635839174
+            ]
+          },
+          "reward": -0.8098758233941186,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            55.20875549316406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.45078405765249585,
+            55.20875713729566
+          ],
+          "info": {
+            "track": 0.4791242862704337,
+            "constraint": 0.0,
+            "prod": 0.0019999697864917015,
+            "profit": -26.99586077980395,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -24.791242862704337,
+              "temp_trip": -36.79124286270434,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              55.20875713729566
+            ],
+            "plant_mult": {
+              "Uc": 0.8539166540444393,
+              "k0": 0.794650618928835,
+              "Hr": 1.061709576134429
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5492159423475041
+          }
+        },
+        {
+          "step": 8,
+          "time": 4.0,
+          "obs": [
+            0.0,
+            55.20875549316406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.45078405765249585,
+            55.20875713729566
+          ],
+          "action": [
+            0.29285141825675964,
+            0.8727359175682068
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              55.20875713729566
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.45078405765249585
+            ]
+          },
+          "reward": -0.7496481370765897,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            55.51311111450195,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.442402463984264,
+            55.51311024696947
+          ],
+          "info": {
+            "track": 0.4486889753030532,
+            "constraint": 0.0,
+            "prod": 0.0032658645847736577,
+            "profit": -24.988271235886327,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -24.486889753030532,
+              "temp_trip": -36.48688975303053,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              55.51311024696947
+            ],
+            "plant_mult": {
+              "Uc": 0.8634545078222562,
+              "k0": 0.8040367817236541,
+              "Hr": 1.0603605446837119
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5575975360157359
+          }
+        },
+        {
+          "step": 9,
+          "time": 4.5,
+          "obs": [
+            0.0,
+            55.51311111450195,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.442402463984264,
+            55.51311024696947
+          ],
+          "action": [
+            0.40267229080200195,
+            0.8461300134658813
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              55.51311024696947
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.442402463984264
+            ]
+          },
+          "reward": -0.689329518939231,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            55.79914855957031,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4345402103204201,
+            55.79914855355246
+          ],
+          "info": {
+            "track": 0.42008514464475366,
+            "constraint": 0.0,
+            "prod": 0.004553899777333893,
+            "profit": -22.9776506313077,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -24.200851446447537,
+              "temp_trip": -36.20085144644754,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              55.79914855355246
+            ],
+            "plant_mult": {
+              "Uc": 0.8727062259867386,
+              "k0": 0.8131413596346286,
+              "Hr": 1.0590519841765162
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5654597896795799
+          }
+        },
+        {
+          "step": 10,
+          "time": 5.0,
+          "obs": [
+            0.0,
+            55.79914855957031,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4345402103204201,
+            55.79914855355246
+          ],
+          "action": [
+            0.5073617100715637,
+            0.8211853504180908
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              55.79914855355246
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4345402103204201
+            ]
+          },
+          "reward": -0.631402167686173,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.067176818847656,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4271901325071734,
+            56.06717824865505
+          ],
+          "info": {
+            "track": 0.3932821751344953,
+            "constraint": 0.0,
+            "prod": 0.0058124358783405265,
+            "profit": -21.046738922872432,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.932821751344953,
+              "temp_trip": -35.93282175134495,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.06717824865505
+            ],
+            "plant_mult": {
+              "Uc": 0.8816803926062866,
+              "k0": 0.8219728002082739,
+              "Hr": 1.0577826804845365
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5728098674928266
+          }
+        },
+        {
+          "step": 11,
+          "time": 5.5,
+          "obs": [
+            0.0,
+            56.067176818847656,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4271901325071734,
+            56.06717824865505
+          ],
+          "action": [
+            0.6052252650260925,
+            0.7981224656105042
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.06717824865505
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4271901325071734
+            ]
+          },
+          "reward": -0.5767495146611072,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.31800079345703,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.42033198744171785,
+            56.31799957938824
+          ],
+          "info": {
+            "track": 0.36820004206117574,
+            "constraint": 0.0,
+            "prod": 0.007016594530554693,
+            "profit": -19.224983822036908,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.682000420611757,
+              "temp_trip": -35.68200042061176,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.31799957938824
+            ],
+            "plant_mult": {
+              "Uc": 0.8903853342272481,
+              "k0": 0.8305392975647098,
+              "Hr": 1.056551455903316
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5796680125582822
+          }
+        },
+        {
+          "step": 12,
+          "time": 6.0,
+          "obs": [
+            0.0,
+            56.31800079345703,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.42033198744171785,
+            56.31799957938824
+          ],
+          "action": [
+            0.6958068609237671,
+            0.7769688367843628
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.31799957938824
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.42033198744171785
+            ]
+          },
+          "reward": -0.5256862318997808,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.55260467529297,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.413939509761265,
+            56.552604183177486
+          ],
+          "info": {
+            "track": 0.3447395816822514,
+            "constraint": 0.0,
+            "prod": 0.008155698200489165,
+            "profit": -17.52287439665936,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.447395816822514,
+              "temp_trip": -35.447395816822514,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.552604183177486
+            ],
+            "plant_mult": {
+              "Uc": 0.8988291275995808,
+              "k0": 0.8388488000004526,
+              "Hr": 1.0553571680595322
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.586060490238735
+          }
+        },
+        {
+          "step": 13,
+          "time": 6.5,
+          "obs": [
+            0.0,
+            56.55260467529297,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.413939509761265,
+            56.552604183177486
+          ],
+          "action": [
+            0.7792412638664246,
+            0.7576439380645752
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.552604183177486
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.413939509761265
+            ]
+          },
+          "reward": -0.47822366090653706,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.77204132080078,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4079841431636751,
+            56.7720413156256
+          ],
+          "info": {
+            "track": 0.32279586843744,
+            "constraint": 0.0,
+            "prod": 0.009226463690202042,
+            "profit": -15.94078869688457,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.2279586843744,
+              "temp_trip": -35.2279586843744,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.7720413156256
+            ],
+            "plant_mult": {
+              "Uc": 0.9070196071707435,
+              "k0": 0.8469090173631232,
+              "Hr": 1.0541987088510618
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.592015856836325
+          }
+        },
+        {
+          "step": 14,
+          "time": 7.0,
+          "obs": [
+            0.0,
+            56.77204132080078,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4079841431636751,
+            56.7720413156256
+          ],
+          "action": [
+            0.8559293150901794,
+            0.7400224804878235
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.7720413156256
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4079841431636751
+            ]
+          },
+          "reward": -0.4342268749580961,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.97734832763672,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.40243701280594524,
+            56.97735007926707
+          ],
+          "info": {
+            "track": 0.3022649920732931,
+            "constraint": 0.0,
+            "prod": 0.01022943356704498,
+            "profit": -14.47422916526987,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.02264992073293,
+              "temp_trip": -35.02264992073293,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.97735007926707
+            ],
+            "plant_mult": {
+              "Uc": 0.9149643723547712,
+              "k0": 0.8547274282049137,
+              "Hr": 1.0530750034188456
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5975629871940548
+          }
+        },
+        {
+          "step": 15,
+          "time": 7.5,
+          "obs": [
+            0.0,
+            56.97734832763672,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.40243701280594524,
+            56.97735007926707
+          ],
+          "action": [
+            0.9263758063316345,
+            0.723964273929596
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.97735007926707
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.40243701280594524
+            ]
+          },
+          "reward": -0.39349425933709664,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.169525146484375,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3972699616782759,
+            57.16952702560952
+          ],
+          "info": {
+            "track": 0.28304729743904816,
+            "constraint": 0.0,
+            "prod": 0.011167090505011683,
+            "profit": -13.116475311236556,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.83047297439048,
+              "temp_trip": -34.83047297439048,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.16952702560952
+            ],
+            "plant_mult": {
+              "Uc": 0.9226707945832782,
+              "k0": 0.8623112867214504,
+              "Hr": 1.051985009149596
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6027300383217241
+          }
+        },
+        {
+          "step": 16,
+          "time": 8.0,
+          "obs": [
+            0.0,
+            57.169525146484375,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3972699616782759,
+            57.16952702560952
+          ],
+          "action": [
+            0.9911096096038818,
+            0.709328830242157
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.16952702560952
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3972699616782759
+            ]
+          },
+          "reward": -0.35579866505230784,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.349510192871094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3924560826135683,
+            57.34951187650568
+          ],
+          "info": {
+            "track": 0.265048812349432,
+            "constraint": 0.0,
+            "prod": 0.012042852295561587,
+            "profit": -11.859955501743595,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.65048812349432,
+              "temp_trip": -34.65048812349432,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.34951187650568
+            ],
+            "plant_mult": {
+              "Uc": 0.9301460241449299,
+              "k0": 0.869667629482491,
+              "Hr": 1.0509277147084237
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6075439173864317
+          }
+        },
+        {
+          "step": 17,
+          "time": 8.5,
+          "obs": [
+            0.0,
+            57.349510192871094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3924560826135683,
+            57.34951187650568
+          ],
+          "action": [
+            1.0,
+            0.6959823966026306
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.34951187650568
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3924560826135683
+            ]
+          },
+          "reward": -0.3374794868359764,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.53840637207031,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3876599742545389,
+            57.53840730639595
+          ],
+          "info": {
+            "track": 0.24615926936040466,
+            "constraint": 0.0,
+            "prod": 0.012246800514909222,
+            "profit": -11.249316227865881,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.461592693604047,
+              "temp_trip": -34.46159269360405,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.53840730639595
+            ],
+            "plant_mult": {
+              "Uc": 0.9373969968197321,
+              "k0": 0.8768032819607003,
+              "Hr": 1.0499021391004866
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6123400257454611
+          }
+        },
+        {
+          "step": 18,
+          "time": 9.0,
+          "obs": [
+            0.0,
+            57.53840637207031,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.3876599742545389,
+            57.53840730639595
+          ],
+          "action": [
+            1.0,
+            0.6873374581336975
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.53840730639595
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3876599742545389
+            ]
+          },
+          "reward": -0.326570389089924,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.73555374145508,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.38282672089180436,
+            57.73555293627871
+          ],
+          "info": {
+            "track": 0.22644470637212918,
+            "constraint": 0.0,
+            "prod": 0.012343465582163912,
+            "profit": -10.8856796363308,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.264447063721292,
+              "temp_trip": -34.26444706372129,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.73555293627871
+            ],
+            "plant_mult": {
+              "Uc": 0.9444304403142902,
+              "k0": 0.8837248648645635,
+              "Hr": 1.0489073307607877
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6171732791081956
+          }
+        },
+        {
+          "step": 19,
+          "time": 9.5,
+          "obs": [
+            0.0,
+            57.73555374145508,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.38282672089180436,
+            57.73555293627871
+          ],
+          "action": [
+            1.0,
+            0.6798503398895264
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.73555293627871
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.38282672089180436
+            ]
+          },
+          "reward": -0.3167530096180812,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.939781188964844,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.37795682097062216,
+            57.93978225332582
+          ],
+          "info": {
+            "track": 0.20602177466741764,
+            "constraint": 0.0,
+            "prod": 0.012440863580587559,
+            "profit": -10.55843365393604,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.060217746674176,
+              "temp_trip": -34.06021774667418,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.93978225332582
+            ],
+            "plant_mult": {
+              "Uc": 0.9512528805040116,
+              "k0": 0.8904388002813107,
+              "Hr": 1.0479423666712797
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6220431790293779
+          }
+        },
+        {
+          "step": 20,
+          "time": 10.0,
+          "obs": [
+            0.0,
+            57.939781188964844,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.37795682097062216,
+            57.93978225332582
+          ],
+          "action": [
+            1.0,
+            0.672332227230072
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.93978225332582
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.37795682097062216
+            ]
+          },
+          "reward": -0.306886528370099,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.15121841430664,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3730510930170924,
+            58.15121849900899
+          ],
+          "info": {
+            "track": 0.18487815009910094,
+            "constraint": 0.0,
+            "prod": 0.012538978139658152,
+            "profit": -10.229550945669967,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.84878150099101,
+              "temp_trip": -33.84878150099101,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.15121849900899
+            ],
+            "plant_mult": {
+              "Uc": 0.9578706474880413,
+              "k0": 0.8969513176355556,
+              "Hr": 1.047006351504457
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6269489069829076
+          }
+        },
+        {
+          "step": 21,
+          "time": 10.5,
+          "obs": [
+            0.0,
+            58.15121841430664,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.3730510930170924,
+            58.15121849900899
+          ],
+          "action": [
+            1.0,
+            0.6648293137550354
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.15121849900899
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3730510930170924
+            ]
+          },
+          "reward": -0.2970005611335042,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.44987869262695,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.36808225912716713,
+            58.44988052697627
+          ],
+          "info": {
+            "track": 0.15501194730237272,
+            "constraint": 0.0,
+            "prod": 0.012638354817456659,
+            "profit": -9.90001870445014,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.550119473023727,
+              "temp_trip": -33.55011947302373,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.44988052697627
+            ],
+            "plant_mult": {
+              "Uc": 0.9642898814625501,
+              "k0": 0.903268459469173,
+              "Hr": 1.046098416792639
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.6319177408728329
+          }
+        },
+        {
+          "step": 22,
+          "time": 11.0,
+          "obs": [
+            0.0,
+            58.44987869262695,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.36808225912716713,
+            58.44988052697627
+          ],
+          "action": [
+            1.0,
+            0.7291131019592285
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.44988052697627
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.36808225912716713
+            ]
+          },
+          "reward": -0.35599520638393994,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.68201446533203,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.36304931204274177,
+            58.682014138103774
+          ],
+          "info": {
+            "track": 0.13179858618962256,
+            "constraint": 0.0,
+            "prod": 0.012739013759145164,
+            "profit": -11.866506879464666,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.317985861896226,
+              "temp_trip": -33.317985861896226,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.682014138103774
+            ],
+            "plant_mult": {
+              "Uc": 0.9705165384178237,
+              "k0": 0.909396087047782,
+              "Hr": 1.0452177201221755
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.6369506879572582
+          }
+        },
+        {
+          "step": 23,
+          "time": 11.5,
+          "obs": [
+            0.0,
+            58.68201446533203,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.36304931204274177,
+            58.682014138103774
+          ],
+          "action": [
+            1.0,
+            0.7193135619163513
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.682014138103774
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.36304931204274177
+            ]
+          },
+          "reward": -0.3438500179987013,
+          "terminated": false,
+          "truncated": true,
+          "next_obs": [
+            0.0,
+            58.92304229736328,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3579796269611186,
+            58.923043974559945
+          ],
+          "info": {
+            "track": 0.10769560254400545,
+            "constraint": 0.0,
+            "prod": 0.012840407460777628,
+            "profit": -11.461667266623378,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.076956025440055,
+              "temp_trip": -33.076956025440055,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.923043974559945
+            ],
+            "plant_mult": {
+              "Uc": 0.9765563956644391,
+              "k0": 0.9153398857990326,
+              "Hr": 1.044363444351826
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.6420203730388814
+          }
+        }
+      ]
+    },
+    {
+      "name": "FastGrid-CSTR-MPC",
+      "seed": 9000,
+      "steps": 24,
+      "protocol": {
+        "scenario": "cstr",
+        "objective": "economic",
+        "reward_mode": "economic",
+        "action_mode": "actuator",
+        "control_dt": 0.5,
+        "episode_steps": 24,
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "integral_obs": false,
+        "terminate_on_runaway": false
+      },
+      "controller": {
+        "name": "FastGrid-CSTR-MPC",
+        "class": "FastGridCSTRMPC",
+        "kind": "nonlinear_grid_mpc",
+        "scenario": "cstr",
+        "action_mode": "actuator",
+        "control_structure": "cstr_grid_mpc",
+        "horizon": 4,
+        "grid": 51,
+        "r_move": 0.0,
+        "pump": 0.5,
+        "nsub": 2,
+        "api": "aiogym.controller.v1",
+        "adapter": "LegacyComputeController"
+      },
+      "scorer": {
+        "score": 95.20221221825668,
+        "avg_temp_err": 2.398893890871661,
+        "avg_level_err_cm": 0.0,
+        "excess_kwh": 0.0,
+        "interlock_frac": 0.0,
+        "comp_temp": 4.797787781743322,
+        "comp_level": 0.0,
+        "comp_energy": 0.0,
+        "comp_safety": 0.0
+      },
+      "rollout": [
+        {
+          "step": 0,
+          "time": 0.0,
+          "obs": [
+            0.0,
+            50.6652946472168,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5205444502912738,
+            50.665296342219776
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              50.665296342219776
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5205444502912738
+            ]
+          },
+          "reward": 0.13091966130568242,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            51.501686096191406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5151123655345096,
+            51.501686878143495
+          ],
+          "info": {
+            "track": 0.8498313121856504,
+            "constraint": 0.0,
+            "prod": 0.004848876344654905,
+            "profit": 4.363988710189414,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -28.498313121856505,
+              "temp_trip": -40.498313121856505,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              51.501686878143495
+            ],
+            "plant_mult": {
+              "Uc": 0.7783609430480396,
+              "k0": 0.7202965535373199,
+              "Hr": 1.072396155399515
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.48488763446549044
+          }
+        },
+        {
+          "step": 1,
+          "time": 0.5,
+          "obs": [
+            0.0,
+            51.501686096191406,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5151123655345096,
+            51.501686878143495
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              51.501686878143495
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5151123655345096
+            ]
+          },
+          "reward": 0.13251519712839194,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            52.39714813232422,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5092029735985484,
+            52.39714735353829
+          ],
+          "info": {
+            "track": 0.7602852646461713,
+            "constraint": 0.0,
+            "prod": 0.004907970264014516,
+            "profit": 4.417173237613064,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -27.602852646461713,
+              "temp_trip": -39.60285264646171,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              52.39714735353829
+            ],
+            "plant_mult": {
+              "Uc": 0.7901654681557485,
+              "k0": 0.7319133382938845,
+              "Hr": 1.0707265265708452
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.4907970264014516
+          }
+        },
+        {
+          "step": 2,
+          "time": 1.0,
+          "obs": [
+            0.0,
+            52.39714813232422,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5092029735985484,
+            52.39714735353829
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              52.39714735353829
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5092029735985484
+            ]
+          },
+          "reward": 0.1342524060691779,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            53.35762023925781,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.5027688664104522,
+            53.3576216521361
+          ],
+          "info": {
+            "track": 0.6642378347863896,
+            "constraint": 0.0,
+            "prod": 0.004972311335895478,
+            "profit": 4.47508020230593,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -26.642378347863897,
+              "temp_trip": -38.6423783478639,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              53.3576216521361
+            ],
+            "plant_mult": {
+              "Uc": 0.8016158575102261,
+              "k0": 0.7431816195077521,
+              "Hr": 1.0691069866070355
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.49723113358954785
+          }
+        },
+        {
+          "step": 3,
+          "time": 1.5,
+          "obs": [
+            0.0,
+            53.35762023925781,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.5027688664104522,
+            53.3576216521361
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              53.3576216521361
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.5027688664104522
+            ]
+          },
+          "reward": 0.13614617218239464,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            54.39002227783203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.49575491784298276,
+            54.39002227278096
+          ],
+          "info": {
+            "track": 0.560997772721904,
+            "constraint": 0.0,
+            "prod": 0.0050424508215701725,
+            "profit": 4.538205739413155,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -25.60997772721904,
+              "temp_trip": -37.60997772721904,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              54.39002227278096
+            ],
+            "plant_mult": {
+              "Uc": 0.8127227351840695,
+              "k0": 0.7541118522852036,
+              "Hr": 1.0675360328421402
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5042450821570172
+          }
+        },
+        {
+          "step": 4,
+          "time": 2.0,
+          "obs": [
+            0.0,
+            54.39002227783203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.49575491784298276,
+            54.39002227278096
+          ],
+          "action": [
+            0.5,
+            0.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              54.39002227278096
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.49575491784298276
+            ]
+          },
+          "reward": 0.13821389357090158,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            55.5024299621582,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.48809669047814236,
+            55.502429792456844
+          ],
+          "info": {
+            "track": 0.44975702075431556,
+            "constraint": 0.0,
+            "prod": 0.005119033095218577,
+            "profit": 4.60712978569672,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -24.497570207543156,
+              "temp_trip": -36.497570207543156,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              55.502429792456844
+            ],
+            "plant_mult": {
+              "Uc": 0.8234964065276975,
+              "k0": 0.7647141780793316,
+              "Hr": 1.0660122076901917
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5119033095218577
+          }
+        },
+        {
+          "step": 5,
+          "time": 2.5,
+          "obs": [
+            0.0,
+            55.5024299621582,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.48809669047814236,
+            55.502429792456844
+          ],
+          "action": [
+            0.5,
+            0.11999999731779099
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              55.502429792456844
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.48809669047814236
+            ]
+          },
+          "reward": 0.025264777738641504,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            56.584129333496094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4797600919862191,
+            56.58412888699478
+          ],
+          "info": {
+            "track": 0.34158711130052166,
+            "constraint": 0.0,
+            "prod": 0.0052023990801378095,
+            "profit": 0.8421592579547168,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -23.415871113005217,
+              "temp_trip": -35.41587111300522,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              56.58412888699478
+            ],
+            "plant_mult": {
+              "Uc": 0.8339468677310167,
+              "k0": 0.7749984340996358,
+              "Hr": 1.0645340972928017
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.520239908013781
+          }
+        },
+        {
+          "step": 6,
+          "time": 3.0,
+          "obs": [
+            0.0,
+            56.584129333496094,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4797600919862191,
+            56.58412888699478
+          ],
+          "action": [
+            0.5,
+            0.4399999976158142
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              56.58412888699478
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4797600919862191
+            ]
+          },
+          "reward": -0.2795244906267687,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            57.41899490356445,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.47083145524291503,
+            57.4189947665367
+          ],
+          "info": {
+            "track": 0.25810052334633016,
+            "constraint": 0.0,
+            "prod": 0.00529168544757085,
+            "profit": -9.31748302089229,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -22.5810052334633,
+              "temp_trip": -34.5810052334633,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              57.4189947665367
+            ],
+            "plant_mult": {
+              "Uc": 0.8440838150982363,
+              "k0": 0.7849741624393308,
+              "Hr": 1.0631003302073334
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.529168544757085
+          }
+        },
+        {
+          "step": 7,
+          "time": 3.5,
+          "obs": [
+            0.0,
+            57.41899490356445,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.47083145524291503,
+            57.4189947665367
+          ],
+          "action": [
+            0.5,
+            0.6600000262260437
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              57.4189947665367
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.47083145524291503
+            ]
+          },
+          "reward": -0.4881970221956196,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.072811126708984,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4614703593282137,
+            58.07281179793072
+          ],
+          "info": {
+            "track": 0.19271882020692815,
+            "constraint": 0.0,
+            "prod": 0.005385296406717864,
+            "profit": -16.27323407318732,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.92718820206928,
+              "temp_trip": -33.92718820206928,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.07281179793072
+            ],
+            "plant_mult": {
+              "Uc": 0.8539166540444393,
+              "k0": 0.794650618928835,
+              "Hr": 1.061709576134429
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5385296406717863
+          }
+        },
+        {
+          "step": 8,
+          "time": 4.0,
+          "obs": [
+            0.0,
+            58.072811126708984,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4614703593282137,
+            58.07281179793072
+          ],
+          "action": [
+            0.5,
+            0.8399999737739563
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.07281179793072
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4614703593282137
+            ]
+          },
+          "reward": -0.6583912926170413,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.56131362915039,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4518196955334934,
+            58.5613123218154
+          ],
+          "info": {
+            "track": 0.14386876781845997,
+            "constraint": 0.0,
+            "prod": 0.005481803044665065,
+            "profit": -21.946376420568043,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.4386876781846,
+              "temp_trip": -33.4386876781846,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.5613123218154
+            ],
+            "plant_mult": {
+              "Uc": 0.8634545078222562,
+              "k0": 0.8040367817236541,
+              "Hr": 1.0603605446837119
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5481803044665066
+          }
+        },
+        {
+          "step": 9,
+          "time": 4.5,
+          "obs": [
+            0.0,
+            58.56131362915039,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4518196955334934,
+            58.5613123218154
+          ],
+          "action": [
+            0.5,
+            0.9599999785423279
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.5613123218154
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4518196955334934
+            ]
+          },
+          "reward": -0.770941666629546,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            58.9277458190918,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4420062489959679,
+            58.92774578842179
+          ],
+          "info": {
+            "track": 0.10722542115782119,
+            "constraint": 0.0,
+            "prod": 0.005579937510040321,
+            "profit": -25.698055554318202,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -21.072254211578212,
+              "temp_trip": -33.07225421157821,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              58.92774578842179
+            ],
+            "plant_mult": {
+              "Uc": 0.8727062259867386,
+              "k0": 0.8131413596346286,
+              "Hr": 1.0590519841765162
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.557993751004032
+          }
+        },
+        {
+          "step": 10,
+          "time": 5.0,
+          "obs": [
+            0.0,
+            58.9277458190918,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4420062489959679,
+            58.92774578842179
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              58.92774578842179
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4420062489959679
+            ]
+          },
+          "reward": -0.8066703500953363,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            59.24597930908203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4321124077605045,
+            59.24597900896942
+          ],
+          "info": {
+            "track": 0.07540209910305791,
+            "constraint": 0.0,
+            "prod": 0.005678875922394955,
+            "profit": -26.889011669844542,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -20.75402099103058,
+              "temp_trip": -32.75402099103058,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              59.24597900896942
+            ],
+            "plant_mult": {
+              "Uc": 0.8816803926062866,
+              "k0": 0.8219728002082739,
+              "Hr": 1.0577826804845365
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5678875922394955
+          }
+        },
+        {
+          "step": 11,
+          "time": 5.5,
+          "obs": [
+            0.0,
+            59.24597930908203,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4321124077605045,
+            59.24597900896942
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              59.24597900896942
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4321124077605045
+            ]
+          },
+          "reward": -0.8039872880683357,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            59.554893493652344,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4221751409938364,
+            59.55489214313731
+          ],
+          "info": {
+            "track": 0.044510785686269115,
+            "constraint": 0.0,
+            "prod": 0.005778248590061636,
+            "profit": -26.799576268944527,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -20.44510785686269,
+              "temp_trip": -32.44510785686269,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              59.55489214313731
+            ],
+            "plant_mult": {
+              "Uc": 0.8903853342272481,
+              "k0": 0.8305392975647098,
+              "Hr": 1.056551455903316
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5778248590061636
+          }
+        },
+        {
+          "step": 12,
+          "time": 6.0,
+          "obs": [
+            0.0,
+            59.554893493652344,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4221751409938364,
+            59.55489214313731
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              59.55489214313731
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4221751409938364
+            ]
+          },
+          "reward": -0.8012983656551848,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            59.85226058959961,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4122161690932773,
+            59.85225915287867
+          ],
+          "info": {
+            "track": 0.014774084712132662,
+            "constraint": 0.0,
+            "prod": 0.005877838309067227,
+            "profit": -26.709945521839494,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -20.147740847121327,
+              "temp_trip": -32.14774084712133,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              59.85225915287867
+            ],
+            "plant_mult": {
+              "Uc": 0.8988291275995808,
+              "k0": 0.8388488000004526,
+              "Hr": 1.0553571680595322
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5877838309067227
+          }
+        },
+        {
+          "step": 13,
+          "time": 6.5,
+          "obs": [
+            0.0,
+            59.85226058959961,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4122161690932773,
+            59.85225915287867
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              59.85225915287867
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4122161690932773
+            ]
+          },
+          "reward": -0.7986098547438933,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            60.13572311401367,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.4022587212736791,
+            60.135723598759704
+          ],
+          "info": {
+            "track": 0.013572359875970363,
+            "constraint": 0.0,
+            "prod": 0.005977412787263209,
+            "profit": -26.620328491463113,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -19.864276401240296,
+              "temp_trip": -31.864276401240296,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              60.135723598759704
+            ],
+            "plant_mult": {
+              "Uc": 0.9070196071707435,
+              "k0": 0.8469090173631232,
+              "Hr": 1.0541987088510618
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.5977412787263209
+          }
+        },
+        {
+          "step": 14,
+          "time": 7.0,
+          "obs": [
+            0.0,
+            60.13572311401367,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.4022587212736791,
+            60.135723598759704
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              60.135723598759704
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.4022587212736791
+            ]
+          },
+          "reward": -0.7959284102239302,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            60.40281295776367,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3923274452738159,
+            60.40281437565448
+          ],
+          "info": {
+            "track": 0.04028143756544793,
+            "constraint": 0.0,
+            "prod": 0.006076725547261841,
+            "profit": -26.53094700746434,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -19.59718562434552,
+              "temp_trip": -31.59718562434552,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              60.40281437565448
+            ],
+            "plant_mult": {
+              "Uc": 0.9149643723547712,
+              "k0": 0.8547274282049137,
+              "Hr": 1.0530750034188456
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6076725547261841
+          }
+        },
+        {
+          "step": 15,
+          "time": 7.5,
+          "obs": [
+            0.0,
+            60.40281295776367,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3923274452738159,
+            60.40281437565448
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              60.40281437565448
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3923274452738159
+            ]
+          },
+          "reward": -0.7932610324589895,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            60.65096664428711,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3824482683666279,
+            60.65096705708968
+          ],
+          "info": {
+            "track": 0.06509670570896801,
+            "constraint": 0.0,
+            "prod": 0.006175517316333721,
+            "profit": -26.442034415299652,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -19.34903294291032,
+              "temp_trip": -31.34903294291032,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              60.65096705708968
+            ],
+            "plant_mult": {
+              "Uc": 0.9226707945832782,
+              "k0": 0.8623112867214504,
+              "Hr": 1.051985009149596
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6175517316333721
+          }
+        },
+        {
+          "step": 16,
+          "time": 8.0,
+          "obs": [
+            0.0,
+            60.65096664428711,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.3824482683666279,
+            60.65096705708968
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              60.65096705708968
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3824482683666279
+            ]
+          },
+          "reward": -0.7906150157295588,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            60.8775520324707,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.37264820640577395,
+            60.877551075852224
+          ],
+          "info": {
+            "track": 0.08775510758522245,
+            "constraint": 0.0,
+            "prod": 0.006273517935942261,
+            "profit": -26.353833857651964,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -19.122448924147776,
+              "temp_trip": -31.122448924147776,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              60.877551075852224
+            ],
+            "plant_mult": {
+              "Uc": 0.9301460241449299,
+              "k0": 0.869667629482491,
+              "Hr": 1.0509277147084237
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6273517935942261
+          }
+        },
+        {
+          "step": 17,
+          "time": 8.5,
+          "obs": [
+            0.0,
+            60.8775520324707,
+            60.0,
+            16.503856658935547,
+            22.436403274536133
+          ],
+          "state": [
+            0.37264820640577395,
+            60.877551075852224
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              60.877551075852224
+            ],
+            "t_cold": 16.50385721696608,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.37264820640577395
+            ]
+          },
+          "reward": -0.7879979141895116,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.0796012878418,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.36295523773893196,
+            61.079601579029735
+          ],
+          "info": {
+            "track": 0.10796015790297346,
+            "constraint": 0.0,
+            "prod": 0.00637044762261068,
+            "profit": -26.266597139650386,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.920398420970265,
+              "temp_trip": -30.920398420970265,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.079601579029735
+            ],
+            "plant_mult": {
+              "Uc": 0.9373969968197321,
+              "k0": 0.8768032819607003,
+              "Hr": 1.0499021391004866
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.637044762261068
+          }
+        },
+        {
+          "step": 18,
+          "time": 9.0,
+          "obs": [
+            0.0,
+            61.0796012878418,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.36295523773893196,
+            61.079601579029735
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.079601579029735
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.36295523773893196
+            ]
+          },
+          "reward": -0.7854174307797891,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.25474166870117,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.353397891776997,
+            61.2547399971997
+          ],
+          "info": {
+            "track": 0.12547399971996995,
+            "constraint": 0.0,
+            "prod": 0.006466021082230031,
+            "profit": -26.18058102599297,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.7452600028003,
+              "temp_trip": -30.7452600028003,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.2547399971997
+            ],
+            "plant_mult": {
+              "Uc": 0.9444304403142902,
+              "k0": 0.8837248648645635,
+              "Hr": 1.0489073307607877
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.646602108223003
+          }
+        },
+        {
+          "step": 19,
+          "time": 9.5,
+          "obs": [
+            0.0,
+            61.25474166870117,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.353397891776997,
+            61.2547399971997
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.2547399971997
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.353397891776997
+            ]
+          },
+          "reward": -0.7828812916376461,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.40035629272461,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3440047838431339,
+            61.40035670519562
+          ],
+          "info": {
+            "track": 0.14003567051956195,
+            "constraint": 0.0,
+            "prod": 0.006559952161568661,
+            "profit": -26.096043054588204,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.59964329480438,
+              "temp_trip": -30.59964329480438,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.40035670519562
+            ],
+            "plant_mult": {
+              "Uc": 0.9512528805040116,
+              "k0": 0.8904388002813107,
+              "Hr": 1.0479423666712797
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6559952161568661
+          }
+        },
+        {
+          "step": 20,
+          "time": 10.0,
+          "obs": [
+            0.0,
+            61.40035629272461,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.3440047838431339,
+            61.40035670519562
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.40035670519562
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3440047838431339
+            ]
+          },
+          "reward": -0.7803971741397604,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.513938903808594,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.33480434866577924,
+            61.513937539738464
+          ],
+          "info": {
+            "track": 0.1513937539738464,
+            "constraint": 0.0,
+            "prod": 0.006651956513342208,
+            "profit": -26.013239137992013,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.486062460261536,
+              "temp_trip": -30.486062460261536,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.513937539738464
+            ],
+            "plant_mult": {
+              "Uc": 0.9578706474880413,
+              "k0": 0.8969513176355556,
+              "Hr": 1.047006351504457
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 10.0,
+            "cstr_conversion": 0.6651956513342208
+          }
+        },
+        {
+          "step": 21,
+          "time": 10.5,
+          "obs": [
+            0.0,
+            61.513938903808594,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.33480434866577924,
+            61.513937539738464
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.513937539738464
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 10.0,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.33480434866577924
+            ]
+          },
+          "reward": -0.7779603993805726,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.71355056762695,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.32577925696508403,
+            61.71355173872699
+          ],
+          "info": {
+            "track": 0.17135517387269913,
+            "constraint": 0.0,
+            "prod": 0.00674220743034916,
+            "profit": -25.932013312685754,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.28644826127301,
+              "temp_trip": -30.28644826127301,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.71355173872699
+            ],
+            "plant_mult": {
+              "Uc": 0.9642898814625501,
+              "k0": 0.903268459469173,
+              "Hr": 1.046098416792639
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.674220743034916
+          }
+        },
+        {
+          "step": 22,
+          "time": 11.0,
+          "obs": [
+            0.0,
+            61.71355056762695,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.32577925696508403,
+            61.71355173872699
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.71355173872699
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.32577925696508403
+            ]
+          },
+          "reward": -0.7755660012931225,
+          "terminated": false,
+          "truncated": false,
+          "next_obs": [
+            0.0,
+            61.885066986083984,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.3169111159004539,
+            61.88506640734953
+          ],
+          "info": {
+            "track": 0.18850664073495266,
+            "constraint": 0.0,
+            "prod": 0.006830888840995462,
+            "profit": -25.852200043104084,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -18.114933592650473,
+              "temp_trip": -30.114933592650473,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              61.88506640734953
+            ],
+            "plant_mult": {
+              "Uc": 0.9705165384178237,
+              "k0": 0.909396087047782,
+              "Hr": 1.0452177201221755
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.6830888840995462
+          }
+        },
+        {
+          "step": 23,
+          "time": 11.5,
+          "obs": [
+            0.0,
+            61.885066986083984,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "state": [
+            0.3169111159004539,
+            61.88506640734953
+          ],
+          "action": [
+            0.5,
+            1.0
+          ],
+          "setpoint": {
+            "h_sp": [
+              0.0
+            ],
+            "t_sp": [
+              60.0
+            ]
+          },
+          "measurement": {
+            "levels": [],
+            "temps": [
+              61.88506640734953
+            ],
+            "t_cold": 16.445765455268635,
+            "Caf": 1.0,
+            "Tcool": 14.832280253743829,
+            "t_amb": 22.436403988291627,
+            "extra_outflow": 0.0,
+            "conc": [
+              0.3169111159004539
+            ]
+          },
+          "reward": -0.7732210575754642,
+          "terminated": false,
+          "truncated": true,
+          "next_obs": [
+            0.0,
+            62.02617645263672,
+            60.0,
+            16.445764541625977,
+            22.436403274536133
+          ],
+          "next_state": [
+            0.30822613916838637,
+            62.026175122064224
+          ],
+          "info": {
+            "track": 0.20261751220642238,
+            "constraint": 0.0,
+            "prod": 0.006917738608316137,
+            "profit": -25.774035252515475,
+            "runaway": false,
+            "cons_info": {
+              "temp_high": -17.973824877935776,
+              "temp_trip": -29.973824877935776,
+              "level_high": 0.0,
+              "level_low": 0.0,
+              "cstr_ca_high": 0.0,
+              "cstr_ca_low": 0.0,
+              "cstr_temp_low": 0.0
+            },
+            "cons_violated": false,
+            "levels": [],
+            "temps": [
+              62.026175122064224
+            ],
+            "plant_mult": {
+              "Uc": 0.9765563956644391,
+              "k0": 0.9153398857990326,
+              "Hr": 1.044363444351826
+            },
+            "cstr_feed_conc": 1.0,
+            "cstr_coolant_temp": 14.832280253743829,
+            "cstr_conversion": 0.6917738608316136
+          }
+        }
+      ]
+    }
+  ],
+  "figures": {
+    "summary": "aiogym/runs/bench_cstr_controllers_summary.svg",
+    "rollout": "aiogym/runs/bench_cstr_controllers_cstr_rollout.svg"
+  }
+}
