@@ -7,6 +7,7 @@ PC-Gym-style benchmarking and parallel training depend on. Run: python aiogym/te
 import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -120,6 +121,39 @@ def test_model_contract():
         check(f"{scn:10s} model contract states={len(card['states'])} actions={len(card['actions'])} params={len(params)}", state_ok and action_ok and vector_ok and param_ok and bounds_ok and meta_ok and generic_ok)
 
 
+def test_model_card_export():
+    """Model-card export covers the current registry, not a hand-written scenario list."""
+    from aiogym.models import MODEL_CARD_SCHEMA_VERSION, collect_model_cards, export_model_cards, validate_model_card
+
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    cards = collect_model_cards()
+    cards_ok = set(cards) == set(SCENARIOS)
+    cards_ok = cards_ok and all(card["schema_version"] == MODEL_CARD_SCHEMA_VERSION for card in cards.values())
+    for scenario, card in cards.items():
+        validate_model_card(card, expected_scenario=scenario)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest = export_model_cards(tmpdir)
+        exported = set(manifest["scenarios"])
+        files_ok = exported == set(SCENARIOS)
+        for scenario in SCENARIOS:
+            path = os.path.join(tmpdir, f"{scenario}.json")
+            files_ok = files_ok and os.path.exists(path)
+            with open(path) as f:
+                validate_model_card(json.load(f), expected_scenario=scenario)
+        files_ok = files_ok and os.path.exists(os.path.join(tmpdir, "manifest.json"))
+
+    docs_path = os.path.join(root, "aiogym", "README.md")
+    docs_ok = os.path.exists(docs_path)
+    if docs_ok:
+        with open(docs_path) as f:
+            docs_text = f.read()
+        for scenario in SCENARIOS:
+            docs_ok = docs_ok and f"`{scenario}`" in docs_text
+
+    check("model-card export covers registered built-ins", cards_ok and files_ok and docs_ok)
+
+
 def test_custom_model_entrypoints():
     """Custom process models can be registered or passed directly to the env."""
     try:
@@ -150,7 +184,38 @@ def test_custom_model_entrypoints():
         unregister_model("mini_tank")
 
 
+def test_public_api_entrypoints():
+    """Stable public API builds envs, runs benchmarks, and plots artifacts."""
+    public_surface_ok = aiogym.api.__all__ == ["make_env", "run_benchmark", "plot_results"]
+    public_surface_ok = public_surface_ok and not hasattr(aiogym, "write_benchmark_artifacts")
 
+    env = aiogym.make_env(model="cstr", protocol="tracking", seed=7, episode_steps=3)
+    env_ok = env.scenario == "cstr" and env.reward_mode == "track" and env.episode_steps == 3
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        payload = aiogym.run_benchmark({
+            "scenario": "cstr",
+            "objective": "tracking",
+            "controller": "pid",
+            "seeds": [7],
+            "episode_steps": 3,
+            "output_dir": tmpdir,
+            "save_rollouts": True,
+            "rollout_steps": 3,
+        })
+        benchmark_path = os.path.join(tmpdir, "benchmark.json")
+        figures = aiogym.plot_results(tmpdir)
+        api_ok = payload["schema_version"] == "aiogym.benchmark_api.v1"
+        api_ok = api_ok and payload["scenario"] == "cstr" and payload["objective"] == "tracking"
+        api_ok = api_ok and payload["rows"][0]["status"] in {"passed", "degraded"}
+        api_ok = api_ok and os.path.exists(benchmark_path)
+        for key in ("input_config", "benchmark_config", "model_card", "rows", "summary_csv",
+                    "leaderboard", "results", "report", "rollouts"):
+            api_ok = api_ok and os.path.exists(payload["artifacts"][key])
+        for key in ("summary", "leaderboard", "rollout", "constraint_timeline"):
+            api_ok = api_ok and os.path.exists(figures[key])
+
+    check("public make_env/run_benchmark/plot_results API", public_surface_ok and env_ok and api_ok)
 
 
 def test_disturbance_schedule_config():
@@ -566,7 +631,7 @@ def test_benchmark_config_and_report_schema():
 def test_kpi_tracking_setpoint_alignment():
     """KPI and tracking metrics should use the same active setpoint semantics."""
     from aiogym.evaluation import _tracking_step_metrics
-    from aiogym.metrics.kpi import W_LEVEL
+    from aiogym.evaluation.metrics.kpi import W_LEVEL
 
     env = AIOGymNativeEnv("heater", reward_mode="track", action_mode="actuator",
                           dynamic=False, randomize=False, randomize_setpoints=False,
@@ -662,10 +727,12 @@ def test_setpoint_randomization_uses_model_bounds():
 
 def test_benchmark_suite_configs():
     """Named benchmark suites are data configs, not hidden script constants."""
-    from aiogym.cli.suite import SUMMARY_COLUMNS, build_summary_table, load_suite
+    from aiogym.api import plot_results
+    from aiogym.cli.suite_benchmark import SUMMARY_COLUMNS, artifact_dir_for, build_summary_table, effective_suite_config, load_suite
+    from aiogym.evaluation.artifacts import write_benchmark_artifacts
 
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    cfg_dir = os.path.join(root, "aiogym", "configs", "benchmarks")
+    cfg_dir = os.path.join(root, "aiogym", "evaluation", "suites")
     required = {
         "core.json",
         "all-actuator.json",
@@ -734,8 +801,111 @@ def test_benchmark_suite_configs():
         and summary[0]["metric_mean"] == 1.0
         and summary[0]["metric_std"] == 0.3
         and summary[0]["seed_list"] == [11, 12]
+        and artifact_dir_for("example") == "aiogym/runs/bench_suite_example_artifacts"
     )
-    check("benchmark suite configs declare controller permissions", configs_ok and summary_ok)
+    effective = effective_suite_config(standard, [
+        {"scenario": "cstr", "objective": "tracking", "controller": "pid"},
+        {"scenario": "hvac", "objective": "tracking", "controller": "pid"},
+    ], episode_steps=4, control_dt=0.5)
+    summary_ok = summary_ok and effective["scenarios"] == ["cstr", "hvac"]
+    summary_ok = summary_ok and effective["objectives"] == ["tracking"]
+    summary_ok = summary_ok and effective["controllers"] == ["pid"]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        payload = {
+            "benchmark": "benchmark_suite",
+            "suite": "registry-smoke",
+            "suite_config": {
+                "name": "registry-smoke",
+                "scenarios": ["cstr", "hvac"],
+                "objectives": ["tracking"],
+                "controllers": ["pid"],
+                "action_mode": "actuator",
+            },
+            "configs": [{"scenario": "cstr"}, {"scenario": "hvac"}],
+            "rows": [
+                {
+                    "suite_case": "tracking:cstr:pid",
+                    "scenario": "cstr",
+                    "objective": "tracking",
+                    "action_mode": "actuator",
+                    "controller": "PID",
+                    "status": "passed",
+                    "metric": "tracking_iae",
+                    "tracking_iae": 1.0,
+                    "kpi": 90.0,
+                    "profit": 0.0,
+                    "return": -1.0,
+                    "track": 1.0,
+                    "constraint": 0.0,
+                    "episodes": 1,
+                    "seed_list": [11],
+                },
+                {
+                    "suite_case": "tracking:hvac:pid",
+                    "scenario": "hvac",
+                    "objective": "tracking",
+                    "action_mode": "actuator",
+                    "controller": "PID",
+                    "status": "passed",
+                    "metric": "tracking_iae",
+                    "tracking_iae": 2.0,
+                    "kpi": 80.0,
+                    "profit": 0.0,
+                    "return": -2.0,
+                    "track": 2.0,
+                    "constraint": 0.0,
+                    "episodes": 1,
+                    "seed_list": [12],
+                },
+            ],
+            "results": [],
+            "report": {"tracking": [{"metric": "tracking_iae", "name": "PID"}]},
+            "errors": [],
+        }
+        artifacts = write_benchmark_artifacts(tmpdir, payload)
+        payload["artifacts"] = artifacts
+        with open(os.path.join(tmpdir, "benchmark.json"), "w") as f:
+            json.dump(payload, f, indent=2)
+        figures = plot_results(tmpdir)
+        report_path = os.path.join(tmpdir, "report.md")
+        report_text = aiogym.render_benchmark_report(tmpdir, out_path=report_path)
+        suite_artifacts_ok = True
+        for key in ("benchmark", "input_config", "benchmark_config", "model_cards_manifest",
+                    "rows", "summary_csv", "leaderboard", "results", "report"):
+            suite_artifacts_ok = suite_artifacts_ok and os.path.exists(artifacts[key])
+        for key in ("summary", "leaderboard"):
+            suite_artifacts_ok = suite_artifacts_ok and os.path.exists(figures[key])
+        suite_artifacts_ok = suite_artifacts_ok and os.path.exists(report_path)
+        suite_artifacts_ok = suite_artifacts_ok and "AIO-Gym Benchmark Report" in report_text
+        suite_artifacts_ok = suite_artifacts_ok and "| cstr |" in report_text and "| hvac |" in report_text
+        suite_artifacts_ok = suite_artifacts_ok and "summary/leaderboard.json" in report_text
+        check_result = aiogym.check_benchmark_artifacts(tmpdir)
+        suite_artifacts_ok = suite_artifacts_ok and check_result["ok"]
+        with open(artifacts["model_cards_manifest"]) as f:
+            manifest = json.load(f)
+        suite_artifacts_ok = suite_artifacts_ok and set(manifest["scenarios"]) == {"cstr", "hvac"}
+        stale_card = os.path.join(tmpdir, "metadata", "model_cards", "cascade.json")
+        with open(stale_card, "w") as f:
+            json.dump({"scenario": "cascade"}, f)
+        stale_result = aiogym.check_benchmark_artifacts(tmpdir)
+        suite_artifacts_ok = suite_artifacts_ok and not stale_result["ok"]
+        suite_artifacts_ok = suite_artifacts_ok and any(row["name"] == "stale_model_cards" for row in stale_result["failed"])
+        single_payload = {
+            "benchmark": "public_api_benchmark",
+            "scenario": "cstr",
+            "config": {},
+            "benchmark_config": {},
+            "rows": payload["rows"][:1],
+            "results": [],
+            "report": {},
+        }
+        single_artifacts = write_benchmark_artifacts(tmpdir, single_payload)
+        stale_hvac_card = os.path.join(tmpdir, "metadata", "model_cards", "hvac.json")
+        suite_artifacts_ok = suite_artifacts_ok and os.path.exists(single_artifacts["model_card"])
+        suite_artifacts_ok = suite_artifacts_ok and not os.path.exists(stale_hvac_card)
+
+    check("benchmark suite configs declare controller permissions", configs_ok and summary_ok and suite_artifacts_ok)
 
 
 def test_oracle():
@@ -755,7 +925,9 @@ def test_oracle():
 
 if __name__ == "__main__":
     print("model contracts:"); test_model_contract()
+    print("model-card export:"); test_model_card_export()
     print("custom model entrypoints:"); test_custom_model_entrypoints()
+    print("public API entrypoints:"); test_public_api_entrypoints()
     print("disturbance schedule config:"); test_disturbance_schedule_config()
     print("CSTR disturbance semantics:"); test_cstr_disturbance_semantics()
     print("process disturbance semantics:"); test_process_disturbance_semantics()

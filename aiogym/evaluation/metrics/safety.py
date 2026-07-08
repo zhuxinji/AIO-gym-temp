@@ -1,4 +1,4 @@
-"""Safety and constraint-violation metrics."""
+"""Safety and constraint-violation metrics for evaluation."""
 from __future__ import annotations
 
 import numpy as np

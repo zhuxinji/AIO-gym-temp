@@ -12,7 +12,7 @@ from time import perf_counter
 from typing import Any, Mapping, Sequence
 import numpy as np
 
-from .controllers import as_controller, build_context, validate_action
+from ..controllers import as_controller, build_context, validate_action
 from .metrics.economic import economic_step_metrics
 from .metrics.robustness import robustness_extrema
 from .metrics.safety import action_bound_metrics as _action_bound_metrics
@@ -286,7 +286,7 @@ class BenchmarkProtocol:
         return data
 
     def make_env(self, action_mode: str | None = None):
-        from .env import AIOGymNativeEnv
+        from ..env import AIOGymNativeEnv
 
         return AIOGymNativeEnv(self.scenario, **self.env_kwargs(action_mode=action_mode))
 

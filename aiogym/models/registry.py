@@ -1,4 +1,9 @@
 import copy
+import json
+from pathlib import Path
+from typing import Iterable, Mapping
+
+import numpy as np
 
 from .core import _is_model_instance
 from .scenarios import (
@@ -120,3 +125,137 @@ def obs_vector(model, levels, temps, t_cold, t_amb, h_sp, t_sp):
     o.append(t_cold)
     o.append(t_amb)
     return o
+
+
+MODEL_CARD_SCHEMA_VERSION = "aiogym.model_card.v1"
+
+REQUIRED_MODEL_CARD_FIELDS = (
+    "schema_version",
+    "scenario",
+    "name",
+    "summary",
+    "states",
+    "actions",
+    "state_vector",
+    "action_vector",
+    "dynamics_disturbances",
+    "parameters",
+    "disturbances",
+    "disturbance_defaults",
+    "constraints",
+    "plant_regime",
+    "economic_config",
+    "supervisory_layout",
+    "dt_micro",
+    "energy_scored",
+)
+
+
+def iter_model_cards(scenarios: Iterable[str] | None = None):
+    """Yield ``(scenario, model_card)`` for the requested registered models."""
+
+    for scenario in scenarios or SCENARIOS:
+        card = _jsonable(make_model(scenario).model_card())
+        card["schema_version"] = MODEL_CARD_SCHEMA_VERSION
+        validate_model_card(card, expected_scenario=scenario)
+        yield scenario, card
+
+
+def collect_model_cards(scenarios: Iterable[str] | None = None) -> dict[str, dict]:
+    """Return validated model cards keyed by scenario name."""
+
+    return {scenario: card for scenario, card in iter_model_cards(scenarios)}
+
+
+def validate_model_card(card: Mapping, expected_scenario: str | None = None) -> None:
+    """Validate the stable model metadata surface used by artifacts and docs."""
+
+    missing = [field for field in REQUIRED_MODEL_CARD_FIELDS if field not in card]
+    if missing:
+        raise ValueError(f"model card is missing required fields: {', '.join(missing)}")
+    if card["schema_version"] != MODEL_CARD_SCHEMA_VERSION:
+        raise ValueError(f"unsupported model card schema: {card['schema_version']!r}")
+    if expected_scenario is not None and card["scenario"] != expected_scenario:
+        raise ValueError(f"expected scenario {expected_scenario!r}, got {card['scenario']!r}")
+    if not isinstance(card["states"], list) or not card["states"]:
+        raise ValueError(f"{card['scenario']} model card must include at least one state")
+    if not isinstance(card["actions"], list):
+        raise ValueError(f"{card['scenario']} model card actions must be a list")
+    for row in card["states"]:
+        _require_model_card_fields(card["scenario"], "state", row, ("name", "unit", "bounds"))
+        _require_model_card_bounds(card["scenario"], "state", row)
+    for row in card["actions"]:
+        _require_model_card_fields(card["scenario"], "action", row, ("name", "kind", "index", "unit", "bounds"))
+        _require_model_card_bounds(card["scenario"], "action", row)
+    if len(card["states"]) != int(card["state_vector"]["length"]):
+        raise ValueError(f"{card['scenario']} state count does not match state_vector length")
+    if len(card["actions"]) != int(card["action_vector"]["length"]):
+        raise ValueError(f"{card['scenario']} action count does not match action_vector length")
+    if not isinstance(card["parameters"], dict) or not card["parameters"]:
+        raise ValueError(f"{card['scenario']} model card must include parameters")
+    for name, row in card["parameters"].items():
+        _require_model_card_fields(card["scenario"], f"parameter {name}", row, ("value", "unit", "bounds"))
+    if not isinstance(card["disturbances"], list):
+        raise ValueError(f"{card['scenario']} disturbances must be a list")
+    if not isinstance(card["constraints"], list) or not card["constraints"]:
+        raise ValueError(f"{card['scenario']} model card must include constraints")
+    if not isinstance(card["plant_regime"], dict) or not card["plant_regime"]:
+        raise ValueError(f"{card['scenario']} model card must include plant_regime")
+    if not isinstance(card["economic_config"], dict) or not card["economic_config"]:
+        raise ValueError(f"{card['scenario']} model card must include economic_config")
+
+
+def export_model_cards(out_dir: str | Path, scenarios: Iterable[str] | None = None,
+                       write_manifest: bool = True) -> dict:
+    """Write one JSON model card per scenario and an optional manifest."""
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    cards = collect_model_cards(scenarios)
+    written = {}
+    for scenario, card in cards.items():
+        path = out / f"{scenario}.json"
+        _write_model_card_json(path, card)
+        written[scenario] = str(path)
+    manifest = {
+        "schema_version": MODEL_CARD_SCHEMA_VERSION,
+        "scenarios": list(cards),
+        "cards": written,
+    }
+    if write_manifest:
+        manifest_path = out / "manifest.json"
+        _write_model_card_json(manifest_path, manifest)
+        manifest["manifest"] = str(manifest_path)
+    return manifest
+
+
+def _require_model_card_fields(scenario: str, kind: str, row: Mapping, fields: Iterable[str]) -> None:
+    missing = [field for field in fields if field not in row]
+    if missing:
+        raise ValueError(f"{scenario} {kind} is missing fields: {', '.join(missing)}")
+
+
+def _require_model_card_bounds(scenario: str, kind: str, row: Mapping) -> None:
+    bounds = row.get("bounds")
+    if not isinstance(bounds, list) or len(bounds) != 2:
+        raise ValueError(f"{scenario} {kind} {row.get('name', '')!r} must expose [low, high] bounds")
+
+
+def _write_model_card_json(path: Path, data: Mapping) -> None:
+    with path.open("w") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+        f.write("\n")
+
+
+def _jsonable(value):
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, tuple):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    return value

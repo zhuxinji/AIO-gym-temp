@@ -1,4 +1,4 @@
-"""Robustness aggregations over perturbed benchmark episodes."""
+"""Robustness aggregations over evaluation episodes."""
 from __future__ import annotations
 
 

@@ -9,7 +9,7 @@ Pipeline (the offline->online story):
      conditions, so "RL beats MPC" is apples-to-apples
   4. save a checkpoint + export ONNX (drop into the browser AIO-Gym RL mode)
 
-    python -m aiogym.cli.train_rlpd --scenario cascade --online-steps 30000
+    python -m aiogym.rl.train_rlpd --scenario cascade --online-steps 30000
 """
 from __future__ import annotations
 import argparse
@@ -79,7 +79,7 @@ def main():
     args = ap.parse_args()
 
     import torch
-    from aiogym.rlpd import RLPD
+    from aiogym.rl import RLPD
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -145,7 +145,7 @@ def main():
     print(f"[pretrain] done in {time.time()-t0:.0f}s  {metric}={pre:.1f}")
 
     # 2b) online learning (symmetric offline+online sampling), best-checkpoint by KPI
-    base = args.out or f"aiogym/runs/rlpd_{args.scenario}"
+    base = args.out or f"aiogym/runs/rl/rlpd/{args.scenario}"
     os.makedirs(os.path.dirname(base), exist_ok=True)
     best, best_path = -1e18, base + "_best.pt"
     obs, _ = env.reset(seed=args.seed)

@@ -1,4 +1,4 @@
-"""Economic and resource-use metrics derived from environment step info."""
+"""Economic and resource-use metrics for evaluation rollouts."""
 from __future__ import annotations
 
 

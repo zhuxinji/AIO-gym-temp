@@ -1,64 +1,99 @@
 <div align="center">
 
-# AIO-Gym
+# AIO-Gym-temp
 
-**ブラウザだけで動くプロセス制御の実験場。**
+**プロセス制御のベンチマーク、コントローラ評価、強化学習訓練のために整理された Python バックエンド。**
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [**日本語**](README.ja.md)
 
-[▶ ライブデモ](https://supcon-international.github.io/AIO-Gym/) · MIT ライセンス
+MIT License
 
 </div>
 
 ---
 
-AIO-Gym は、4 つの古典的な産業制御問題——多段加熱タンクチェーン、Johansson の 4 タンク、発熱反応器 CSTR、2 ゾーン HVAC——をインタラクティブなリアルタイム・シミュレーションにしたものです。手動で操作しても、PID や MPC に任せても、強化学習の方策に制御させても構いません。物理・制御・描画のすべてがクライアント側で動くので、ページを開けばそのまま使えます——サーバー不要、インストール不要。付属の Python パッケージ（`aiogym/`）は同じプラントを Gymnasium 環境として公開し、NMPC オラクルと並列学習を備えます。オフラインで学習した方策は ONNX としてそのままブラウザに戻せます。
+この checkout は **AIO-Gym-temp** と呼びます。これは **AIO-Gym** から派生した、バックエンド整理版です。この文書では、**AIO-Gym** は再整理前の古いバックエンドスナップショットを指します。
 
-### 特長
+この README はバックエンドの変更だけを説明します。対象は、パッケージ構成、Python API、コマンドライン入口、benchmark evaluation、controller 構成、model registry、RL training、artifacts、生成出力の扱いです。
 
-- **インストール不要・バックエンド不要**：純粋な静的フロントエンド。GitHub Pages や任意の静的ホスティングに置くだけ。
-- **4 つのプラント、4 つのコントローラ**：手動・分散 PID・APC 風 MPC・監督制御 RL をライブで切り替え。
-- **追従ではなく経済性で勝負**：経済目標（価値 − エネルギー − 制約違反）でスコアリング。固定設定値の PID/MPC が最適化の余地を残す、まさにそこで学習方策が勝てます。
-- **誠実な忠実度**：センサーのノイズ／むだ時間／遅れ／バイアス、アクチュエータの固着／スルーレートを切り替え可能。外乱と機器故障は自動でランダムに発生し、その都度ポップアップで通知します。
-- **3 言語 UI**（English / 中文 / 日本語）と**エピソード制 KPI**——1 エピソード = 600 秒のシミュレーション（10 倍速で約 1 分）、エピソード平均でスコア化。
-- **[チャレンジモード](challenge.html)**：モバイル+デスクトップのミニゲーム、3設備から選択（反応器 / 空調 / タンク連結）——RL ゴーストと**並んで**同じ外乱で競い（2つのライブ P&ID）、経済スコアを競う。放置では勝てないスコア設計。
+詳しいバックエンド利用手順は [aiogym/README.md](aiogym/README.md) にあります。
 
-### シナリオ
+## Backend Scope
 
-| シナリオ | 内容 | 制御の見どころ |
-|---|---|---|
-| **多段加熱タンクチェーン** | 直列に並んだ加熱タンク | 液位 + 温度 + エネルギー + 安全インターロック。入門に最適 |
-| **4 タンク（Johansson）** | 古典的 MIMO ベンチマーク、ポンプ交差供給 | γ スライダーで**非最小位相**領域へ。PID が目に見えて苦戦 |
-| **発熱反応器 CSTR** | 発熱反応 + 冷却ジャケット | 冷却不足で**熱暴走**。安全境界に貼り付いてこそ生産量最大 |
-| **2 ゾーン HVAC** | 互いに熱交換する 2 部屋 | 屋外の変動に抗い、最小電力で快適域を維持 |
+`AIO-Gym-temp` は `aiogym/` 以下に native Python backend を提供します。
 
-### 制御モード
+- Native Gymnasium environments.
+- 7 つの登録済み backend scenarios: `cascade`, `quadruple`, `cstr`, `hvac`, `extraction`, `heater`, `crystallization`.
+- PID, MPC, oracle, generic policy objects, SB3 policies の統一 controller evaluation.
+- summary tables, reports, plots, reusable artifacts を出力する named benchmark suites.
+- SB3 と RLPD の RL training entrypoints.
+- notebooks/scripts/外部 Python 利用者向けの小さな public Python API.
+- shell/automation workflow 向けの console commands.
 
-- **手動** — オペレーターのようにアクチュエータのスライダーを操作。
-- **PID** — 内蔵の分散マルチループ PID。設定値の編集とゲイン整定をライブで。
-- **MPC** — ブラウザ内で動く APC 風の多変数 MPC。
-- **RL** — **監督制御**型の強化学習：方策が**設定値**を選び、内層の PID がプラントをそこへ調節します。下限は常に PID で、RL はその上に経済最適化を載せるだけ。方策は ONNX として読み込みブラウザ内で推論——各シナリオに経済方策を 1 つ内蔵し、最適化している報酬式はパネルに明記されます。
-
-> **なぜ監督制御か？** 学習方策は**追従**では整定済みの PID に勝てません。勝てるのは**経済性**です。RL に設定値を選ばせ（RTO 的）、PID が調節を保証する——これが実際に割に合う設計で、現在の "control-informed RL" の実践とも一致します。
-
-### 学習スタック（`aiogym/`）
-
-同じ 4 つのプラントはネイティブの **Gymnasium** 環境でもあり、ブラウザなしで学習できます：
-
-- **NMPC オラクル** — CasADi / IPOPT による非線形 MPC（do-mpc 風）を完全モデルの上界として使用。[PC-Gym](https://github.com/MaximilianB2/pc-gym) の手法に倣ったものです。
-- **並列学習** — Stable-Baselines3 の SAC/PPO を `SubprocVecEnv` で、CPU コアごとに 1 プラント（この種の小さな MLP では CPU が MPS より高速）。
-- **ベンチマーク内蔵** — 各学習の終了時に、方策を PID・MPC・オラクルと経済目標で順位付け。
+リポジトリルートからインストールします。
 
 ```bash
-# ブラウザ
-./run.sh                       # → http://127.0.0.1:8000 （またはライブデモを開くだけ）
-
-# 学習
-cd aiogym && pip install -r requirements.txt
-python train.py                # SAC · 監督制御の設定値 · 経済報酬 · 並列環境
-python -m pytest tests/        # 環境 / オラクル / ベクトル化 のチェック
+pip install -e .
+pip install -e ".[oracle]"   # optional: CasADi/IPOPT oracle support
+pip install -e ".[train]"    # optional: SB3/Torch training support
+pip install -e ".[export]"   # optional: ONNX export support
 ```
 
-### クレジット
+よく使うコマンド:
 
-プラントモデル、ベースラインとしてのオラクル、忠実度の整合は、**[PC-Gym](https://github.com/MaximilianB2/pc-gym)** および Maximilian Bloor 氏らの control-informed 強化学習の研究を参考にしています。MIT ライセンスで公開。
+```bash
+aiogym-suite-benchmark --suite standard-baselines --episodes 3
+aiogym-single-benchmark --scenario cstr --objective tracking --controllers pid,mpc
+aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
+aiogym-artifact-check aiogym/runs/bench_suite_standard-baselines_artifacts
+aiogym-train-sb3 --scenario cstr --algo sac --steps 10000 --onnx
+```
+
+Python API:
+
+```python
+import aiogym
+
+env = aiogym.make_env(model="cstr", protocol="tracking", seed=7)
+payload = aiogym.run_benchmark({
+    "scenario": "cstr",
+    "objective": "tracking",
+    "controller": "pid",
+})
+figures = aiogym.plot_results(payload["run_dir"])
+```
+
+## AIO-Gym-temp vs AIO-Gym
+
+**AIO-Gym** は再整理前の古い backend layout です。これは script-oriented な構造で、多くの backend source files が `aiogym/` 直下に置かれ、利用者は個別の Python files を直接実行していました。
+
+**AIO-Gym-temp** は現在の reorganized backend です。source code は責務ごとに分割され、user entrypoints は明確になり、generated outputs は source files から分離されています。
+
+| Area | AIO-Gym | AIO-Gym-temp |
+|---|---|---|
+| Package setup | `pyproject.toml` がなく、repo root から標準 package として install できない。 | `pyproject.toml`、optional dependency groups、package data、console scripts を持つ installable package。 |
+| User entrypoints | `python aiogym/train.py`, `python aiogym/train_rlpd.py`, `train_all.sh` などを直接実行。 | `aiogym-suite-benchmark`, `aiogym-report`, `aiogym-train-sb3`, `aiogym-train-rlpd` などの stable commands。 |
+| Python API | `aiogym.__init__` や internal modules から直接 import する形が中心。 | `aiogym.make_env`, `aiogym.run_benchmark`, `aiogym.plot_results` の小さな public API。 |
+| Backend layout | `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py` が flat に配置。 | `models/`, `controllers/`, `evaluation/`, `rl/`, `cli/` と薄い `api.py` に分割。 |
+| Model coverage | cascade, quadruple, CSTR, HVAC, fired heater. | cascade, quadruple, CSTR, HVAC, extraction, fired heater, crystallization. |
+| Controllers | PID, MPC, evaluation helpers, baseline concepts が `baselines.py` と `oracle.py` に集中。 | controller interface, registry, configs, adapters, PID, MPC, oracle, tuning tools が `aiogym.controllers` に集約。 |
+| Evaluation | scripts/helpers が中心。 | `aiogym.evaluation` が benchmark protocols, rollout collection, metrics, reports, plots, artifacts, suites を担当。 |
+| RL code | `rlpd.py`, `train_rlpd.py`, `train_sac.py`, `train.py` が core backend modules と同じ階層。 | RL algorithms と training flows は `aiogym.rl` に集約。default outputs は `aiogym/runs/rl/`。 |
+| Generated outputs | historical run JSON が `aiogym/runs/` に tracked されていた。 | `aiogym/runs/` は local output area。source control には `.gitignore` のみ残す。 |
+
+## Recommended Mental Model
+
+新しい backend code を追加するときは、次の構造に従います。
+
+```text
+aiogym/
+  api.py          # stable Python user entrypoint
+  cli/            # terminal entrypoints only
+  models/         # process models, kernel, registry, model cards
+  controllers/    # controller API, built-in controllers, configs, tuning
+  evaluation/     # benchmark protocols, metrics, reports, plots, artifacts
+  rl/             # RL algorithms and training workflows
+  runs/           # local generated outputs
+```
+
+`api.py` と `cli/` はシステムへの入口であり、core logic を置く場所ではありません。core behavior は `models/`, `controllers/`, `evaluation/`, `rl/` に置きます。

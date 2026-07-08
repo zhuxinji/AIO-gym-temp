@@ -38,20 +38,21 @@ all = [
 ]
 
 [project.scripts]
-aiogym-benchmark = "aiogym.cli.benchmark:main"
-aiogym-suite = "aiogym.cli.suite:main"
-aiogym-train = "aiogym.cli.train:main"
-aiogym-train-rlpd = "aiogym.cli.train_rlpd:main"
-aiogym-train-sb3 = "aiogym.cli.train_sb3:main"
-aiogym-tune-cstr-mpc = "aiogym.cli.tune_cstr_mpc:main"
-aiogym-tune-extraction-pid = "aiogym.cli.tune_extraction_pid:main"
+aiogym-artifact-check = "aiogym.cli.artifact_tools:artifact_check_main"
+aiogym-model-cards = "aiogym.cli.artifact_tools:model_cards_main"
+aiogym-report = "aiogym.cli.artifact_tools:report_main"
+aiogym-single-benchmark = "aiogym.cli.single_benchmark:main"
+aiogym-suite-benchmark = "aiogym.cli.suite_benchmark:main"
+aiogym-train-rlpd = "aiogym.rl.train_rlpd:main"
+aiogym-train-sb3 = "aiogym.rl.train_sb3:main"
 
 [tool.setuptools.packages.find]
 include = ["aiogym*"]
 
 [tool.setuptools.package-data]
 aiogym = [
-  "configs/benchmarks/*.json",
-  "configs/controllers/*.json",
+  "controllers/configs/*.json",
+  "evaluation/suites/*.json",
   "tests/golden.json",
+  "tests/generate_golden.mjs",
 ]

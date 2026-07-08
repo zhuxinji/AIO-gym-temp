@@ -1,4 +1,4 @@
-"""Setpoint-tracking metrics."""
+"""Setpoint-tracking metrics for evaluation."""
 from __future__ import annotations
 
 

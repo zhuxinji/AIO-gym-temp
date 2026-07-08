@@ -1,160 +1,9 @@
-#!/usr/bin/env python3
-"""Generic controller benchmark runner for all built-in AIO-Gym scenarios."""
+"""SVG plotting helpers for benchmark artifacts."""
 from __future__ import annotations
 
-import argparse
-import json
-import os
-from datetime import datetime, timezone
+from pathlib import Path
 
-from aiogym.controllers import make_controller
-from aiogym.evaluation import (
-    BenchmarkConfig,
-    BenchmarkProtocol,
-    build_evaluation_report,
-    evaluate_controller,
-    metric_direction,
-    primary_metric_for_objective,
-    rollout_controller,
-)
-from aiogym.models import SCENARIOS, make_model
-
-
-def protocol_factory(objective: str):
-    return {
-        "economic": BenchmarkProtocol.economic,
-        "tracking": BenchmarkProtocol.tracking,
-        "robustness": BenchmarkProtocol.robustness,
-        "safety": BenchmarkProtocol.safety,
-        "kpi": BenchmarkProtocol.kpi,
-    }[objective]
-
-
-def parse_controllers(raw: str):
-    names = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    if not names:
-        raise ValueError("--controllers must include at least one controller")
-    return names
-
-
-def parse_seed_list(raw: str | None, seed: int, episodes: int):
-    if not raw:
-        return [seed + i for i in range(episodes)]
-    seeds = [int(part.strip()) for part in raw.split(",") if part.strip()]
-    if not seeds:
-        raise ValueError("--seed-list must contain at least one integer seed")
-    return seeds
-
-
-def compact_row(result: dict):
-    controller = result["controller"]
-    metric = result["metric"]
-    diagnostics = dict(result.get("controller_diagnostics") or {})
-    return {
-        "name": result["name"],
-        "control_structure": controller.get("control_structure"),
-        "controller_status": result.get("controller_status", "ok"),
-        "controller_solve_count": diagnostics.get("solve_count", 0),
-        "controller_solver_success_count": diagnostics.get("solver_success_count", 0),
-        "controller_solver_failure_count": diagnostics.get("solver_failure_count", 0),
-        "controller_fallback_count": diagnostics.get("fallback_count", 0),
-        "controller_last_solver_error": diagnostics.get("last_solver_error"),
-        "metric": metric,
-        metric: result[metric],
-        f"{metric}_std": result[f"{metric}_std"],
-        "kpi": result["kpi"],
-        "normalized_score": result["normalized_score"],
-        "profit": result["profit"],
-        "return": result["return"],
-        "track": result["track"],
-        "constraint": result["constraint"],
-        "tracking_iae": result.get("tracking_iae"),
-        "energy_kwh": result.get("energy_kwh"),
-        "runtime_seconds": result.get("runtime_seconds"),
-        "runtime_seconds_per_step": result.get("runtime_seconds_per_step"),
-        "runtime_total_seconds": result.get("runtime_total_seconds"),
-        "constraint_violation_count": result.get("constraint_violation_count"),
-        "constraint_violation_severity": result.get("constraint_violation_severity"),
-        "safety_margin_min": result.get("safety_margin_min"),
-        "episodes": result["episodes"],
-        "seed": result["seed"],
-        "seed_list": result["seed_list"],
-    }
-
-
-def controller_specs(args, baseline_protocol: BenchmarkProtocol):
-    specs = []
-    for name in parse_controllers(args.controllers):
-        if name == "sb3":
-            if not args.sb3_path:
-                raise ValueError("controller 'sb3' requires --sb3-path")
-            sb3_protocol = protocol_factory(args.objective)(
-                args.scenario,
-                action_mode=args.sb3_action_mode,
-                episode_steps=args.episode_steps,
-                control_dt=args.control_dt,
-            )
-            specs.append({
-                "name": "sb3",
-                "protocol": sb3_protocol,
-                "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
-                "config": {
-                    "path": args.sb3_path,
-                    "algo": args.sb3_algo,
-                    "action_mode": args.sb3_action_mode,
-                },
-            })
-            continue
-        if name in ("oracle", "nmpc"):
-            mode = "track" if args.objective == "tracking" else baseline_protocol.env_reward_mode
-            specs.append({
-                "name": name,
-                "protocol": baseline_protocol,
-                "seed_list": parse_seed_list(args.seed_list, args.seed, args.oracle_episodes),
-                "config": {"mode": mode},
-            })
-            continue
-        specs.append({
-            "name": name,
-            "protocol": baseline_protocol,
-            "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
-            "config": {},
-        })
-    return specs
-
-
-def run_spec(spec: dict, scenario: str):
-    controller = make_controller(spec["name"], scenario=scenario, config=spec.get("config") or {})
-    seeds = spec["seed_list"]
-    return evaluate_controller(
-        controller,
-        spec["protocol"].make_env(),
-        episodes=len(seeds),
-        seed=seeds[0],
-        seed_list=seeds,
-        protocol=spec["protocol"],
-        include_episodes=True,
-    )
-
-
-def rollout_spec(spec: dict, scenario: str, max_steps: int | None = None):
-    controller = make_controller(spec["name"], scenario=scenario, config=spec.get("config") or {})
-    protocol = spec["protocol"]
-    return rollout_controller(
-        controller,
-        protocol.make_env(),
-        seed=spec["seed_list"][0],
-        max_steps=max_steps,
-        protocol=protocol,
-    )
-
-
-def figure_paths(out_path: str, scenario: str):
-    base, _ = os.path.splitext(out_path)
-    return {
-        "summary": f"{base}_summary.svg",
-        "rollout": f"{base}_{scenario}_rollout.svg",
-    }
+from aiogym.models import make_model
 
 
 def plot_summary(rows: list[dict], path: str, scenario: str):
@@ -233,6 +82,71 @@ def plot_rollouts(rollouts: list[dict], path: str, scenario: str):
             {"title": "Constraint penalty", "series": [metric_series("constraint")]},
         ]
     _plot_series_panels(rollouts, panels, path, f"{scenario} rollout comparison")
+
+
+def plot_leaderboard(board: list[dict], path: str, title: str) -> None:
+    metric = board[0]["metric"] if board else "metric"
+    values = [0.0 if row["metric_value"] is None else float(row["metric_value"]) for row in board]
+    width = 980
+    height = max(260, 130 + 54 * max(1, len(board)))
+    left, top, bar_h = 220, 90, 26
+    lo = min([0.0] + values)
+    hi = max([0.0] + values)
+    if lo == hi:
+        hi = lo + 1.0
+    parts = [_svg_header(width, height), _svg_text(42, 46, f"{title} leaderboard", size=22, weight="700")]
+    parts.append(_svg_text(42, 74, f"Primary metric: {metric}", size=12, fill="#475569"))
+    for i, row in enumerate(board):
+        y = top + i * 54
+        value = 0.0 if row["metric_value"] is None else float(row["metric_value"])
+        x0 = left + _map_x(min(0.0, value), lo, hi, 0, 660)
+        x1 = left + _map_x(max(0.0, value), lo, hi, 0, 660)
+        parts.append(_svg_text(42, y + 19, f"{row['rank']}. {row['controller']}", size=13, fill="#0f172a"))
+        parts.append(f'<rect x="{min(x0, x1):.2f}" y="{y:.2f}" width="{max(2.0, abs(x1 - x0)):.2f}" height="{bar_h}" fill="#2563eb"/>')
+        parts.append(_svg_text(max(x0, x1) + 8, y + 18, _fmt(value), size=12, fill="#334155"))
+        parts.append(_svg_text(left + 675, y + 18, str(row.get("status") or ""), size=11, fill="#64748b"))
+    parts.append("</svg>")
+    _write_text(path, "\n".join(parts))
+
+
+def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> None:
+    width, height = 1100, 520
+    left, top, w, h = 80, 82, 960, 330
+    colors = ["#dc2626", "#2563eb", "#059669", "#d97706", "#7c3aed", "#475569"]
+    series = []
+    for artifact in rollouts:
+        rows = artifact.get("rollout", [])
+        if not rows:
+            continue
+        series.append({
+            "name": artifact.get("name", "controller"),
+            "x": [float(row.get("time", i)) for i, row in enumerate(rows)],
+            "y": [float(row.get("constraint", row.get("info", {}).get("constraint", 0.0)) or 0.0) for row in rows],
+        })
+    xs = [v for row in series for v in row["x"]]
+    ys = [v for row in series for v in row["y"]]
+    xlo, xhi = (min(xs), max(xs)) if xs else (0.0, 1.0)
+    ylo, yhi = 0.0, max([1.0] + ys)
+    if xlo == xhi:
+        xhi = xlo + 1.0
+    parts = [_svg_header(width, height), _svg_text(42, 46, f"{scenario} constraint timeline", size=22, weight="700")]
+    parts.append(f'<rect x="{left}" y="{top}" width="{w}" height="{h}" fill="#f8fafc" stroke="#cbd5e1"/>')
+    for i, row in enumerate(series):
+        points = []
+        for xv, yv in zip(row["x"], row["y"]):
+            px = left + (xv - xlo) / (xhi - xlo) * w
+            py = top + h - (yv - ylo) / (yhi - ylo) * h
+            points.append(f"{px:.2f},{py:.2f}")
+        color = colors[i % len(colors)]
+        parts.append(f'<polyline points="{" ".join(points)}" fill="none" stroke="{color}" stroke-width="2.5"/>')
+        lx = left + (i % 4) * 210
+        ly = top + h + 48 + (i // 4) * 24
+        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 30}" y2="{ly}" stroke="{color}" stroke-width="3"/>')
+        parts.append(_svg_text(lx + 38, ly + 4, row["name"], size=12, fill="#334155"))
+    parts.append(_svg_text(left - 12, top + 10, _fmt(yhi), size=10, anchor="end", fill="#64748b"))
+    parts.append(_svg_text(left + w / 2, top + h + 34, "Time", size=12, anchor="middle", fill="#334155"))
+    parts.append("</svg>")
+    _write_text(path, "\n".join(parts))
 
 
 def state_series(index: int, label: str | None = None, dashed: bool = False):
@@ -391,6 +305,10 @@ def _map_y(value: float, lo: float, hi: float, y: float, h: float):
     return y + h - (float(value) - lo) / (hi - lo) * h
 
 
+def _map_x(value: float, lo: float, hi: float, x: float, w: float) -> float:
+    return x + (float(value) - lo) / (hi - lo) * w
+
+
 def _fmt(value: float):
     if abs(value) >= 100:
         return f"{value:.0f}"
@@ -404,100 +322,5 @@ def _escape(text: str):
 
 
 def _write_text(path: str, text: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write(text)
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--scenario", default="cstr", choices=SCENARIOS)
-    ap.add_argument("--objective", default="economic", choices=["economic", "tracking", "robustness", "safety", "kpi"])
-    ap.add_argument("--controllers", default="pid,mpc")
-    ap.add_argument("--episodes", type=int, default=3)
-    ap.add_argument("--oracle-episodes", type=int, default=1)
-    ap.add_argument("--episode-steps", type=int, default=80)
-    ap.add_argument("--seed", type=int, default=9000)
-    ap.add_argument("--seed-list", default=None, help="comma-separated fixed seeds; overrides --seed/--episodes")
-    ap.add_argument("--control-dt", type=float, default=0.5)
-    ap.add_argument("--sb3-path", default=None)
-    ap.add_argument("--sb3-algo", default="sac", choices=["sac", "ppo", "td3"])
-    ap.add_argument("--sb3-action-mode", default="setpoint", choices=["actuator", "setpoint"])
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--save-rollouts", action="store_true")
-    ap.add_argument("--plot", action="store_true")
-    ap.add_argument("--rollout-steps", type=int, default=None)
-    args = ap.parse_args()
-
-    make_protocol = protocol_factory(args.objective)
-    baseline_protocol = make_protocol(
-        args.scenario,
-        action_mode="actuator",
-        episode_steps=args.episode_steps,
-        control_dt=args.control_dt,
-    )
-    out_path = args.out or f"aiogym/runs/bench_{args.scenario}_controllers.json"
-    specs = controller_specs(args, baseline_protocol)
-    results = [run_spec(spec, args.scenario) for spec in specs]
-    rows = [compact_row(r) for r in results]
-    configs = [
-        BenchmarkConfig.from_protocol(
-            spec["protocol"],
-            controller=spec["name"],
-            seeds=spec["seed_list"],
-            controller_config=spec.get("config") or {},
-        ).metadata()
-        for spec in specs
-    ]
-
-    payload = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "benchmark": "controller_benchmark",
-        "scenario": args.scenario,
-        "objective": args.objective,
-        "controllers": [spec["name"] for spec in specs],
-        "metric": primary_metric_for_objective(baseline_protocol.objective),
-        "metric_direction": metric_direction(primary_metric_for_objective(baseline_protocol.objective)),
-        "protocol": baseline_protocol.metadata(),
-        "configs": configs,
-        "rows": rows,
-        "results": results,
-        "report": build_evaluation_report(results),
-    }
-
-    rollouts = []
-    if args.save_rollouts or args.plot:
-        rollouts = [rollout_spec(spec, args.scenario, max_steps=args.rollout_steps) for spec in specs]
-        payload["rollouts"] = rollouts
-
-    if args.plot:
-        figures = figure_paths(out_path, args.scenario)
-        plot_summary(rows, figures["summary"], args.scenario)
-        plot_rollouts(rollouts, figures["rollout"], args.scenario)
-        payload["figures"] = figures
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
-
-    print(f"saved {out_path}")
-    if args.plot:
-        for kind, path in payload["figures"].items():
-            print(f"saved {kind} figure {path}")
-    for row in payload["rows"]:
-        metric = row["metric"]
-        print(
-            f"{row['name']:18s} {row['control_structure']:18s} "
-            f"{metric}={row[metric]:9.2f} +/- {row[f'{metric}_std']:.2f} "
-            f"kpi={row['kpi']:8.2f} profit={row['profit']:8.2f} "
-            f"track={row['track']:8.2f} constraint={row['constraint']:8.2f} "
-            f"safety={row.get('constraint_violation_count', 0):6.1f} "
-            f"status={row.get('controller_status', 'ok'):8s} "
-            f"fallback={row.get('controller_fallback_count', 0):3} "
-            f"runtime={row.get('runtime_seconds', 0.0):7.3f}s "
-            f"step={row.get('runtime_seconds_per_step', 0.0) * 1000.0:7.2f}ms"
-        )
-
-
-if __name__ == "__main__":
-    main()
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(text)

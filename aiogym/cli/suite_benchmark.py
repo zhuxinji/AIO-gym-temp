@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Run named AIO-Gym controller benchmark suites."""
+"""Run named AIO-Gym benchmark suites."""
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import os
 import traceback
@@ -19,10 +18,11 @@ from aiogym.evaluation import (
     evaluate_controller,
     primary_metric_for_objective,
 )
+from aiogym.evaluation.artifacts import plot_results, write_benchmark_artifacts
 from aiogym.models import SCENARIOS
 
 
-CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs" / "benchmarks"
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "evaluation" / "suites"
 SCENARIO_ALIASES = {
     "ALL_SCENARIOS": tuple(SCENARIOS),
     "CORE_SCENARIOS": ("cascade", "quadruple", "cstr", "hvac"),
@@ -192,51 +192,20 @@ def build_summary_table(rows: list[dict]):
     return table
 
 
-def summary_paths(out_path: str, summary_out: str | None = None):
-    if summary_out:
-        base, ext = os.path.splitext(summary_out)
-        if ext.lower() in (".csv", ".md", ".json"):
-            return {ext.lower().lstrip("."): summary_out}
-        return {"csv": f"{summary_out}.csv", "md": f"{summary_out}.md"}
-    base, _ = os.path.splitext(out_path)
-    return {"csv": f"{base}_summary.csv", "md": f"{base}_summary.md"}
+def artifact_dir_for(suite_name: str, artifact_dir: str | None = None):
+    if artifact_dir:
+        return artifact_dir
+    return f"aiogym/runs/bench_suite_{suite_name}_artifacts"
 
 
-def write_summary_files(table: list[dict], paths: dict[str, str]):
-    written = {}
-    if "csv" in paths:
-        _write_summary_csv(table, paths["csv"])
-        written["csv"] = paths["csv"]
-    if "md" in paths:
-        _write_summary_markdown(table, paths["md"])
-        written["markdown"] = paths["md"]
-    if "json" in paths:
-        _write_json(paths["json"], table)
-        written["json"] = paths["json"]
-    return written
-
-
-def _write_summary_csv(table: list[dict], path: str):
-    out_dir = os.path.dirname(path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(SUMMARY_COLUMNS))
-        writer.writeheader()
-        for row in table:
-            writer.writerow({key: _cell_value(row.get(key)) for key in SUMMARY_COLUMNS})
-
-
-def _write_summary_markdown(table: list[dict], path: str):
-    out_dir = os.path.dirname(path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-    columns = list(SUMMARY_COLUMNS)
-    with open(path, "w") as f:
-        f.write("| " + " | ".join(columns) + " |\n")
-        f.write("| " + " | ".join(["---"] * len(columns)) + " |\n")
-        for row in table:
-            f.write("| " + " | ".join(_escape_markdown(_cell_value(row.get(key))) for key in columns) + " |\n")
+def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int, control_dt: float):
+    config = dict(suite)
+    config["scenarios"] = list(dict.fromkeys(case["scenario"] for case in cases))
+    config["objectives"] = list(dict.fromkeys(case["objective"] for case in cases))
+    config["controllers"] = list(dict.fromkeys(case["controller"] for case in cases))
+    config["episode_steps"] = episode_steps
+    config["control_dt"] = control_dt
+    return config
 
 
 def _write_json(path: str, data):
@@ -245,20 +214,6 @@ def _write_json(path: str, data):
         os.makedirs(out_dir, exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
-
-
-def _cell_value(value):
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return f"{value:.10g}"
-    if isinstance(value, (list, tuple, dict)):
-        return json.dumps(value, separators=(",", ":"))
-    return str(value)
-
-
-def _escape_markdown(value: str):
-    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
 
 
 def build_cases(args):
@@ -367,7 +322,9 @@ def print_case(row: dict):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Run a benchmark suite and write a standard artifact directory."
+    )
     ap.add_argument("--suite", default="core", help=f"built-in suite or JSON path; built-ins: {', '.join(builtin_suites())}")
     ap.add_argument("--scenarios", default=None, help="comma-separated override")
     ap.add_argument("--objectives", default=None, help="comma-separated override")
@@ -379,19 +336,17 @@ def main():
     ap.add_argument("--control-dt", type=float, default=None)
     ap.add_argument("--sb3-path", default=None)
     ap.add_argument("--sb3-algo", default="sac", choices=["sac", "ppo", "td3"])
-    ap.add_argument("--out", default=None)
     ap.add_argument("--fail-fast", action="store_true")
     ap.add_argument("--fail-on-degraded", action="store_true",
                     help="exit non-zero when any controller reports fallback/degraded diagnostics")
-    ap.add_argument("--summary-out", default=None,
-                    help="summary table path or basename; defaults to <out>_summary.csv and <out>_summary.md")
+    ap.add_argument("--artifact-dir", default=None,
+                    help="standard artifact directory; defaults to aiogym/runs/bench_suite_<suite>_artifacts")
     ap.add_argument("--tracebacks", action="store_true")
     args = ap.parse_args()
 
     suite, cases = build_cases(args)
     episode_steps = int(args.episode_steps if args.episode_steps is not None else suite.get("episode_steps", 80))
     control_dt = float(args.control_dt if args.control_dt is not None else suite.get("control_dt", 0.5))
-    out_path = args.out or f"aiogym/runs/bench_suite_{args.suite}.json"
     started = perf_counter()
     rows = []
     results = []
@@ -427,13 +382,14 @@ def main():
         "total": len(rows),
     }
     summary_table = build_summary_table(rows)
-    summary_files = write_summary_files(summary_table, summary_paths(out_path, args.summary_out))
+    suite_config = effective_suite_config(suite, cases, episode_steps, control_dt)
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "benchmark": "benchmark_suite",
         "suite": suite["name"],
         "description": suite["description"],
-        "suite_config": suite,
+        "suite_config": suite_config,
+        "suite_source_config": suite,
         "defaults": {
             "episodes": args.episodes,
             "episode_steps": episode_steps,
@@ -446,27 +402,29 @@ def main():
         "runtime_seconds": float(perf_counter() - started),
         "rows": rows,
         "summary_table": summary_table,
-        "summary_files": summary_files,
         "degraded_cases": [row for row in rows if row["status"] == "degraded"],
         "configs": configs,
         "results": results,
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
-
-    out_dir = os.path.dirname(out_path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
+    artifact_dir = artifact_dir_for(args.suite, args.artifact_dir)
+    payload["artifact_dir"] = artifact_dir
+    payload["artifacts"] = write_benchmark_artifacts(artifact_dir, payload)
+    _write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
+    figures = plot_results(artifact_dir)
+    payload["artifacts"].update({
+        f"{key}_figure": path
+        for key, path in figures.items()
+        if key in {"summary", "leaderboard", "rollout", "constraint_timeline"}
+    })
+    _write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
 
     print(
-        f"saved {out_path} "
+        f"saved artifacts {artifact_dir} "
         f"passed={counts['passed']} degraded={counts['degraded']} "
         f"skipped={counts['skipped']} failed={counts['failed']}"
     )
-    for kind, path in summary_files.items():
-        print(f"saved {kind} summary {path}")
     if counts["failed"]:
         raise SystemExit(1)
     if args.fail_on_degraded and counts["degraded"]:

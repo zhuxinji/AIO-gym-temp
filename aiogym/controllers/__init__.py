@@ -231,7 +231,7 @@ def make_controller(name: str, model=None, scenario: str | None = None,
 
 def load_controller_config(name: str, scenario: str | None = None) -> dict[str, Any]:
     key = name.lower()
-    path = Path(__file__).resolve().parent.parent / "configs" / "controllers" / f"{key}.json"
+    path = Path(__file__).resolve().parent / "configs" / f"{key}.json"
     if not path.exists() and key == "nmpc":
         path = path.with_name("oracle.json")
     if not path.exists():

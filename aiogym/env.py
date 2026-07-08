@@ -12,7 +12,7 @@ Contract (matches the browser RL contract so ONNX policies are interchangeable):
 reward_mode:
   "kpi"      (default) reward = -(instantaneous KPI penalty) using the same
              tracking + excess-energy + safety KPI the gym/browser display
-             (metrics.kpi), so the RL optimizes exactly what it is judged on.
+             (evaluation.metrics.kpi), so the RL optimizes exactly what it is judged on.
   "economic" CSTR production-maximisation (legacy economic demo).
   "track"    plain setpoint tracking: reward = -normalized SP error.
 
@@ -28,8 +28,8 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from .models import make_model, obs_vector
-from .kernel import Integrator
-from .metrics.kpi import KPIScorer
+from .models import Integrator
+from .evaluation.metrics.kpi import KPIScorer
 
 # Advisory/interlock limits mirror frontend/js/sim/alarms.js (LIMITS).
 T_HIGH, T_TRIP = 80.0, 92.0

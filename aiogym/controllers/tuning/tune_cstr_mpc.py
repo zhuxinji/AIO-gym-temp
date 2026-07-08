@@ -1,3 +1,4 @@
+"""Tune the CSTR MPC baseline parameters."""
 from __future__ import annotations
 
 import itertools

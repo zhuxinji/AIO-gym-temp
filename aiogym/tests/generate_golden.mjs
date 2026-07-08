@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '..');
+const ROOT = path.resolve(HERE, '..', '..');
 const DEFAULT_OUT = path.join(ROOT, 'aiogym', 'tests', 'golden.json');
 const SCENARIOS = ['cascade', 'quadruple', 'cstr', 'hvac'];
 const DEFAULT_ACTIONS = {
@@ -51,8 +51,8 @@ function printHelp() {
   console.log(`Generate aiogym/tests/golden.json from the browser JS source models.
 
 Usage:
-  node scripts/generate_golden.mjs [--out PATH] [--dt 0.05] [--steps 200]
-  node scripts/generate_golden.mjs --check
+  node aiogym/tests/generate_golden.mjs [--out PATH] [--dt 0.05] [--steps 200]
+  node aiogym/tests/generate_golden.mjs --check
 
 Options:
   --check              Compare generated output with the existing golden file without writing.
@@ -168,7 +168,7 @@ async function main() {
       console.error(`Golden mismatch: ${path.relative(ROOT, args.out)}`);
       for (const mismatch of mismatches.slice(0, 10)) console.error(`  ${mismatch}`);
       if (mismatches.length > 10) console.error(`  ... ${mismatches.length - 10} more mismatches`);
-      console.error('Run: node scripts/generate_golden.mjs');
+      console.error('Run: node aiogym/tests/generate_golden.mjs');
       process.exit(1);
     }
     console.log(`Golden is up to date: ${path.relative(ROOT, args.out)}`);

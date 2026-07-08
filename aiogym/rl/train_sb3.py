@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Train and evaluate a minimal Stable-Baselines3 baseline for AIO-Gym."""
+"""Train, export, and evaluate Stable-Baselines3 baselines for AIO-Gym.
+
+Rollout parallelism uses SubprocVecEnv by default: one plant per worker process.
+For these small MLP policies, CPU is the default on Apple machines because MPS
+overhead is usually larger than the network compute. CUDA is still used when
+available.
+"""
 from __future__ import annotations
 
 import argparse
 import importlib.util
 import json
 import os
+import time
 from datetime import datetime, timezone
 
 from aiogym.controllers import make_controller
@@ -56,6 +63,17 @@ def make_training_env(args, rank: int = 0):
     return _init
 
 
+def default_n_envs():
+    return min(16, max(1, (os.cpu_count() or 4) - 2))
+
+
+def best_device():
+    import torch
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
 def build_algo(args, env):
     try:
         from stable_baselines3 import PPO, SAC, TD3
@@ -71,6 +89,7 @@ def build_algo(args, env):
         env=env,
         verbose=args.verbose,
         seed=args.seed,
+        device=args.device,
         learning_rate=args.learning_rate,
         tensorboard_log=args.tensorboard_log,
     )
@@ -80,6 +99,7 @@ def build_algo(args, env):
             train_freq=args.train_freq,
             gradient_steps=args.gradient_steps,
             buffer_size=args.buffer_size,
+            learning_starts=args.learning_starts,
             **common,
         )
     if algo == "td3":
@@ -88,6 +108,7 @@ def build_algo(args, env):
             train_freq=args.train_freq,
             gradient_steps=args.gradient_steps,
             buffer_size=args.buffer_size,
+            learning_starts=args.learning_starts,
             **common,
         )
     if algo == "ppo":
@@ -146,6 +167,10 @@ def training_metadata(args, checkpoint_path: str):
         "total_timesteps": args.steps,
         "seed": args.seed,
         "n_envs": args.n_envs,
+        "vec_env": args.vec_env,
+        "subproc_start_method": args.subproc_start_method if args.vec_env == "subproc" else None,
+        "device": args.device,
+        "torch_threads": args.torch_threads,
         "train_episode_steps": args.train_episode_steps,
         "env_kwargs": {
             "dynamic": args.dynamic,
@@ -211,7 +236,11 @@ def main():
     ap.add_argument("--action-mode", default="actuator", choices=["actuator", "setpoint"])
     ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "track"])
     ap.add_argument("--steps", type=int, default=10000)
-    ap.add_argument("--n-envs", type=int, default=1)
+    ap.add_argument("--n-envs", type=int, default=default_n_envs())
+    ap.add_argument("--vec-env", default="subproc", choices=["subproc", "dummy"],
+                    help="parallel rollout backend; subproc gives one process per env")
+    ap.add_argument("--subproc-start-method", default="fork", choices=["fork", "forkserver", "spawn"],
+                    help="multiprocessing start method for SubprocVecEnv")
     ap.add_argument("--train-episode-steps", type=int, default=400)
     ap.add_argument("--seed", type=int, default=1000)
     ap.add_argument("--control-dt", type=float, default=0.5)
@@ -227,12 +256,17 @@ def main():
     ap.add_argument("--learning-rate", type=float, default=3e-4)
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--buffer-size", type=int, default=300000)
+    ap.add_argument("--learning-starts", type=int, default=100)
     ap.add_argument("--train-freq", type=int, default=1)
     ap.add_argument("--gradient-steps", type=int, default=1)
     ap.add_argument("--ppo-n-steps", type=int, default=2048)
+    ap.add_argument("--device", default=None,
+                    help="SB3 policy device; defaults to CUDA if available, otherwise CPU. Use 'mps' explicitly if desired.")
+    ap.add_argument("--torch-threads", type=int, default=2,
+                    help="torch intra-op threads; keep low so SubprocVecEnv workers get CPU time")
     ap.add_argument("--verbose", type=int, default=1)
     ap.add_argument("--tensorboard-log", default=None)
-    ap.add_argument("--out-dir", default="aiogym/runs/sb3")
+    ap.add_argument("--out-dir", default="aiogym/runs/rl/sb3")
     ap.add_argument("--name", default=None)
     ap.add_argument("--eval-objective", default="kpi", choices=["economic", "tracking", "robustness", "safety", "kpi"])
     ap.add_argument("--eval-episodes", type=int, default=3)
@@ -249,32 +283,56 @@ def main():
 
     try:
         from stable_baselines3.common.env_util import make_vec_env
+        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+        import torch
     except ModuleNotFoundError as ex:
         raise SystemExit(
             "stable-baselines3 is not installed. Install the optional RL dependencies "
             "from aiogym/requirements.txt before running this script."
         ) from ex
+    args.device = args.device or best_device()
+    torch.set_num_threads(max(1, int(args.torch_threads)))
 
     os.makedirs(args.out_dir, exist_ok=True)
     run_name = args.name or f"{args.algo}_{args.scenario}_{args.action_mode}_{args.reward_mode}_seed{args.seed}"
     checkpoint_path = os.path.join(args.out_dir, run_name)
     report_path = os.path.join(args.out_dir, f"{run_name}_report.json")
 
-    env = make_vec_env(make_training_env(args), n_envs=args.n_envs, seed=args.seed)
+    vec_env_cls = SubprocVecEnv if args.vec_env == "subproc" else DummyVecEnv
+    vec_env_kwargs = {"start_method": args.subproc_start_method} if args.vec_env == "subproc" else None
+    env = make_vec_env(
+        make_training_env(args),
+        n_envs=args.n_envs,
+        seed=args.seed,
+        vec_env_cls=vec_env_cls,
+        vec_env_kwargs=vec_env_kwargs,
+    )
     model = build_algo(args, env)
+    print(
+        f"training {args.algo.upper()} | {args.n_envs} {args.vec_env} envs | "
+        f"device={args.device} | action={args.action_mode} | reward={args.reward_mode}"
+    )
+    t0 = time.time()
     model.learn(total_timesteps=args.steps, progress_bar=False)
+    train_seconds = time.time() - t0
     model.save(checkpoint_path)
     checkpoint_zip = f"{checkpoint_path}.zip"
     onnx_path = None
     if args.onnx:
         onnx_path = args.onnx_path or f"{checkpoint_path}.onnx"
         export_onnx(model, env.observation_space.shape[0], onnx_path)
+    env.close()
 
     protocol, result, rollout = evaluate_checkpoint(args, checkpoint_zip)
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "kind": "sb3_train_eval",
         "training": training_metadata(args, checkpoint_zip),
+        "training_runtime": {
+            "seconds": train_seconds,
+            "steps_per_second": args.steps / train_seconds if train_seconds > 0 else None,
+            "steps_per_second_per_env": (args.steps / train_seconds / args.n_envs) if train_seconds > 0 else None,
+        },
         "evaluation_protocol": protocol.metadata(),
         "evaluation": result,
     }
@@ -290,6 +348,11 @@ def main():
     if onnx_path is not None:
         print(f"exported onnx {onnx_path}")
     print(f"saved report {report_path}")
+    if train_seconds > 0:
+        print(
+            f"train throughput {args.steps / train_seconds:.1f} steps/s "
+            f"({args.n_envs} envs x {args.steps / train_seconds / args.n_envs:.1f}/env/s)"
+        )
     print(
         f"eval {metric}={result[metric]:.3f} kpi={result['kpi']:.3f} "
         f"profit={result['profit']:.3f} track={result['track']:.3f} "

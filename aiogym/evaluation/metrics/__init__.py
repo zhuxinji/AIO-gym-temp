@@ -1,4 +1,4 @@
-"""Metric and scorer helpers used by AIO-Gym evaluation."""
+"""Metric and scorer helpers for AIO-Gym evaluation."""
 
 from .kpi import KPIScorer, W_ENERGY, W_LEVEL, W_SAFETY, W_TEMP
 from .economic import economic_step_metrics

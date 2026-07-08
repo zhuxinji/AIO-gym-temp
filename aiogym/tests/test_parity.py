@@ -7,7 +7,7 @@ in the port) shows up within a few RK4 steps, so matching 8 checkpoints over
 200 steps to ~1e-9 proves the two dynamics are identical.
 
 Regenerate golden after intentional browser-model changes:
-  node scripts/generate_golden.mjs
+  node aiogym/tests/generate_golden.mjs
 
 Run directly:  python aiogym/tests/test_parity.py
 Or via pytest: pytest aiogym/tests/test_parity.py
@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from aiogym.models import make_model
-from aiogym.kernel import Integrator
+from aiogym.models import Integrator
 
 GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden.json")
 ATOL = 1e-9

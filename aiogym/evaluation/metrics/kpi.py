@@ -1,4 +1,4 @@
-"""Composite KPI scorer.
+"""Composite KPI scorer for evaluation.
 
 This is the numpy/python port of frontend/js/sim/scoring.js.  The normalized
 score is:
