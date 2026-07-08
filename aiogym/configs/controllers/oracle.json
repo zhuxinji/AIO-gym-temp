@@ -17,9 +17,34 @@
     "solve_every": 1
   },
   "scenarios": {
-    "cascade": {},
-    "quadruple": {},
+    "cascade": {
+      "horizon": 1
+    },
+    "quadruple": {
+      "horizon": 1
+    },
     "cstr": {},
-    "hvac": {}
+    "hvac": {
+      "horizon": 2
+    },
+    "extraction": {
+      "horizon": 2,
+      "control_dt": 0.05
+    },
+    "heater": {
+      "horizon": 2,
+      "ipopt_max_iter": 120
+    },
+    "crystallization": {
+      "horizon": 2,
+      "control_dt": 1.0,
+      "mode": "track",
+      "du_max": 0.4,
+      "q_temp": 1.0,
+      "q_level": 1.0,
+      "r_move": 0.0,
+      "nsub_max": 6,
+      "ipopt_max_iter": 120
+    }
   }
 }

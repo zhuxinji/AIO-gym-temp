@@ -1,0 +1,7 @@
+{
+  "description": "Economic benchmark for supervisory setpoint policies.",
+  "scenarios": ["cascade", "quadruple", "cstr", "hvac", "heater"],
+  "objectives": ["economic"],
+  "controllers": ["sb3"],
+  "action_mode": "setpoint"
+}

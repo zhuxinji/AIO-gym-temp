@@ -3,7 +3,7 @@ numpy>=1.24
 gymnasium>=0.29
 
 # Training (optional; install when you train)
-# stable-baselines3>=2.3      # SAC baseline (train_sac.py)
+# stable-baselines3>=2.3      # SAC/SB3 baselines (aiogym.cli.train*)
 # torch>=2.2
 # onnx>=1.16                   # export the trained policy...
 # onnxruntime>=1.17            # ...to run it in the browser AIO-Gym, head-to-head with MPC

@@ -4,6 +4,7 @@
 Exercises the Gymnasium/RL surface that
 PC-Gym-style benchmarking and parallel training depend on. Run: python aiogym/tests/test_interface.py
 """
+import json
 import os
 import sys
 
@@ -256,6 +257,7 @@ def test_process_disturbance_semantics():
     _, _, _, _, info = env.step(np.full(env.action_space.shape[0], 0.5, np.float32))
     hvac_info_ok = info["hvac_heat_load"] == [500.0, -100.0] and info["hvac_efficiency"] == 0.9
     hvac_info_ok = hvac_info_ok and "hvac_comfort_low" in info["cons_info"]
+    hvac_info_ok = hvac_info_ok and info["cons_violated"] and info["constraint"] > 0.0
     check("HVAC env reports heat-load and efficiency", hvac_info_ok)
 
 def test_plant_drift_semantics():
@@ -330,30 +332,41 @@ def test_controller_evaluation_protocol():
                                        randomize_setpoints=False, randomize_plant=False,
                                        plant_drift=False)
     names = set(registered_controllers())
-    registry_ok = {"pid", "mpc", "oracle", "cstr_grid_mpc", "policy", "sb3"}.issubset(names)
+    registry_ok = {"pid", "mpc", "oracle", "policy", "sb3"}.issubset(names)
     expected_keys = {"name", "action_mode", "control_structure", "parameters", "scenarios"}
-    expected_scenarios = {scn for scn in BUILTIN_MODELS if make_model(scn).supervisory_layout}
+    controller_scenarios = {
+        name: set(load_controller_config(name).get("scenarios", {}))
+        for name in ("pid", "mpc", "oracle", "sb3")
+    }
+    expected_config_scenarios = {
+        "pid": controller_scenarios["pid"],
+        "mpc": controller_scenarios["mpc"],
+        "oracle": controller_scenarios["oracle"],
+        "sb3": controller_scenarios["sb3"],
+    }
     config_shape_ok = True
-    for ctl in ("pid", "mpc", "oracle", "cstr_grid_mpc", "sb3"):
+    for ctl in ("pid", "mpc", "oracle", "sb3"):
         cfg = load_controller_config(ctl, "cstr")
         raw_scenarios = load_controller_config(ctl).get("scenarios", {})
         config_shape_ok = config_shape_ok and expected_keys.issubset(cfg)
-        config_shape_ok = config_shape_ok and set(raw_scenarios) == expected_scenarios
+        config_shape_ok = config_shape_ok and set(raw_scenarios) == expected_config_scenarios[ctl]
     mpc_defaults = load_controller_config("mpc", "cstr")
     pid_defaults = load_controller_config("pid", "cstr")
+    extraction_pid_defaults = load_controller_config("pid", "extraction")
     pid_controller = make_controller("pid", scenario="cstr")
     mpc_controller = make_controller("mpc", scenario="cstr", config={"P": 4})
-    grid_controller = make_controller("cstr_grid_mpc", scenario="cstr", config={"grid": 11})
     oracle_controller = make_controller("oracle", scenario="cstr", config={"mode": "economic", "horizon": 4})
+    extraction_pid_controller = make_controller("pid", scenario="extraction")
     registry_ok = registry_ok and config_shape_ok
     registry_ok = registry_ok and pid_defaults["parameters"]["gains"]["temp"] == [0.08, 0.02, 0.0]
+    registry_ok = registry_ok and extraction_pid_defaults["parameters"]["gains"]["temp"] == [0.0, 0.25, 0.0]
+    registry_ok = registry_ok and extraction_pid_defaults["parameters"]["pairing"]["temp"][0] == ["pump", 0, 4, False]
     registry_ok = registry_ok and pid_controller.metadata()["api"] == "aiogym.controller.v1"
     registry_ok = registry_ok and pid_controller.metadata()["gains"]["temp"] == [0.08, 0.02, 0.0]
+    registry_ok = registry_ok and extraction_pid_controller.metadata()["pairing"]["temp"][0] == ["pump", 0, 4, False]
     registry_ok = registry_ok and mpc_defaults["parameters"]["P"] == 40
     registry_ok = registry_ok and mpc_controller.metadata()["control_structure"] == "fixed_sp_mpc"
     registry_ok = registry_ok and mpc_controller.metadata()["horizon"] == 4
-    registry_ok = registry_ok and grid_controller.metadata()["control_structure"] == "cstr_grid_mpc"
-    registry_ok = registry_ok and grid_controller.metadata()["grid"] == 11
     registry_ok = registry_ok and oracle_controller.metadata()["control_structure"] == "nmpc_oracle"
     registry_ok = registry_ok and oracle_controller.metadata()["horizon"] == 4
     check("controller registry builds built-ins", registry_ok)
@@ -378,6 +391,25 @@ def test_controller_evaluation_protocol():
         and "return_std" in pid
     )
     check("actuator controller evaluation includes reproducibility metadata", fixed_ok)
+
+    extraction_protocol = BenchmarkProtocol.tracking("extraction", action_mode="actuator", episode_steps=5,
+                                                     dynamic=False, randomize=False,
+                                                     randomize_setpoints=False, randomize_plant=False,
+                                                     plant_drift=False)
+    extraction = evaluate_controller(
+        extraction_pid_controller,
+        extraction_protocol.make_env(),
+        seed_list=[22],
+        protocol=extraction_protocol,
+    )
+    extraction_ok = (
+        extraction["name"] == "PID"
+        and extraction["controller"]["scenario"] == "extraction"
+        and extraction["episodes"] == 1
+        and extraction["constraint_violation_count"] == 0.0
+        and np.isfinite(extraction["kpi"])
+    )
+    check("extraction PID baseline evaluates through controller registry", extraction_ok)
 
     sup = BenchmarkProtocol.economic("cstr", action_mode="setpoint", episode_steps=8,
                                      dynamic=False, randomize=False,
@@ -405,13 +437,41 @@ def test_controller_evaluation_protocol():
     )
     check("policy evaluation uses the same rollout path", policy_ok)
 
+    class DegradedPolicy:
+        name = "diagnostic-setpoint-policy"
+
+        def act(self, obs, deterministic=True):
+            return default_action
+
+        def diagnostics(self):
+            return {
+                "solve_count": 1,
+                "solver_success_count": 0,
+                "solver_failure_count": 1,
+                "fallback_count": 1,
+                "degraded": True,
+                "last_solver_error": "synthetic failure",
+            }
+
+    diagnostic_controller = as_controller(DegradedPolicy(), action_mode="setpoint",
+                                          control_structure="diagnostic_setpoint_policy")
+    diag = evaluate_controller(diagnostic_controller, sup.make_env(), episodes=1, seed=322,
+                               protocol=sup, include_episodes=True)
+    diag_ok = (
+        diag["controller_status"] == "degraded"
+        and diag["controller_solver_failure_count"] == 1.0
+        and diag["controller_fallback_count"] == 1.0
+        and diag["controller_diagnostics"]["solver_failure_count"] == 1
+        and diag["controller_diagnostics"]["last_solver_error"] == "synthetic failure"
+        and diag["episode_metrics"][0]["controller_degraded_count"] == 1.0
+    )
+    check("controller diagnostics mark degraded evaluations", diag_ok)
+
 
 def test_generic_controller_rollout():
     """The common rollout recorder should work across built-in process models."""
     rollout_ok = True
-    for scn in SCENARIOS:
-        if not make_model(scn).supervisory_layout:
-            continue
+    for scn in load_controller_config("pid").get("scenarios", {}):
         protocol = BenchmarkProtocol.tracking(
             scn,
             action_mode="actuator",
@@ -445,9 +505,25 @@ def test_benchmark_config_and_report_schema():
         "robustness": BenchmarkProtocol.robustness("cstr", episode_steps=3),
         "safety": BenchmarkProtocol.safety("cstr", episode_steps=3),
     }
+    tracking_metrics = protocols["tracking"].metadata()["metrics"]
+    tracking_meta = protocols["tracking"].metadata()
+    tracking_env_kwargs = protocols["tracking"].env_kwargs()
+    legacy_protocol = BenchmarkProtocol.tracking("cstr", reward_mode="track", episode_steps=3)
     protocol_ok = (
-        protocols["tracking"].metadata()["metrics"][0] == "tracking_iae"
+        tracking_metrics[0] == "tracking_iae"
+        and all(key.startswith("tracking_") for key in tracking_metrics)
+        and "energy_kwh" not in tracking_metrics
+        and "constraint_violation_count" not in tracking_metrics
+        and tracking_meta["primary_metric"] == "tracking_iae"
+        and tracking_meta["primary_metric_direction"] == "minimize"
+        and tracking_meta["env_reward_mode"] == "track"
+        and "reward_mode" not in tracking_meta
+        and protocols["tracking"].reward_mode == "track"
+        and tracking_env_kwargs["reward_mode"] == "track"
+        and "env_reward_mode" not in tracking_env_kwargs
+        and legacy_protocol.env_reward_mode == "track"
         and protocols["economic"].metadata()["metrics"][0] == "profit"
+        and protocols["economic"].metadata()["primary_metric"] == "profit"
         and protocols["robustness"].metadata()["noise"] is True
         and protocols["safety"].metadata()["metrics"][0] == "constraint_violation_count"
     )
@@ -459,6 +535,10 @@ def test_benchmark_config_and_report_schema():
         and config_meta["controller"] == "pid"
         and config_meta["seed_list"] == [11, 12]
         and config_meta["episode_steps"] == 3
+        and config_meta["primary_metric"] == "tracking_iae"
+        and config_meta["primary_metric_direction"] == "minimize"
+        and config_meta["protocol"]["env_reward_mode"] == "track"
+        and "reward_mode" not in config_meta["protocol"]
         and "tracking_iae" in config_meta["metric_definitions"]
     )
 
@@ -472,6 +552,8 @@ def test_benchmark_config_and_report_schema():
     report = build_evaluation_report([result])
     report_ok = (
         {"tracking", "economic", "safety", "robustness"}.issubset(report)
+        and result["metric"] == "tracking_iae"
+        and result["metric_direction"] == "minimize"
         and report["tracking"][0]["name"] == "PID"
         and "tracking_iae" in report["tracking"][0]
         and "profit" in report["economic"][0]
@@ -481,17 +563,193 @@ def test_benchmark_config_and_report_schema():
     check("BenchmarkConfig + separated evaluation report schema", protocol_ok and config_ok and report_ok)
 
 
+def test_kpi_tracking_setpoint_alignment():
+    """KPI and tracking metrics should use the same active setpoint semantics."""
+    from aiogym.evaluation import _tracking_step_metrics
+    from aiogym.metrics.kpi import W_LEVEL
+
+    env = AIOGymNativeEnv("heater", reward_mode="track", action_mode="actuator",
+                          dynamic=False, randomize=False, randomize_setpoints=False,
+                          episode_steps=1)
+    env.reset(seed=0)
+    _, _, _, _, info = env.step(np.full(env.action_space.shape[0], 0.5, np.float32))
+    level_err = abs(info["levels"][0] - env.h_sp[0]) / env.model.kpi_level_scale
+    report = env.scorer.report()
+    tracking = _tracking_step_metrics(info, {"h_sp": env.h_sp, "t_sp": env.t_sp}, 0.0, env.control_dt, env)
+    scaled_ok = (
+        abs(report["comp_level"] - W_LEVEL * level_err) < 1e-9
+        and abs(tracking["tracking_iae"] - (abs(info["temps"][0] - env.t_sp[0]) + level_err) * env.control_dt) < 1e-9
+    )
+
+    class HighSetpointPolicy:
+        name = "high-setpoint-policy"
+
+        def act(self, obs, deterministic=True):
+            return np.array([1.0, 1.0], dtype=np.float32)
+
+    protocol = BenchmarkProtocol.economic("heater", action_mode="setpoint", episode_steps=1,
+                                          dynamic=False, randomize=False,
+                                          randomize_setpoints=False, randomize_plant=False,
+                                          plant_drift=False)
+    result = evaluate_controller(
+        as_controller(HighSetpointPolicy(), action_mode="setpoint"),
+        protocol.make_env(),
+        seed_list=[7],
+        protocol=protocol,
+        include_episodes=True,
+    )
+    replay = protocol.make_env()
+    replay.reset(seed=7)
+    _, _, _, _, replay_info = replay.step(np.array([1.0, 1.0], dtype=np.float32))
+    post = _tracking_step_metrics(
+        replay_info,
+        {"h_sp": replay.h_sp, "t_sp": replay.t_sp},
+        0.0,
+        replay.control_dt,
+        replay,
+    )
+    pre = _tracking_step_metrics(
+        replay_info,
+        {"h_sp": [3.0], "t_sp": [370.0]},
+        0.0,
+        replay.control_dt,
+        replay,
+    )
+    setpoint_ok = (
+        abs(result["episode_metrics"][0]["tracking_iae"] - post["tracking_iae"]) < 1e-9
+        and abs(post["tracking_iae"] - pre["tracking_iae"]) > 1e-6
+    )
+    check("KPI and tracking metrics use active scaled setpoints", scaled_ok and setpoint_ok)
+
+
+def test_pure_tracking_reward_mode():
+    """Tracking reward should be pure SP error; safety/energy stay report-only."""
+    from aiogym.evaluation import metric_for_reward_mode, primary_metric_for_objective
+
+    env = AIOGymNativeEnv("hvac", reward_mode="track", action_mode="actuator",
+                          dynamic=False, randomize=False, randomize_setpoints=False,
+                          episode_steps=1)
+    env.reset(seed=0)
+    _, reward, _, _, info = env.step(np.zeros(env.action_space.shape[0], np.float32))
+    pure_reward_ok = abs(reward + info["track"]) < 1e-9
+    diagnostics_ok = "constraint" in info and "energy_kw" in info and info["constraint"] >= 0.0
+    metric_ok = metric_for_reward_mode("track") == "return" and primary_metric_for_objective("tracking") == "tracking_iae"
+    check("Pure SP tracking reward excludes energy and constraints", pure_reward_ok and diagnostics_ok and metric_ok)
+
+
+def test_setpoint_randomization_uses_model_bounds():
+    """Setpoint moves should honor model-specific SP bounds such as heater O2."""
+    env = AIOGymNativeEnv("heater", dynamic=False, randomize=False,
+                          randomize_setpoints=True, episode_steps=1)
+    reset_bounds_ok = True
+    move_bounds_ok = True
+    for seed in range(8):
+        env.reset(seed=seed)
+        reset_bounds_ok = reset_bounds_ok and 364.0 <= env.t_sp[0] <= 372.0
+        reset_bounds_ok = reset_bounds_ok and 1.8 <= env.h_sp[0] <= 5.0
+        env._apply_disturbance("setpoint_move")
+        move_bounds_ok = move_bounds_ok and 364.0 <= env.t_sp[0] <= 372.0
+        move_bounds_ok = move_bounds_ok and 1.8 <= env.h_sp[0] <= 5.0
+
+    legacy_water_range_ok = True
+    tank = AIOGymNativeEnv("cascade", dynamic=False, randomize=False,
+                           randomize_setpoints=True, episode_steps=1)
+    tank.reset(seed=3)
+    for idx in tank.model.controlled_levels():
+        legacy_water_range_ok = legacy_water_range_ok and 0.15 <= tank.h_sp[idx] <= 0.70
+    check("setpoint randomization uses model-specific bounds", reset_bounds_ok and move_bounds_ok and legacy_water_range_ok)
+
+
+def test_benchmark_suite_configs():
+    """Named benchmark suites are data configs, not hidden script constants."""
+    from aiogym.cli.suite import SUMMARY_COLUMNS, build_summary_table, load_suite
+
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    cfg_dir = os.path.join(root, "aiogym", "configs", "benchmarks")
+    required = {
+        "core.json",
+        "all-actuator.json",
+        "tracking-actuator.json",
+        "economic-actuator.json",
+        "economic-supervisory.json",
+        "rl-direct-actuator.json",
+        "robustness-actuator.json",
+        "standard-baselines.json",
+        "crystallization-tracking.json",
+    }
+    present = set(os.listdir(cfg_dir))
+    configs_ok = required.issubset(present)
+    for name in required:
+        with open(os.path.join(cfg_dir, name)) as f:
+            cfg = json.load(f)
+        configs_ok = configs_ok and {"description", "scenarios", "objectives", "controllers", "action_mode"}.issubset(cfg)
+        configs_ok = configs_ok and cfg["action_mode"] in {"actuator", "setpoint"}
+        configs_ok = configs_ok and bool(cfg["objectives"]) and bool(cfg["controllers"])
+    with open(os.path.join(cfg_dir, "economic-supervisory.json")) as f:
+        supervisory = json.load(f)
+    with open(os.path.join(cfg_dir, "rl-direct-actuator.json")) as f:
+        direct = json.load(f)
+    configs_ok = configs_ok and supervisory["action_mode"] == "setpoint" and supervisory["controllers"] == ["sb3"]
+    configs_ok = configs_ok and direct["action_mode"] == "actuator" and direct["controllers"] == ["sb3"]
+    with open(os.path.join(cfg_dir, "standard-baselines.json")) as f:
+        standard = json.load(f)
+    configs_ok = configs_ok and standard["scenarios"] == "ALL_SCENARIOS"
+    configs_ok = configs_ok and standard["objectives"] == ["tracking", "economic"]
+    configs_ok = configs_ok and standard["controllers"] == ["pid", "mpc", "oracle"]
+    crystal = load_suite("crystallization-tracking")
+    configs_ok = configs_ok and crystal["scenarios"] == ["crystallization"]
+    configs_ok = configs_ok and crystal["controllers"] == ["pid", "mpc", "oracle"]
+    configs_ok = configs_ok and crystal["episode_steps"] == 30
+    configs_ok = configs_ok and crystal["control_dt"] == 1.0
+    summary = build_summary_table([{
+        "suite_case": "tracking:cstr:pid",
+        "scenario": "cstr",
+        "objective": "tracking",
+        "action_mode": "actuator",
+        "controller": "PID",
+        "control_structure": "fixed_sp_pid",
+        "status": "passed",
+        "metric": "tracking_iae",
+        "kpi": 90.0,
+        "kpi_std": 1.5,
+        "profit": 0.0,
+        "return": -1.0,
+        "return_std": 0.2,
+        "track": 1.0,
+        "tracking_iae": 1.0,
+        "tracking_iae_std": 0.3,
+        "energy_kwh": 0.1,
+        "constraint": 0.0,
+        "constraint_violation_count": 0.0,
+        "constraint_violation_severity": 0.0,
+        "safety_margin_min": 0.0,
+        "runtime_seconds_per_step": 0.001,
+        "controller_fallback_count": 0,
+        "controller_solver_failure_count": 0,
+        "episodes": 2,
+        "seed_list": [11, 12],
+    }])
+    summary_ok = (
+        set(SUMMARY_COLUMNS).issubset(summary[0])
+        and summary[0]["metric_mean"] == 1.0
+        and summary[0]["metric_std"] == 0.3
+        and summary[0]["seed_list"] == [11, 12]
+    )
+    check("benchmark suite configs declare controller permissions", configs_ok and summary_ok)
+
+
 def test_oracle():
     """NMPC oracle solves and beats PID on CSTR economic (it's the upper bound)."""
     try:
-        from aiogym.control.oracle import OracleAgent
+        from aiogym.controllers.oracle import OracleAgent
     except RuntimeError as ex:
         print(f"  (skip oracle: {ex})"); return
-    from aiogym.control.baselines import PIDAgent, evaluate
+    from aiogym.evaluation import evaluate_controller
+    from aiogym.controllers.pid import PIDAgent
     from aiogym.models import make_model
     mk = lambda: AIOGymNativeEnv("cstr", reward_mode="economic", episode_steps=120, dynamic=True, randomize_plant=True)
-    orc = evaluate(OracleAgent("cstr", horizon=12, mode="economic"), mk(), episodes=2)["profit"]
-    pid = evaluate(PIDAgent(make_model("cstr")), mk(), episodes=2)["profit"]
+    orc = evaluate_controller(OracleAgent("cstr", horizon=12, mode="economic"), mk(), episodes=2)["profit"]
+    pid = evaluate_controller(PIDAgent(make_model("cstr")), mk(), episodes=2)["profit"]
     check(f"NMPC oracle {orc:.0f} > PID {pid:.0f}", orc > pid)
 
 
@@ -509,5 +767,9 @@ if __name__ == "__main__":
     print("controller evaluation protocol:"); test_controller_evaluation_protocol()
     print("generic controller rollout:"); test_generic_controller_rollout()
     print("benchmark config/report schema:"); test_benchmark_config_and_report_schema()
+    print("KPI/tracking setpoint alignment:"); test_kpi_tracking_setpoint_alignment()
+    print("pure SP tracking reward mode:"); test_pure_tracking_reward_mode()
+    print("setpoint randomization bounds:"); test_setpoint_randomization_uses_model_bounds()
+    print("benchmark suite configs:"); test_benchmark_suite_configs()
     print("NMPC oracle baseline:"); test_oracle()
     print(f"\nALL INTERFACE TESTS PASS {OK}")

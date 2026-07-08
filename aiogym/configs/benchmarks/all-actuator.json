@@ -1,0 +1,7 @@
+{
+  "description": "All built-in process models with fixed actuator baselines.",
+  "scenarios": "ALL_SCENARIOS",
+  "objectives": ["tracking", "economic"],
+  "controllers": ["pid", "mpc"],
+  "action_mode": "actuator"
+}

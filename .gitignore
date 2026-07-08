@@ -1,7 +1,10 @@
 # Python
 .venv/
+.venv-rl/
 __pycache__/
 *.pyc
+output/
+tmp/
 
 # Node / OS
 node_modules/

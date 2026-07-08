@@ -1,0 +1,7 @@
+{
+  "description": "Standard fixed-actuator baseline matrix for all built-in scenarios.",
+  "scenarios": "ALL_SCENARIOS",
+  "objectives": ["tracking", "economic"],
+  "controllers": ["pid", "mpc", "oracle"],
+  "action_mode": "actuator"
+}

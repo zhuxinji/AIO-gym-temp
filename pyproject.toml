@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiogym"
+version = "0.1.0"
+description = "Native Gymnasium backend and benchmark suite for AIO-Gym process-control environments."
+readme = "aiogym/README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "AIO-Gym Contributors" }
+]
+dependencies = [
+  "gymnasium>=0.29",
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+oracle = [
+  "casadi>=3.6",
+]
+train = [
+  "stable-baselines3>=2.3",
+  "torch>=2.2",
+]
+export = [
+  "onnx>=1.16",
+  "onnxruntime>=1.17",
+]
+all = [
+  "casadi>=3.6",
+  "stable-baselines3>=2.3",
+  "torch>=2.2",
+  "onnx>=1.16",
+  "onnxruntime>=1.17",
+]
+
+[project.scripts]
+aiogym-benchmark = "aiogym.cli.benchmark:main"
+aiogym-suite = "aiogym.cli.suite:main"
+aiogym-train = "aiogym.cli.train:main"
+aiogym-train-rlpd = "aiogym.cli.train_rlpd:main"
+aiogym-train-sb3 = "aiogym.cli.train_sb3:main"
+aiogym-tune-cstr-mpc = "aiogym.cli.tune_cstr_mpc:main"
+aiogym-tune-extraction-pid = "aiogym.cli.tune_extraction_pid:main"
+
+[tool.setuptools.packages.find]
+include = ["aiogym*"]
+
+[tool.setuptools.package-data]
+aiogym = [
+  "configs/benchmarks/*.json",
+  "configs/controllers/*.json",
+  "tests/golden.json",
+]

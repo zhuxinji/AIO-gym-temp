@@ -14,6 +14,18 @@
     "cascade": {},
     "quadruple": {},
     "cstr": {},
-    "hvac": {}
+    "hvac": {},
+    "heater": {
+      "cv_scale_level": 1.2,
+      "cv_scale_temp": 12.0
+    },
+    "crystallization": {
+      "Ts": 1.0,
+      "P": 2,
+      "move_supp": 0.0,
+      "du_max": 0.4,
+      "cv_scale_level": 1.0,
+      "cv_scale_temp": 1.0
+    }
   }
 }

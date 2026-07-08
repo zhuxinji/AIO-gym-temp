@@ -11,10 +11,10 @@ Contract (matches the browser RL contract so ONNX policies are interchangeable):
 
 reward_mode:
   "kpi"      (default) reward = -(instantaneous KPI penalty) using the same
-             tracking + excess-energy + safety scoring the gym/browser display
-             (scoring.py), so the RL optimizes exactly what it is judged on.
+             tracking + excess-energy + safety KPI the gym/browser display
+             (metrics.kpi), so the RL optimizes exactly what it is judged on.
   "economic" CSTR production-maximisation (legacy economic demo).
-  "track"    plain setpoint tracking (legacy).
+  "track"    plain setpoint tracking: reward = -normalized SP error.
 
 dynamic=True injects within-episode disturbances (setpoint steps, cold-inlet
 steps, ambient drift, demand surges) on top of domain-randomised start points.
@@ -29,12 +29,27 @@ from gymnasium import spaces
 
 from .models import make_model, obs_vector
 from .kernel import Integrator
-from .scoring import KPIScorer
+from .metrics.kpi import KPIScorer
 
 # Advisory/interlock limits mirror frontend/js/sim/alarms.js (LIMITS).
 T_HIGH, T_TRIP = 80.0, 92.0
 H_HIGH_FRAC, H_LOW_FRAC, H_OVERFLOW_FRAC = 0.90, 0.15, 0.97
 I_TEMP_MAX, I_LEVEL_MAX = 300.0, 8.0          # anti-windup clamp + obs normalizer for integral error
+DISTURBANCE_ATTRS = {
+    "t_cold": "t_cold",
+    "t_amb": "t_amb",
+    "extra_outflow": "extra_outflow",
+    "Caf": "caf",
+    "Tcool": "tcool",
+    "pump_flow_factor": "pump_flow_factor",
+    "heater_efficiency": "heater_efficiency",
+    "heat_loss_factor": "heat_loss_factor",
+    "heat_load": "heat_load",
+    "hvac_efficiency": "hvac_efficiency",
+    "growth_factor": "growth_factor",
+    "nucleation_factor": "nucleation_factor",
+    "solubility_bias": "solubility_bias",
+}
 
 # ---- Environment wrapper ----
 class AIOGymNativeEnv(gym.Env):
@@ -44,7 +59,9 @@ class AIOGymNativeEnv(gym.Env):
                  reward_mode="kpi", dynamic=True, randomize=True, randomize_setpoints=True,
                  randomize_plant=False, plant_drift=False, integral_obs=False, action_mode="actuator",
                  noise=False, noise_pct=0.01, custom_reward=None, custom_model=None,
-                 terminate_on_runaway=False, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0):
+                 terminate_on_runaway=False, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
+                 crystal_ln_sp=None, crystal_cv_sp=None, crystal_random_targets=False,
+                 crystal_ln_range=(10.0, 11.5), crystal_cv_range=(0.75, 0.95)):
         super().__init__()
         self.model = make_model(custom_model if custom_model is not None else scenario)
         self.scenario = self.model.scenario
@@ -63,6 +80,11 @@ class AIOGymNativeEnv(gym.Env):
         self.terminate_on_runaway = terminate_on_runaway
         # legacy economic-mode weights (CSTR)
         self.w_prod, self.w_energy, self.w_constraint = w_prod, w_energy, w_constraint
+        self.crystal_ln_sp = crystal_ln_sp
+        self.crystal_cv_sp = crystal_cv_sp
+        self.crystal_random_targets = bool(crystal_random_targets)
+        self.crystal_ln_range = tuple(crystal_ln_range)
+        self.crystal_cv_range = tuple(crystal_cv_range)
 
         self._p_nominal = {k: (list(v) if isinstance(v, list) else v) for k, v in self.model.p.items()}
         self._regime = copy.deepcopy(getattr(self.model, "plant_regime", {}))
@@ -80,6 +102,13 @@ class AIOGymNativeEnv(gym.Env):
         self.nP, self.nV, self.nH = nP, nV, nH
         self.nu = nP + nV + nH
         hsp, tsp = self.model.default_setpoints()
+        if self.scenario == "crystallization":
+            if crystal_ln_sp is not None:
+                tsp[0] = float(crystal_ln_sp)
+            if crystal_cv_sp is not None:
+                hsp[0] = float(crystal_cv_sp)
+                if len(tsp) > 1:
+                    tsp[1] = float(crystal_cv_sp)
         self._hsp0 = [hsp.get(i, 0.0) for i in range(self.model.n)]
         self._tsp0 = list(tsp)
         self._tcold0 = float(self._disturbance_defaults.get("t_cold", self.model.p.get("t_cold", 15.0)))
@@ -96,8 +125,11 @@ class AIOGymNativeEnv(gym.Env):
         # the RL policy do offset-free tracking like PID + adapt under operating-regime drift.
         self.integral_obs = integral_obs
         self.nctrl = len(self.model.controlled_levels())
-        obs_dim = 3 * self.model.n + self.nctrl + 2
-        if integral_obs:
+        if self.scenario == "crystallization" and hasattr(self.model, "observation_dim"):
+            obs_dim = self.model.observation_dim()
+        else:
+            obs_dim = 3 * self.model.n + self.nctrl + 2
+        if integral_obs and self.scenario != "crystallization":
             obs_dim += self.model.n + self.nctrl       # integral temp error + integral level error
         # supervisory (RL-on-PID): action = setpoints, an inner PID does the regulation.
         self.action_mode = action_mode
@@ -108,7 +140,7 @@ class AIOGymNativeEnv(gym.Env):
         else:
             self.layout = None
         if self.layout is not None:
-            from .control.baselines import PIDAgent
+            from .controllers.pid import PIDAgent
             self.pid = PIDAgent(self.model)
             act_dim = len(self.layout)
         else:
@@ -117,6 +149,8 @@ class AIOGymNativeEnv(gym.Env):
         self.action_space = spaces.Box(0.0, 1.0, (act_dim,), dtype=np.float32)
         self.observation_space = spaces.Box(-np.inf, np.inf, (obs_dim,), dtype=np.float32)
         self._k = 0
+        self.last_act = self.model.default_action() if hasattr(self.model, "default_action") else self._split(np.full(self.nu, 0.5))
+        self.previous_act = copy.deepcopy(self.last_act)
 
     # ---- helpers ----
     def _copy_disturbance_value(self, value):
@@ -128,44 +162,30 @@ class AIOGymNativeEnv(gym.Env):
             for name, value in self._disturbance_defaults.items()
         }
 
+    def _set_disturbance_value(self, name, value):
+        self._disturbance_values[name] = self._copy_disturbance_value(value)
+        attr = DISTURBANCE_ATTRS.get(name)
+        if attr:
+            setattr(self, attr, self._copy_disturbance_value(value))
+
     def _sync_known_disturbances(self):
-        known = {
-            "t_cold": self.t_cold,
-            "t_amb": self.t_amb,
-            "extra_outflow": self.extra_outflow,
-            "Caf": self.caf,
-            "Tcool": self.tcool,
-            "pump_flow_factor": self.pump_flow_factor,
-            "heater_efficiency": self.heater_efficiency,
-            "heat_loss_factor": self.heat_loss_factor,
-            "heat_load": list(self.heat_load),
-            "hvac_efficiency": self.hvac_efficiency,
-        }
         for name in self._disturbance_defaults:
-            if name in known:
-                self._disturbance_values[name] = self._copy_disturbance_value(known[name])
+            attr = DISTURBANCE_ATTRS.get(name)
+            if attr and hasattr(self, attr):
+                self._disturbance_values[name] = self._copy_disturbance_value(getattr(self, attr))
 
     def _env(self):
-        env = {
-            name: self._copy_disturbance_value(value)
-            for name, value in self._disturbance_values.items()
-        }
-        env.update({"t_cold": self.t_cold, "t_amb": self.t_amb, "extra_outflow": self.extra_outflow})
-        if self.scenario == "cstr":
-            env.update({"Caf": self.caf, "Tcool": self.tcool})
-        elif self.scenario in ("cascade", "quadruple"):
-            env.update({"pump_flow_factor": self.pump_flow_factor,
-                        "heater_efficiency": self.heater_efficiency,
-                        "heat_loss_factor": self.heat_loss_factor})
-        elif self.scenario == "hvac":
-            env.update({"heat_load": list(self.heat_load), "hvac_efficiency": self.hvac_efficiency})
-        return env
+        self._sync_known_disturbances()
+        return self.model.runtime_env(self._disturbance_values)
 
     def _split(self, action):
         a = np.clip(np.asarray(action, np.float64), 0.0, 1.0)
         return self.model.action_vector_to_dict(a)
 
     def _obs(self):
+        if self.scenario == "crystallization":
+            o = self.model.observation(self.integ.x, self.last_act, self._env(), self.t_sp, self.h_sp)
+            return np.asarray(o, dtype=np.float32)
         out = self.model.outputs(self.integ.x)
         levels, temps = out["levels"], out["temps"]
         if self.noise:                            # measurement noise on observed state (reward uses true state)
@@ -178,6 +198,8 @@ class AIOGymNativeEnv(gym.Env):
         return np.asarray(o, dtype=np.float32)
 
     def _accumulate_integral(self):
+        if self.scenario == "crystallization":
+            return
         out = self.model.outputs(self.integ.x)
         levels, temps = out["levels"], out["temps"]
         ctrl = self.model.controlled_levels()
@@ -256,61 +278,39 @@ class AIOGymNativeEnv(gym.Env):
 
     def _apply_disturbance(self, event):
         rng = self.np_random
-        if event == "cold_inlet_step":
-            self.t_cold = float(np.clip(self._tcold0 + rng.uniform(-8, 8), 2, 35))
-        elif event == "ambient_step":
-            self.t_amb = float(np.clip(self._tamb0 + rng.uniform(-8, 12), 0, 40))
-        elif event == "demand_surge":
-            self.extra_outflow = float(abs(rng.uniform(0, 8e-4)))
-        elif event == "feed_concentration_step":
-            self.caf = float(np.clip(self._caf0 + rng.uniform(-0.25, 0.35), 0.2, 2.0))
-        elif event == "coolant_temperature_step":
-            self.tcool = float(np.clip(self._tcool0 + rng.uniform(-8, 10), -5, 35))
-        elif event == "pump_capacity_shift":
-            self.pump_flow_factor = float(np.clip(self._pump_flow_factor0 + rng.uniform(-0.30, 0.30), 0.6, 1.3))
-        elif event == "heater_efficiency_shift":
-            self.heater_efficiency = float(np.clip(self._heater_efficiency0 + rng.uniform(-0.35, 0.15), 0.55, 1.15))
-        elif event == "heat_loss_shift":
-            self.heat_loss_factor = float(np.clip(self._heat_loss_factor0 + rng.uniform(-0.4, 1.2), 0.5, 2.4))
-        elif event == "internal_heat_load_step":
-            self.heat_load = [float(rng.uniform(-200, 900)), float(rng.uniform(-200, 900))]
-        elif event == "hvac_efficiency_shift":
-            self.hvac_efficiency = float(np.clip(self._hvac_efficiency0 + rng.uniform(-0.35, 0.20), 0.6, 1.2))
-        elif event == "setpoint_move":
-            for i in self.model.controlled_levels():
-                self.h_sp[i] = float(np.clip(self.h_sp[i] * (1 + 0.15 * rng.uniform(-1, 1)), 0.15, 0.70))
-            self.t_sp = [float(np.clip(t * (1 + 0.10 * rng.uniform(-1, 1)), 15.0, 85.0)) for t in self.t_sp]
+        if event == "setpoint_move":
+            self._randomize_setpoints(rng)
         else:
-            self._apply_schema_disturbance(event)
-        self._sync_known_disturbances()
+            row = self._disturbance_by_event.get(event)
+            if row and row.get("kind") != "setpoint":
+                name = row.get("name")
+                default = self._disturbance_defaults.get(name, row.get("default", 0.0))
+                self._set_disturbance_value(name, self.model.sample_disturbance(event, default, rng))
 
-    def _apply_schema_disturbance(self, event):
-        row = self._disturbance_by_event.get(event)
-        if not row or row.get("kind") == "setpoint":
-            return
-        name = row.get("name")
-        if not name:
-            return
-        default = self._disturbance_values.get(name, self._disturbance_defaults.get(name, row.get("default", 0.0)))
-        self._disturbance_values[name] = self._sample_schema_disturbance(default, row)
+    def _setpoint_bounds(self):
+        h_bounds = {}
+        t_bounds = {}
+        for spec in getattr(self.model, "supervisory_layout", ()):
+            if len(spec) < 4:
+                continue
+            kind = spec[0]
+            idx = spec[1]
+            lo, hi = float(spec[-2]), float(spec[-1])
+            if kind == "h_sp":
+                h_bounds[int(idx)] = (lo, hi)
+            elif kind == "t_sp":
+                t_bounds[int(idx)] = (lo, hi)
+        return h_bounds, t_bounds
 
-    def _sample_schema_disturbance(self, default, row):
-        rng = self.np_random
-        if row.get("values"):
-            values = list(row["values"])
-            return self._copy_disturbance_value(values[int(rng.integers(0, len(values)))])
-        bounds = row.get("bounds")
-        if (
-            isinstance(bounds, (tuple, list))
-            and len(bounds) == 2
-            and bounds[0] is not None
-            and bounds[1] is not None
-        ):
-            lo, hi = float(bounds[0]), float(bounds[1])
-            if isinstance(default, (list, tuple)):
-                return [float(rng.uniform(lo, hi)) for _ in default]
-            return float(rng.uniform(lo, hi))
-        return self._copy_disturbance_value(default)
+    def _randomize_setpoints(self, rng):
+        h_bounds, t_bounds = self._setpoint_bounds()
+        for i in self.model.controlled_levels():
+            lo, hi = h_bounds.get(i, (0.15, 0.70))
+            self.h_sp[i] = float(np.clip(self.h_sp[i] * (1 + 0.15 * rng.uniform(-1, 1)), lo, hi))
+        self.t_sp = [
+            float(np.clip(t * (1 + 0.10 * rng.uniform(-1, 1)), *t_bounds.get(i, (15.0, 85.0))))
+            for i, t in enumerate(self.t_sp)
+        ]
 
     def _reward_done(self, act):
         out = self.model.outputs(self.integ.x)
@@ -320,34 +320,32 @@ class AIOGymNativeEnv(gym.Env):
         # tracking error, normalised (level scale 0.1 m, temp scale 10 degC) for info/legacy
         track = sum(abs(levels[i] - self.h_sp[i]) / 0.1 for i in ctrl)
         track += sum(abs(temps[i] - self.t_sp[i]) / 10.0 for i in range(self.model.n))
-        con = 0.0
-        for i, h in enumerate(levels):
-            if h > H_HIGH_FRAC * hmax[i]:
-                con += (h - H_HIGH_FRAC * hmax[i]) / (0.1 * hmax[i])
-            elif h < H_LOW_FRAC * hmax[i]:
-                con += (H_LOW_FRAC * hmax[i] - h) / (0.1 * hmax[i])
-        for T in temps:
-            if T > T_HIGH:
-                con += (T - T_HIGH) / 10.0
-        runaway = any(T > T_TRIP for T in temps) or any(levels[i] > H_OVERFLOW_FRAC * hmax[i] for i in range(len(levels)))
+        cons_info = self.model.common_constraint_info(levels, temps)
+        runaway = self.model.runaway_state(levels, temps)
+        env = self._env()
+        cons_info.update(self.model.process_constraint_info(self.integ.x, levels, temps, env))
+        try:
+            process_extra = self.model.process_info(self.integ.x, levels, temps, env, act)
+        except TypeError:
+            process_extra = self.model.process_info(self.integ.x, levels, temps, env)
+        con = self._constraint_penalty(cons_info, hmax)
 
         # Always accumulate the KPI scorer (independent of reward_mode) so any agent
         # PID / MPC / RL can be ranked by env.scorer.report()["score"].
         heat_w = self.model.heater_power(act)
-        ideal_w = self.model.ideal_power(levels, temps, self.t_sp, self._env(), act)
+        ideal_w = self.model.ideal_power(levels, temps, self.t_sp, env, act)
         pen = self.scorer.step_penalty(levels, temps, self.h_sp, self.t_sp,
                                        heat_w, ideal_w, runaway, self.control_dt)
 
         prod = 0.0
         if self.reward_mode == "economic":
-            profit, prod = self._economic_profit(act, levels, temps, runaway)
+            profit, prod = self._economic_profit(act, levels, temps, runaway, env)
             reward = profit * self.reward_scale          # scaled for stable critic; profit reported raw
         elif self.reward_mode == "kpi":
             reward = -pen * self.reward_scale            # -(instantaneous KPI penalty)
             profit = 0.0
         else:
-            energy = sum(act["heaters"]) + 0.3 * sum(act["pumps"])
-            reward = -(track + 0.03 * energy + 5.0 * con)
+            reward = -track
             profit = 0.0
 
         if self.custom_reward is not None:               # user-supplied reward overrides
@@ -356,38 +354,6 @@ class AIOGymNativeEnv(gym.Env):
         terminated = bool(self.terminate_on_runaway and runaway)
         if terminated:
             reward -= 50.0
-        # per-constraint violation amounts (PC-Gym-style tracking for safe-RL benchmarking)
-        cons_info = {"temp_high": max((T - T_HIGH for T in temps), default=0.0),
-                     "temp_trip": max((T - T_TRIP for T in temps), default=0.0),
-                     "level_high": max((levels[i] - H_HIGH_FRAC * hmax[i] for i in range(len(levels))), default=0.0),
-                     "level_low": max((H_LOW_FRAC * hmax[i] - levels[i] for i in range(len(levels))), default=0.0)}
-        process_extra = {}
-        if self.scenario == "cstr":
-            ca = float(self.integ.x[0])
-            cons_info.update({
-                "cstr_ca_high": max(0.0, ca - 1.5),
-                "cstr_ca_low": max(0.0, -ca),
-                "cstr_temp_low": max(0.0, -temps[0]),
-            })
-            process_extra = {
-                "cstr_feed_conc": self.caf,
-                "cstr_coolant_temp": self.tcool,
-                "cstr_conversion": self.model.conversion(self.integ.x, self._env()),
-            }
-        elif self.scenario in ("cascade", "quadruple"):
-            process_extra = {
-                "pump_flow_factor": self.pump_flow_factor,
-                "heater_efficiency": self.heater_efficiency,
-                "heat_loss_factor": self.heat_loss_factor,
-            }
-        elif self.scenario == "hvac":
-            lo_viol = max((20.0 - T for T in temps), default=0.0)
-            hi_viol = max((T - 24.0 for T in temps), default=0.0)
-            cons_info.update({"hvac_comfort_low": max(0.0, lo_viol), "hvac_comfort_high": max(0.0, hi_viol)})
-            process_extra = {
-                "hvac_heat_load": list(self.heat_load),
-                "hvac_efficiency": self.hvac_efficiency,
-            }
         heat_kw = self.model.heater_power(act) / 1000.0
         pump_kw = self.model.pump_power(act) / 1000.0
         info = {"track": track, "constraint": con, "prod": prod, "profit": profit,
@@ -400,16 +366,35 @@ class AIOGymNativeEnv(gym.Env):
             info.update(process_extra)
         return float(reward), terminated, info
 
-    def _economic_profit(self, act, levels, temps, runaway):
+    def _constraint_penalty(self, cons_info, hmax):
+        hmax_values = list(hmax)
+        level_scale = 0.1 * max(max(hmax_values), 1e-9) if hmax_values else 0.1
+        scales = {
+            "temp_high": 10.0,
+            "temp_trip": 10.0,
+        }
+        scales.update(self.model.constraint_penalty_scales())
+        total = 0.0
+        for key, value in cons_info.items():
+            violation = max(0.0, float(value))
+            if key.startswith("level_"):
+                scale = level_scale
+            else:
+                scale = scales.get(key, 1.0)
+            total += violation / max(scale, 1e-9)
+        return float(total)
+
+    def _economic_profit(self, act, levels, temps, runaway, env=None):
         """Economic objective: value minus energy cost minus soft-band violation.
 
         The optimum hugs a band/constraint edge that drifts with operating regime, so fixed-SP control is
         suboptimal. Returns (profit, production)."""
         cfg = self._econ
+        env = env or self._env()
         ctrl = self.model.controlled_levels()
         value = prod = 0.0
         if cfg["value"] == "production" and hasattr(self.model, "production"):
-            prod = self.model.production(self.integ.x, act, self._env())
+            prod = self.model.production(self.integ.x, act, env)
             value = prod
         energy_kw = self.model.heater_power(act) / 1000.0
         viol = 0.0
@@ -418,12 +403,13 @@ class AIOGymNativeEnv(gym.Env):
                 viol += (lo - temps[i]) / 10.0
             if hi is not None and temps[i] > hi:
                 viol += (temps[i] - hi) / 10.0
+        level_scale = cfg.get("level_scale", 0.1)
         for j, i in enumerate(ctrl):
             lo, hi = cfg["level_band"][j]
             if lo is not None and levels[i] < lo:
-                viol += (lo - levels[i]) / 0.1
+                viol += (lo - levels[i]) / level_scale
             if hi is not None and levels[i] > hi:
-                viol += (levels[i] - hi) / 0.1
+                viol += (levels[i] - hi) / level_scale
         profit = cfg["w_value"] * value - cfg["w_energy"] * energy_kw - cfg["w_viol"] * viol
         if runaway:
             profit -= 50.0
@@ -453,17 +439,24 @@ class AIOGymNativeEnv(gym.Env):
         self.heat_loss_factor = float(self._heat_loss_factor0)
         self.heat_load = list(self._heat_load0)
         self.hvac_efficiency = float(self._hvac_efficiency0)
+        self.growth_factor = float(self._disturbance_defaults.get("growth_factor", 1.0))
+        self.nucleation_factor = float(self._disturbance_defaults.get("nucleation_factor", 1.0))
+        self.solubility_bias = float(self._disturbance_defaults.get("solubility_bias", 0.0))
         self.extra_outflow = 0.0
         if self.randomize:
             for j in range(len(x0)):
                 x0[j] *= 1.0 + 0.08 * float(rng.uniform(-1, 1))
-            self.t_cold = float(np.clip(self._tcold0 + rng.uniform(-5, 5), 2, 35))
-            self.t_amb = float(np.clip(self._tamb0 + rng.uniform(-5, 8), 0, 40))
+            if self.scenario != "crystallization":
+                self.t_cold = float(np.clip(self._tcold0 + rng.uniform(-5, 5), 2, 35))
+                self.t_amb = float(np.clip(self._tamb0 + rng.uniform(-5, 8), 0, 40))
         self._sync_known_disturbances()
-        if self.randomize_setpoints:
-            for i in self.model.controlled_levels():
-                self.h_sp[i] = float(np.clip(self.h_sp[i] * (1 + 0.15 * rng.uniform(-1, 1)), 0.15, 0.70))
-            self.t_sp = [float(np.clip(t * (1 + 0.10 * rng.uniform(-1, 1)), 15.0, 85.0)) for t in self.t_sp]
+        if self.scenario == "crystallization" and self.crystal_random_targets:
+            self.t_sp[0] = float(rng.uniform(*self.crystal_ln_range))
+            self.h_sp[0] = float(rng.uniform(*self.crystal_cv_range))
+            if len(self.t_sp) > 1:
+                self.t_sp[1] = self.h_sp[0]
+        if self.randomize_setpoints and self.scenario != "crystallization":
+            self._randomize_setpoints(rng)
         self.integ.reset(x0)
         self.scorer.reset()
         if self.pid is not None:
@@ -471,6 +464,8 @@ class AIOGymNativeEnv(gym.Env):
         self._itemp = [0.0] * self.model.n
         self._ilevel = [0.0] * self.nctrl
         self._k = 0
+        self.last_act = self.model.default_action() if hasattr(self.model, "default_action") else self._split(np.full(self.nu, 0.5))
+        self.previous_act = copy.deepcopy(self.last_act)
         self._schedule_disturbances()
         return self._obs(), {}
 
@@ -516,6 +511,7 @@ class AIOGymNativeEnv(gym.Env):
 
     def step(self, action):
         act = self._supervise(action) if self.pid is not None else self._split(action)
+        self.last_act = act
         for (t, event) in self._dist_events:
             if t == self._k:
                 self._apply_disturbance(event)

@@ -13,7 +13,9 @@ the browser AIO-Gym (export to ONNX, load in RL mode) and competes with PID/MPC.
 
 ## Install & verify
 ```bash
-pip install -r aiogym/requirements.txt          # numpy + gymnasium
+pip install -e .                                # core Gymnasium backend
+pip install -e ".[oracle]"                      # add NMPC oracle support
+pip install -e ".[train]"                       # add SB3/Torch training support
 node scripts/generate_golden.mjs --check         # verify golden was generated from JS source
 python aiogym/tests/test_parity.py               # prove consistency with the JS sim
 ```
@@ -30,15 +32,26 @@ Single env runs roughly 2k steps/s (pure python); wrap in `gymnasium.vector` for
 ## Contract (matches the browser RL contract; ONNX policies are interchangeable)
 - `obs = [levels(n), temps(n), t_sp(n), h_sp(controlled k), t_cold, t_amb]`
 - `action = [pumps..., valves..., heaters...] in [0,1]`  (direct-actuator mode)
-- `reward = -(w_track*tracking + w_energy*effort + w_constraint*violation)`; hard
-  terminal on thermal runaway / overflow. Weights and `control_dt`, `episode_steps`,
-  `randomize`, `randomize_setpoints` are constructor args.
+- `reward_mode="track"` uses pure setpoint tracking: `reward = -tracking_error`.
+  `reward_mode="kpi"` uses the composite tracking + excess-energy + safety score;
+  `reward_mode="economic"` uses value minus energy and soft constraint penalties.
+  `control_dt`, `episode_steps`, `randomize`, and `randomize_setpoints` are
+  constructor args.
 
 ## Train
-`train_sac.py` is the SAC baseline. For the **offline-to-online** goal (RLPD /
-Cal-QL): generate a historian dataset from this env, seed the replay buffer,
-keep exploring online. RLPD = SAC + offline data in buffer + critic LayerNorm +
-critic ensemble + symmetric sampling (official JAX impl: ikostrikov/rlpd).
+Stable backend entry points live under `aiogym.cli` and are also exposed as
+console commands when installed:
+
+```bash
+aiogym-benchmark --scenario cstr --objective tracking --controllers pid,mpc
+aiogym-suite --suite core --episodes 3
+aiogym-train-sb3 --scenario cstr --algo sac --steps 10000 --onnx
+```
+
+For the **offline-to-online** goal (RLPD / Cal-QL): generate a historian dataset
+from this env, seed the replay buffer, keep exploring online. RLPD = SAC +
+offline data in buffer + critic LayerNorm + critic ensemble + symmetric
+sampling (official JAX impl: ikostrikov/rlpd).
 
 ## Roadmap (next, on top of this consistent core)
 - **Supervisory setpoint mode** (`action = setpoints`, inner PID regulates): the
