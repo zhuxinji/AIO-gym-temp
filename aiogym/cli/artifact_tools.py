@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from aiogym.evaluation import check_benchmark_artifacts, render_benchmark_report
-from aiogym.models import collect_model_cards, export_model_cards
+from aiogym.models import collect_model_cards, export_model_card_markdown, export_model_cards
 
 
 def parse_scenarios(raw: str | None):
@@ -25,22 +25,34 @@ def model_cards_main():
         description="Export or validate model-card metadata for registered scenarios."
     )
     ap.add_argument("--out-dir", default="aiogym/runs/model_cards",
-                    help="directory for one JSON file per model card")
+                    help="directory for exported model cards")
     ap.add_argument("--scenarios", default=None,
                     help="comma-separated scenario override; defaults to all registered scenarios")
+    ap.add_argument("--format", default="json", choices=["json", "markdown", "both"],
+                    help="export machine-readable JSON, human-readable Markdown, or both")
     ap.add_argument("--check", action="store_true",
                     help="validate and print the manifest without writing files")
     ap.add_argument("--no-manifest", action="store_true",
-                    help="skip writing manifest.json")
+                    help="skip writing manifest/index files")
     args = ap.parse_args()
 
     scenarios = parse_scenarios(args.scenarios)
     if args.check:
         cards = collect_model_cards(scenarios)
-        print(json.dumps({"count": len(cards), "scenarios": list(cards)}, indent=2))
+        print(json.dumps({"count": len(cards), "format": args.format, "scenarios": list(cards)}, indent=2))
         return
 
-    manifest = export_model_cards(args.out_dir, scenarios=scenarios, write_manifest=not args.no_manifest)
+    if args.format == "json":
+        manifest = export_model_cards(args.out_dir, scenarios=scenarios, write_manifest=not args.no_manifest)
+    elif args.format == "markdown":
+        manifest = export_model_card_markdown(args.out_dir, scenarios=scenarios, write_index=not args.no_manifest)
+    else:
+        out = Path(args.out_dir)
+        manifest = {
+            "json": export_model_cards(out / "json", scenarios=scenarios, write_manifest=not args.no_manifest),
+            "markdown": export_model_card_markdown(out / "markdown", scenarios=scenarios,
+                                                   write_index=not args.no_manifest),
+        }
     print(json.dumps(manifest, indent=2))
 
 

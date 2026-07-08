@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "aiogym"
 version = "0.1.0"
 description = "Native Gymnasium backend and benchmark suite for AIO-Gym process-control environments."
-readme = "aiogym/README.md"
+readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = { text = "MIT" }
 authors = [
   { name = "AIO-Gym Contributors" }
 ]
@@ -46,12 +46,28 @@ aiogym-suite-benchmark = "aiogym.cli.suite_benchmark:main"
 aiogym-train-rlpd = "aiogym.rl.train_rlpd:main"
 aiogym-train-sb3 = "aiogym.rl.train_sb3:main"
 
-[tool.setuptools.packages.find]
-include = ["aiogym*"]
+[tool.setuptools]
+packages = [
+  "aiogym",
+  "aiogym.cli",
+  "aiogym.controllers",
+  "aiogym.controllers.tuning",
+  "aiogym.evaluation",
+  "aiogym.evaluation.metrics",
+  "aiogym.models",
+  "aiogym.models.scenarios",
+  "aiogym.rl",
+]
+package-dir = { "aiogym" = "." }
 
 [tool.setuptools.package-data]
 aiogym = [
   "controllers/configs/*.json",
+  "controllers/examples/*.py",
+  "controllers/examples/*.md",
+  "models/model_cards/*.md",
+  "models/examples/*.py",
+  "models/examples/*.md",
   "evaluation/suites/*.json",
   "tests/golden.json",
   "tests/generate_golden.mjs",

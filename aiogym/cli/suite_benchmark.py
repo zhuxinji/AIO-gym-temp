@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -192,10 +193,16 @@ def build_summary_table(rows: list[dict]):
     return table
 
 
-def artifact_dir_for(suite_name: str, artifact_dir: str | None = None):
+def artifact_run_id(now: datetime | None = None) -> str:
+    stamp = now or datetime.now(timezone.utc)
+    return stamp.strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def artifact_dir_for(suite_name: str, artifact_dir: str | None = None, run_id: str | None = None):
     if artifact_dir:
         return artifact_dir
-    return f"aiogym/runs/bench_suite_{suite_name}_artifacts"
+    safe_suite = re.sub(r"[^A-Za-z0-9_.-]+", "-", suite_name).strip("-") or "suite"
+    return f"aiogym/runs/bench_suite_{safe_suite}_{run_id or artifact_run_id()}_artifacts"
 
 
 def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int, control_dt: float):
@@ -340,7 +347,7 @@ def main():
     ap.add_argument("--fail-on-degraded", action="store_true",
                     help="exit non-zero when any controller reports fallback/degraded diagnostics")
     ap.add_argument("--artifact-dir", default=None,
-                    help="standard artifact directory; defaults to aiogym/runs/bench_suite_<suite>_artifacts")
+                    help="standard artifact directory; defaults to a timestamped aiogym/runs/bench_suite_<suite>_<time>_artifacts")
     ap.add_argument("--tracebacks", action="store_true")
     args = ap.parse_args()
 
@@ -408,7 +415,7 @@ def main():
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
-    artifact_dir = artifact_dir_for(args.suite, args.artifact_dir)
+    artifact_dir = artifact_dir_for(suite["name"], args.artifact_dir)
     payload["artifact_dir"] = artifact_dir
     payload["artifacts"] = write_benchmark_artifacts(artifact_dir, payload)
     _write_json(os.path.join(artifact_dir, "benchmark.json"), payload)

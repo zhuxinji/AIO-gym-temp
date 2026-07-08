@@ -3,6 +3,9 @@
 .venv-rl/
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
 output/
 tmp/
 

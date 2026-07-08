@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from aiogym.evaluation.plots import (
     plot_constraint_timeline,
+    plot_learning_curve,
     plot_leaderboard,
     plot_rollouts,
     plot_summary,
@@ -52,6 +53,12 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
         plot_constraint_timeline(rollouts, str(constraint_path), title)
         figures["constraint_timeline"] = str(constraint_path)
         artifact_figures["constraint_timeline_figure"] = str(constraint_path)
+    learning_curve = payload.get("learning_curve") or []
+    if learning_curve:
+        curve_path = figures_dir / "learning_curve.svg"
+        plot_learning_curve(learning_curve, str(curve_path), title)
+        figures["learning_curve"] = str(curve_path)
+        artifact_figures["learning_curve_figure"] = str(curve_path)
     payload.setdefault("artifacts", {})
     payload["artifacts"].update(artifact_figures)
     _write_json(benchmark_path, payload)
@@ -67,6 +74,7 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
         "results": out_dir / "results",
         "rollouts": out_dir / "rollouts",
         "figures": out_dir / "figures",
+        "training": out_dir / "training",
     }
     for path in dirs.values():
         path.mkdir(parents=True, exist_ok=True)
@@ -91,6 +99,18 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
     for key, path in paths.items():
         artifacts[key] = str(path)
     artifacts.update(model_card_artifacts)
+
+    if payload.get("training"):
+        training_path = dirs["training"] / "training.json"
+        _write_json(training_path, payload.get("training", {}))
+        artifacts["training"] = str(training_path)
+    if payload.get("learning_curve"):
+        curve_json = dirs["training"] / "learning_curve.json"
+        curve_csv = dirs["training"] / "learning_curve.csv"
+        _write_json(curve_json, payload.get("learning_curve", []))
+        _write_learning_curve_csv(curve_csv, payload.get("learning_curve", []))
+        artifacts["learning_curve"] = str(curve_json)
+        artifacts["learning_curve_csv"] = str(curve_csv)
 
     if payload.get("rollouts"):
         rollout_path = dirs["rollouts"] / "rollouts.json"
@@ -201,6 +221,22 @@ def _write_summary_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         f.write(",".join(columns) + "\n")
         for row in rows:
             f.write(",".join(_csv_cell(row.get(column)) for column in columns) + "\n")
+
+
+def _write_learning_curve_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    preferred = [
+        "step", "timesteps", "phase", "metric", "metric_value", "kpi", "profit",
+        "return", "track", "tracking_iae", "constraint_violation_count",
+        "constraint_violation_severity", "runtime_total_seconds",
+    ]
+    keys = list(dict.fromkeys(
+        [key for key in preferred if any(key in row for row in rows)]
+        + sorted({key for row in rows for key in row}.difference(preferred))
+    ))
+    with path.open("w") as f:
+        f.write(",".join(keys) + "\n")
+        for row in rows:
+            f.write(",".join(_csv_cell(row.get(column)) for column in keys) + "\n")
 
 
 def _csv_cell(value) -> str:

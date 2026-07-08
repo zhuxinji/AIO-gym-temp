@@ -149,6 +149,80 @@ def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> 
     _write_text(path, "\n".join(parts))
 
 
+def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
+    """Plot numeric RL training history rows as a compact SVG curve sheet."""
+
+    series_keys = _learning_curve_keys(curve)
+    width, height = 1100, 640
+    left, top, w, h = 86, 96, 920, 380
+    colors = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#475569", "#0f766e", "#be123c"]
+    parts = [_svg_header(width, height), _svg_text(42, 46, f"{title} learning curve", size=22, weight="700")]
+    parts.extend(_svg_axes(left, top, w, h))
+    if not curve or not series_keys:
+        parts.append(_svg_text(left + w / 2, top + h / 2, "No learning-curve rows", size=15, anchor="middle", fill="#64748b"))
+        parts.append("</svg>")
+        _write_text(path, "\n".join(parts))
+        return
+
+    x_key = "timesteps" if any("timesteps" in row for row in curve) else "step"
+    xs = [float(row.get(x_key, row.get("step", i))) for i, row in enumerate(curve)]
+    xlo, xhi = min(xs), max(xs)
+    if xlo == xhi:
+        xhi = xlo + 1.0
+    all_ys = [float(row[key]) for row in curve for key in series_keys if _is_number(row.get(key))]
+    ylo, yhi = min(all_ys), max(all_ys)
+    if ylo == yhi:
+        yhi = ylo + 1.0
+    pad = (yhi - ylo) * 0.08
+    ylo -= pad
+    yhi += pad
+
+    for i, key in enumerate(series_keys):
+        ys = [float(row[key]) if _is_number(row.get(key)) else None for row in curve]
+        clean_xs = [x for x, y in zip(xs, ys) if y is not None]
+        clean_ys = [y for y in ys if y is not None]
+        if not clean_xs:
+            continue
+        color = colors[i % len(colors)]
+        points = _polyline_points(clean_xs, clean_ys, xlo, xhi, ylo, yhi, left, top, w, h)
+        parts.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2.5"/>')
+        lx = 42 + (i % 3) * 310
+        ly = 530 + (i // 3) * 26
+        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 28}" y2="{ly}" stroke="{color}" stroke-width="3"/>')
+        parts.append(_svg_text(lx + 36, ly + 4, key, size=12, fill="#334155"))
+
+    parts.append(_svg_text(left - 12, top + 8, _fmt(yhi), size=10, anchor="end", fill="#64748b"))
+    parts.append(_svg_text(left - 12, top + h, _fmt(ylo), size=10, anchor="end", fill="#64748b"))
+    parts.append(_svg_text(left, top + h + 30, _fmt(xlo), size=10, anchor="middle", fill="#64748b"))
+    parts.append(_svg_text(left + w, top + h + 30, _fmt(xhi), size=10, anchor="middle", fill="#64748b"))
+    parts.append(_svg_text(left + w / 2, top + h + 52, x_key, size=13, anchor="middle", fill="#334155"))
+    parts.append("</svg>")
+    _write_text(path, "\n".join(parts))
+
+
+def _learning_curve_keys(curve: list[dict]) -> list[str]:
+    preferred = [
+        "metric_value",
+        "kpi",
+        "profit",
+        "return",
+        "track",
+        "tracking_iae",
+        "constraint_violation_count",
+        "constraint_violation_severity",
+    ]
+    skip = {"step", "timesteps", "time", "phase", "metric", "metric_direction"}
+    keys = {
+        key
+        for row in curve
+        for key, value in row.items()
+        if key not in skip and _is_number(value)
+    }
+    ordered = [key for key in preferred if key in keys]
+    ordered.extend(sorted(keys.difference(preferred)))
+    return ordered[:8]
+
+
 def state_series(index: int, label: str | None = None, dashed: bool = False):
     return {"kind": "state", "index": index, "label": label or f"x{index}", "dashed": dashed}
 
@@ -265,6 +339,10 @@ def _list_value(value, index: int):
     if isinstance(value, list) and len(value) > index:
         return value[index]
     return None
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _svg_header(width: int, height: int):

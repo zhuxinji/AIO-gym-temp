@@ -30,13 +30,13 @@ MIT 许可
 - 面向 notebook、脚本和外部 Python 用户的精简公共 API。
 - 面向终端和自动化流程的 console commands。
 
-从仓库根目录安装：
+从仓库根目录安装后端：
 
 ```bash
-pip install -e .
-pip install -e ".[oracle]"   # 可选：CasADi/IPOPT oracle 支持
-pip install -e ".[train]"    # 可选：SB3/Torch 训练支持
-pip install -e ".[export]"   # 可选：ONNX 导出支持
+pip install -e ./aiogym
+pip install -e "./aiogym[oracle]"   # 可选：CasADi/IPOPT oracle 支持
+pip install -e "./aiogym[train]"    # 可选：SB3/Torch 训练支持
+pip install -e "./aiogym[export]"   # 可选：ONNX 导出支持
 ```
 
 常用命令：
@@ -71,7 +71,7 @@ figures = aiogym.plot_results(payload["run_dir"])
 
 | 方面 | AIO-Gym | AIO-Gym-temp |
 |---|---|---|
-| 包配置 | 没有 `pyproject.toml`，不能从仓库根目录作为标准包安装。 | 有 `pyproject.toml`，支持可安装包、可选依赖组、package data 和 console scripts。 |
+| 包配置 | 没有 `pyproject.toml`，不能作为标准包安装。 | 后端包有 `aiogym/pyproject.toml`，支持可安装包、可选依赖组、package data 和 console scripts。 |
 | 用户入口 | 直接运行脚本，例如 `python aiogym/train.py`、`python aiogym/train_rlpd.py`、`train_all.sh`。 | 稳定命令，例如 `aiogym-suite-benchmark`、`aiogym-report`、`aiogym-train-sb3`、`aiogym-train-rlpd`。 |
 | Python API | 主要从 `aiogym.__init__` 和内部模块直接导入。 | 精简公共 API：`aiogym.make_env`、`aiogym.run_benchmark`、`aiogym.plot_results`。 |
 | 后端结构 | 平铺文件：`models.py`、`kernel.py`、`baselines.py`、`oracle.py`、`rlpd.py`、`train.py`、`train_sac.py`、`train_rlpd.py`。 | 分层包结构：`models/`、`controllers/`、`evaluation/`、`rl/`、`cli/`，再加一个很薄的 `api.py`。 |
@@ -90,7 +90,7 @@ figures = aiogym.plot_results(payload["run_dir"])
 
 ### 1. 可安装包和标准命令
 
-`AIO-Gym-temp` 可以从仓库根目录安装。用户命令在 `pyproject.toml` 中定义：
+`AIO-Gym-temp` 可以从后端包目录安装。用户命令在 `aiogym/pyproject.toml` 中定义：
 
 ```text
 aiogym-single-benchmark

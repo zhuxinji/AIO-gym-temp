@@ -66,6 +66,8 @@ def _summary_rows(benchmark: Mapping[str, Any], summary_rows: Sequence[Mapping[s
         ["Controllers", ", ".join(str(item) for item in controllers)],
         ["Rows", str(len(summary_rows) or len(benchmark.get("rows") or []))],
     ]
+    if benchmark.get("learning_curve"):
+        rows.append(["Learning Curve Rows", str(len(benchmark.get("learning_curve") or []))])
     if counts:
         rows.append(["Counts", ", ".join(f"{key}={value}" for key, value in counts.items())])
     defaults = benchmark.get("defaults") or {}
@@ -148,8 +150,12 @@ def _artifact_section(root: Path, benchmark: Mapping[str, Any], artifacts: Mappi
         ("report", "results/report.json"),
         ("model_cards_manifest", "metadata/model_cards/manifest.json"),
         ("model_card", "metadata/model_card.json"),
+        ("training", "training/training.json"),
+        ("learning_curve", "training/learning_curve.json"),
+        ("learning_curve_csv", "training/learning_curve.csv"),
         ("summary_figure", "figures/summary.svg"),
         ("leaderboard_figure", "figures/leaderboard.svg"),
+        ("learning_curve_figure", "figures/learning_curve.svg"),
     ]
     rows = []
     for key, default in keys:
@@ -253,6 +259,9 @@ def _rel(path) -> str:
     marker = "/results/"
     if marker in raw:
         return "results/" + raw.split(marker, 1)[1]
+    marker = "/training/"
+    if marker in raw:
+        return "training/" + raw.split(marker, 1)[1]
     marker = "/figures/"
     if marker in raw:
         return "figures/" + raw.split(marker, 1)[1]
@@ -290,15 +299,27 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
         "benchmark_config": _check_artifact_path(root, artifacts, "benchmark_config", "config/benchmark_config.json"),
         "summary_figure": _check_artifact_path(root, artifacts, "summary_figure", "figures/summary.svg"),
         "leaderboard_figure": _check_artifact_path(root, artifacts, "leaderboard_figure", "figures/leaderboard.svg"),
+        "training": _check_artifact_path(root, artifacts, "training", "training/training.json"),
+        "learning_curve": _check_artifact_path(root, artifacts, "learning_curve", "training/learning_curve.json"),
+        "learning_curve_csv": _check_artifact_path(root, artifacts, "learning_curve_csv", "training/learning_curve.csv"),
+        "learning_curve_figure": _check_artifact_path(root, artifacts, "learning_curve_figure", "figures/learning_curve.svg"),
     }
     for key in ("rows", "summary_csv", "leaderboard", "results", "report", "input_config", "benchmark_config"):
         _add_exists(checks, key, paths[key], required=True)
     for key in ("summary_figure", "leaderboard_figure"):
         _add_exists(checks, key, paths[key], required=bool(rows))
+    if benchmark.get("training"):
+        _add_exists(checks, "training", paths["training"], required=True)
+    learning_curve = list(benchmark.get("learning_curve") or [])
+    if learning_curve:
+        for key in ("learning_curve", "learning_curve_csv", "learning_curve_figure"):
+            _add_exists(checks, key, paths[key], required=True)
 
     row_data = _safe_json_list(checks, "rows_json", paths["rows"])
     leaderboard = _safe_json_list(checks, "leaderboard_json", paths["leaderboard"])
     summary_rows = _safe_csv_rows(checks, "summary_csv_rows", paths["summary_csv"])
+    curve_rows = _safe_json_list(checks, "learning_curve_json", paths["learning_curve"]) if learning_curve else None
+    curve_csv_rows = _safe_csv_rows(checks, "learning_curve_csv_rows", paths["learning_curve_csv"]) if learning_curve else None
     if row_data is not None:
         _add_count_check(checks, "rows_json_count", len(row_data), expected_rows, paths["rows"])
     if summary_rows is not None:
@@ -306,6 +327,10 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
     if leaderboard is not None:
         active_rows = sum(1 for row in rows if row.get("status") != "failed")
         _add_count_check(checks, "leaderboard_count", len(leaderboard), active_rows, paths["leaderboard"])
+    if curve_rows is not None:
+        _add_count_check(checks, "learning_curve_json_count", len(curve_rows), len(learning_curve), paths["learning_curve"])
+    if curve_csv_rows is not None:
+        _add_count_check(checks, "learning_curve_csv_count", len(curve_csv_rows), len(learning_curve), paths["learning_curve_csv"])
 
     _check_model_cards(root, artifacts, expected_scenarios, checks)
     return _check_result(root, checks)

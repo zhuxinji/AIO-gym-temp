@@ -16,11 +16,18 @@ import argparse
 import json
 import os
 import time
+from datetime import datetime, timezone
 
 import numpy as np
 
 from aiogym.controllers import build_context, make_controller, validate_action
-from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, metric_for_reward_mode
+from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, metric_for_reward_mode, rollout_controller
+from aiogym.rl.artifacts import (
+    learning_curve_point,
+    result_row,
+    rl_payload,
+    write_rl_artifacts,
+)
 
 
 def collect_offline(env, agent, episodes, seed=1000):
@@ -58,6 +65,10 @@ def eval_policy(rlpd, env, episodes=12, seed=5000):
     return rep[metric], rep[f"{metric}_std"]
 
 
+def artifact_dir_for(args, base: str) -> str:
+    return args.artifact_dir or f"{base}_artifacts"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default="cascade", choices=["cascade", "quadruple", "cstr", "hvac"])
@@ -76,6 +87,10 @@ def main():
     ap.add_argument("--eval-every", type=int, default=2500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--artifact-dir", default=None,
+                    help="standard benchmark artifact directory; defaults to <out>_artifacts")
+    ap.add_argument("--save-rollout", action="store_true")
+    ap.add_argument("--rollout-steps", type=int, default=None)
     args = ap.parse_args()
 
     import torch
@@ -99,6 +114,17 @@ def main():
 
     def mkenv(mode=None):
         return protocol(mode).make_env()
+
+    def eval_result(agent, episodes=12, seed=5000, mode=None, include_episodes=False):
+        eval_protocol = protocol(mode or args.action_mode)
+        return evaluate_controller(
+            agent,
+            eval_protocol.make_env(),
+            episodes=episodes,
+            seed=seed,
+            protocol=eval_protocol,
+            include_episodes=include_episodes,
+        )
 
     env = mkenv()
     obs_dim = env.observation_space.shape[0]
@@ -131,7 +157,8 @@ def main():
     if args.bc_steps > 0:
         print(f"[bc] warm-starting actor ({args.bc_steps} steps)...")
         rlpd.bc_warmstart(args.bc_steps)
-        bc0, _ = eval_policy(rlpd, mkenv())
+        bc_result = eval_result(rlpd)
+        bc0 = bc_result[metric]
         print(f"[bc] done  {metric}={bc0:.1f}  (PID {pid[metric]:.1f} / MPC {mpc[metric]:.1f})")
 
     # 2a) offline pretrain. With BC: critic-only (hold the warm-started actor). Without
@@ -141,7 +168,8 @@ def main():
     t0 = time.time()
     for i in range(args.pretrain_updates):
         rlpd.update(actor=pretrain_actor)
-    pre, _ = eval_policy(rlpd, mkenv())
+    pretrain_result = eval_result(rlpd)
+    pre = pretrain_result[metric]
     print(f"[pretrain] done in {time.time()-t0:.0f}s  {metric}={pre:.1f}")
 
     # 2b) online learning (symmetric offline+online sampling), best-checkpoint by KPI
@@ -150,6 +178,9 @@ def main():
     best, best_path = -1e18, base + "_best.pt"
     obs, _ = env.reset(seed=args.seed)
     hist = []
+    if args.bc_steps > 0:
+        hist.append(learning_curve_point(0, bc_result, phase="bc"))
+    hist.append(learning_curve_point(0, pretrain_result, phase="pretrain"))
     t0 = time.time()
     for step in range(1, args.online_steps + 1):
         a = rlpd.act(obs, deterministic=False)
@@ -158,18 +189,31 @@ def main():
         obs = o2 if not (term or trunc) else env.reset()[0]
         rlpd.update()
         if step % args.eval_every == 0:
-            ret, std = eval_policy(rlpd, mkenv())
+            online_result = eval_result(rlpd)
+            ret, std = online_result[metric], online_result.get(f"{metric}_std", 0.0)
             if ret > best:                              # keep the peak — off-policy RL can collapse late
                 best = ret
                 torch.save(rlpd.state_dict(), best_path)
-            hist.append({"step": step, metric: ret})
+            hist.append(learning_curve_point(step, online_result, phase="online"))
             sps = step / (time.time() - t0)
             print(f"[online] step {step:6d}  RLPD {metric}={ret:8.1f}±{std:.1f}  "
                   f"(PID {pid[metric]:.1f} / MPC {mpc[metric]:.1f})  best={best:.1f}  {sps:.0f} steps/s")
 
     if os.path.exists(best_path):                       # restore the best checkpoint for the final policy
         rlpd.load_state_dict(torch.load(best_path))
-    final, final_std = eval_policy(rlpd, mkenv(), episodes=24)
+    eval_protocol = protocol(args.action_mode)
+    final_result = evaluate_controller(
+        rlpd,
+        eval_protocol.make_env(),
+        episodes=24,
+        seed=5000,
+        protocol=eval_protocol,
+        include_episodes=True,
+    )
+    final, final_std = final_result[metric], final_result.get(f"{metric}_std", 0.0)
+    final_point = learning_curve_point(args.online_steps, final_result, phase="final")
+    if not hist or hist[-1].get("phase") != "final":
+        hist.append(final_point)
     result = {
         "scenario": args.scenario, "reward_mode": args.reward_mode, "metric": metric,
         "PID": {metric: pid[metric]}, "MPC": {metric: mpc[metric]},
@@ -185,7 +229,61 @@ def main():
     rlpd.save_onnx(base + ".onnx")
     with open(base + ".json", "w") as f:
         json.dump(result, f, indent=2)
+    rollouts = []
+    if args.save_rollout:
+        rollouts.append(rollout_controller(
+            rlpd,
+            eval_protocol.make_env(),
+            seed=5000,
+            max_steps=args.rollout_steps,
+            protocol=eval_protocol,
+        ))
+    training = {
+        "algo": "rlpd",
+        "scenario": args.scenario,
+        "action_mode": args.action_mode,
+        "reward_mode": args.reward_mode,
+        "seed": args.seed,
+        "offline_episodes": args.offline_episodes,
+        "bc_steps": args.bc_steps,
+        "pretrain_updates": args.pretrain_updates,
+        "online_steps": args.online_steps,
+        "eval_every": args.eval_every,
+        "utd": args.utd,
+        "n_critics": args.n_critics,
+        "checkpoint_path": base + ".pt",
+        "onnx_path": base + ".onnx",
+        "legacy_report_path": base + ".json",
+    }
+    standard_payload = rl_payload(
+        kind="rlpd_train_eval",
+        scenario=args.scenario,
+        objective=eval_protocol.objective,
+        action_mode=args.action_mode,
+        training=training,
+        protocol=eval_protocol.metadata(),
+        results=[final_result, pid, mpc],
+        rows=[
+            result_row(final_result, args.scenario, args.action_mode, controller="RLPD",
+                       suite_case=f"{eval_protocol.objective}:{args.scenario}:rlpd"),
+            result_row(pid, args.scenario, "actuator", controller="PID",
+                       suite_case=f"{eval_protocol.objective}:{args.scenario}:pid"),
+            result_row(mpc, args.scenario, "actuator", controller="MPC",
+                       suite_case=f"{eval_protocol.objective}:{args.scenario}:mpc"),
+        ],
+        learning_curve=hist,
+        rollouts=rollouts,
+        extra={
+            "training_runtime": {
+                "online_seconds": time.time() - t0,
+            },
+            "rl_comparison": result,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    write_rl_artifacts(artifact_dir_for(args, base), standard_payload)
     print(f"saved {base}.pt / .onnx / .json")
+    print(f"saved artifacts {artifact_dir_for(args, base)}")
 
 
 if __name__ == "__main__":

@@ -34,27 +34,31 @@ The detailed backend usage guide lives in [aiogym/README.md](aiogym/README.md).
   policies.
 - Named benchmark suites with summary tables, reports, plots, and reusable
   artifacts.
+- Human-readable model cards under `aiogym/models/model_cards/`.
+- Model extension examples under `aiogym/models/examples/`.
+- Controller extension examples under `aiogym/controllers/examples/`.
 - RL training entrypoints for SB3 and RLPD.
 - A small public Python API for notebooks, scripts, and external Python users.
 - Console commands for terminal and automation workflows.
 
-Install from the repository root:
+Install the backend from the repository root:
 
 ```bash
-pip install -e .
-pip install -e ".[oracle]"   # optional: CasADi/IPOPT oracle support
-pip install -e ".[train]"    # optional: SB3/Torch training support
-pip install -e ".[export]"   # optional: ONNX export support
+pip install -e ./aiogym
+pip install -e "./aiogym[oracle]"   # optional: CasADi/IPOPT oracle support
+pip install -e "./aiogym[train]"    # optional: SB3/Torch training support
+pip install -e "./aiogym[export]"   # optional: ONNX export support
 ```
 
 Common commands:
 
 ```bash
-aiogym-suite-benchmark --suite standard-baselines --episodes 3
+aiogym-suite-benchmark --suite standard-baselines --episodes 3 --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-single-benchmark --scenario cstr --objective tracking --controllers pid,mpc
 aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-artifact-check aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-train-sb3 --scenario cstr --algo sac --steps 10000 --onnx
+aiogym-model-cards --format markdown --out-dir aiogym/models/model_cards
 ```
 
 Python API:
@@ -83,7 +87,7 @@ generated outputs are separated from source files.
 
 | Area | AIO-Gym | AIO-Gym-temp |
 |---|---|---|
-| Package setup | No `pyproject.toml`; not installable as a standard package from the repo root. | Installable package with `pyproject.toml`, optional dependency groups, package data, and console scripts. |
+| Package setup | No `pyproject.toml`; not installable as a standard package. | Installable backend package with `aiogym/pyproject.toml`, optional dependency groups, package data, and console scripts. |
 | User entrypoints | Direct scripts such as `python aiogym/train.py`, `python aiogym/train_rlpd.py`, and `train_all.sh`. | Stable commands such as `aiogym-suite-benchmark`, `aiogym-report`, `aiogym-train-sb3`, and `aiogym-train-rlpd`. |
 | Python API | Mostly direct imports from `aiogym.__init__` and internal modules. | Small public API: `aiogym.make_env`, `aiogym.run_benchmark`, and `aiogym.plot_results`. |
 | Backend layout | Flat files: `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py`. | Layered packages: `models/`, `controllers/`, `evaluation/`, `rl/`, `cli/`, plus a thin `api.py`. |
@@ -102,8 +106,8 @@ generated outputs are separated from source files.
 
 ### 1. Installable package and canonical commands
 
-`AIO-Gym-temp` is installable from the repository root. User-facing commands are
-defined in `pyproject.toml`:
+`AIO-Gym-temp` is installable from the backend package directory. User-facing
+commands are defined in `aiogym/pyproject.toml`:
 
 ```text
 aiogym-single-benchmark
@@ -213,11 +217,28 @@ Benchmark runs now write a reusable artifact directory:
   metadata/
   summary/
   results/
+  training/
   figures/
 ```
 
 This separates source code from generated outputs and gives reports, plots,
-model cards, summaries, and full result payloads a predictable home.
+model cards, summaries, RL learning curves, and full result payloads a
+predictable home.
+
+Human-readable model cards for every built-in process live in
+`aiogym/models/model_cards/`. They are generated from the same registered model metadata
+used by benchmark artifacts:
+
+```bash
+aiogym-model-cards --format markdown --out-dir aiogym/models/model_cards
+```
+
+Extension templates live next to the layer they extend:
+
+```bash
+python aiogym/models/examples/custom_model.py
+python aiogym/controllers/examples/custom_controller.py
+```
 
 ### 8. RL code grouped under `aiogym.rl`
 

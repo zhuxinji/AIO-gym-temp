@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tiny static file server for the AIO-Gym web app (frontend/).
-Sends Cache-Control: no-store so the browser always loads the latest files —
-handy for development and harmless for the (static, dependency-free) app.
+"""Tiny static file server for this frontend directory.
+
+Sends Cache-Control: no-store so clients always load the latest files.
 Stdlib only; no install needed.
 
-    python3 serve.py [port]      # default 8000
+    python3 frontend/serve.py [port]      # default 8000
 """
 import http.server
 import os
@@ -12,7 +12,7 @@ import socketserver
 import sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -29,5 +29,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 socketserver.TCPServer.allow_reuse_address = True
 with socketserver.TCPServer(("", PORT), Handler) as httpd:
-    print(f"[AIO-Gym] serving frontend/ at http://127.0.0.1:{PORT}")
+    print(f"serving {ROOT} at http://127.0.0.1:{PORT}")
     httpd.serve_forever()

@@ -26,7 +26,7 @@ from .reports import (
     render_benchmark_report,
 )
 from .artifacts import plot_results, write_benchmark_artifacts
-from .plots import plot_constraint_timeline, plot_leaderboard, plot_rollouts, plot_summary
+from .plots import plot_constraint_timeline, plot_leaderboard, plot_learning_curve, plot_rollouts, plot_summary
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
@@ -56,4 +56,5 @@ __all__ = [
     "plot_rollouts",
     "plot_leaderboard",
     "plot_constraint_timeline",
+    "plot_learning_curve",
 ]

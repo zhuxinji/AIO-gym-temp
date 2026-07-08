@@ -123,7 +123,14 @@ def test_model_contract():
 
 def test_model_card_export():
     """Model-card export covers the current registry, not a hand-written scenario list."""
-    from aiogym.models import MODEL_CARD_SCHEMA_VERSION, collect_model_cards, export_model_cards, validate_model_card
+    from aiogym.models import (
+        MODEL_CARD_SCHEMA_VERSION,
+        collect_model_cards,
+        export_model_card_markdown,
+        export_model_cards,
+        render_model_card_markdown,
+        validate_model_card,
+    )
 
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     cards = collect_model_cards()
@@ -143,6 +150,18 @@ def test_model_card_export():
                 validate_model_card(json.load(f), expected_scenario=scenario)
         files_ok = files_ok and os.path.exists(os.path.join(tmpdir, "manifest.json"))
 
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest = export_model_card_markdown(tmpdir)
+        markdown_ok = set(manifest["scenarios"]) == set(SCENARIOS)
+        markdown_ok = markdown_ok and os.path.exists(os.path.join(tmpdir, "README.md"))
+        for scenario, card in cards.items():
+            text = render_model_card_markdown(card)
+            path = os.path.join(tmpdir, f"{scenario}.md")
+            markdown_ok = markdown_ok and os.path.exists(path)
+            markdown_ok = markdown_ok and f"`{scenario}`" in text
+            markdown_ok = markdown_ok and "## State Vector" in text
+            markdown_ok = markdown_ok and "## Dynamics And Assumptions" in text
+
     docs_path = os.path.join(root, "aiogym", "README.md")
     docs_ok = os.path.exists(docs_path)
     if docs_ok:
@@ -150,8 +169,15 @@ def test_model_card_export():
             docs_text = f.read()
         for scenario in SCENARIOS:
             docs_ok = docs_ok and f"`{scenario}`" in docs_text
+            card_path = os.path.join(root, "aiogym", "models", "model_cards", f"{scenario}.md")
+            docs_ok = docs_ok and os.path.exists(card_path)
+            if os.path.exists(card_path):
+                with open(card_path) as f:
+                    card_text = f.read()
+                docs_ok = docs_ok and f"`{scenario}`" in card_text
+                docs_ok = docs_ok and "## Benchmark Semantics" in card_text
 
-    check("model-card export covers registered built-ins", cards_ok and files_ok and docs_ok)
+    check("model-card export covers registered built-ins", cards_ok and files_ok and markdown_ok and docs_ok)
 
 
 def test_custom_model_entrypoints():
@@ -801,7 +827,9 @@ def test_benchmark_suite_configs():
         and summary[0]["metric_mean"] == 1.0
         and summary[0]["metric_std"] == 0.3
         and summary[0]["seed_list"] == [11, 12]
-        and artifact_dir_for("example") == "aiogym/runs/bench_suite_example_artifacts"
+        and artifact_dir_for("example", run_id="20260708T120000000000Z")
+        == "aiogym/runs/bench_suite_example_20260708T120000000000Z_artifacts"
+        and artifact_dir_for("example", artifact_dir="custom/out") == "custom/out"
     )
     effective = effective_suite_config(standard, [
         {"scenario": "cstr", "objective": "tracking", "controller": "pid"},
@@ -861,6 +889,11 @@ def test_benchmark_suite_configs():
             ],
             "results": [],
             "report": {"tracking": [{"metric": "tracking_iae", "name": "PID"}]},
+            "training": {"algo": "smoke", "total_timesteps": 2},
+            "learning_curve": [
+                {"step": 0, "phase": "start", "metric": "tracking_iae", "metric_value": 3.0, "tracking_iae": 3.0},
+                {"step": 2, "phase": "final", "metric": "tracking_iae", "metric_value": 1.0, "tracking_iae": 1.0},
+            ],
             "errors": [],
         }
         artifacts = write_benchmark_artifacts(tmpdir, payload)
@@ -872,14 +905,16 @@ def test_benchmark_suite_configs():
         report_text = aiogym.render_benchmark_report(tmpdir, out_path=report_path)
         suite_artifacts_ok = True
         for key in ("benchmark", "input_config", "benchmark_config", "model_cards_manifest",
-                    "rows", "summary_csv", "leaderboard", "results", "report"):
+                    "rows", "summary_csv", "leaderboard", "results", "report",
+                    "training", "learning_curve", "learning_curve_csv"):
             suite_artifacts_ok = suite_artifacts_ok and os.path.exists(artifacts[key])
-        for key in ("summary", "leaderboard"):
+        for key in ("summary", "leaderboard", "learning_curve"):
             suite_artifacts_ok = suite_artifacts_ok and os.path.exists(figures[key])
         suite_artifacts_ok = suite_artifacts_ok and os.path.exists(report_path)
         suite_artifacts_ok = suite_artifacts_ok and "AIO-Gym Benchmark Report" in report_text
         suite_artifacts_ok = suite_artifacts_ok and "| cstr |" in report_text and "| hvac |" in report_text
         suite_artifacts_ok = suite_artifacts_ok and "summary/leaderboard.json" in report_text
+        suite_artifacts_ok = suite_artifacts_ok and "training/learning_curve.json" in report_text
         check_result = aiogym.check_benchmark_artifacts(tmpdir)
         suite_artifacts_ok = suite_artifacts_ok and check_result["ok"]
         with open(artifacts["model_cards_manifest"]) as f:

@@ -18,6 +18,12 @@ from datetime import datetime, timezone
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, rollout_controller
+from aiogym.rl.artifacts import (
+    learning_curve_point,
+    result_row,
+    rl_payload,
+    write_rl_artifacts,
+)
 
 
 def protocol_factory(objective: str):
@@ -158,6 +164,41 @@ def evaluate_checkpoint(args, checkpoint_path: str):
     return protocol, result, rollout
 
 
+def evaluate_training_policy(args, model, step: int, phase: str = "eval"):
+    protocol = protocol_factory(args.eval_objective)(
+        args.scenario,
+        action_mode=args.action_mode,
+        episode_steps=args.eval_episode_steps,
+        control_dt=args.control_dt,
+    )
+    controller = make_controller(
+        "sb3",
+        scenario=args.scenario,
+        policy=model,
+        config={
+            "algo": args.algo,
+            "action_mode": args.action_mode,
+            "name": f"SB3-{args.algo.upper()}",
+        },
+    )
+    seeds = parse_seed_list(args.eval_seed_list, args.eval_seed, args.learning_curve_episodes)
+    env = protocol.make_env()
+    try:
+        result = evaluate_controller(
+            controller,
+            env,
+            episodes=len(seeds),
+            seed=seeds[0],
+            seed_list=seeds,
+            protocol=protocol,
+            include_episodes=False,
+        )
+    finally:
+        if hasattr(env, "close"):
+            env.close()
+    return learning_curve_point(step, result, phase=phase)
+
+
 def training_metadata(args, checkpoint_path: str):
     return {
         "algo": args.algo,
@@ -186,6 +227,31 @@ def training_metadata(args, checkpoint_path: str):
         },
         "checkpoint_path": checkpoint_path,
     }
+
+
+def artifact_dir_for(args, run_name: str) -> str:
+    return args.artifact_dir or os.path.join(args.out_dir, f"{run_name}_artifacts")
+
+
+def make_learning_curve_callback(args):
+    from stable_baselines3.common.callbacks import BaseCallback
+
+    class LearningCurveCallback(BaseCallback):
+        def __init__(self):
+            super().__init__()
+            self.history = []
+            self._next_eval = max(1, int(args.learning_curve_every))
+
+        def _on_step(self) -> bool:
+            if args.learning_curve_every <= 0 or self.num_timesteps < self._next_eval:
+                return True
+            row = evaluate_training_policy(args, self.model, self.num_timesteps)
+            row["timesteps"] = self.num_timesteps
+            self.history.append(row)
+            self._next_eval += max(1, int(args.learning_curve_every))
+            return True
+
+    return LearningCurveCallback()
 
 
 def export_onnx(model, obs_dim: int, path: str):
@@ -268,11 +334,16 @@ def main():
     ap.add_argument("--tensorboard-log", default=None)
     ap.add_argument("--out-dir", default="aiogym/runs/rl/sb3")
     ap.add_argument("--name", default=None)
+    ap.add_argument("--artifact-dir", default=None,
+                    help="standard benchmark artifact directory; defaults to <out-dir>/<name>_artifacts")
     ap.add_argument("--eval-objective", default="kpi", choices=["economic", "tracking", "robustness", "safety", "kpi"])
     ap.add_argument("--eval-episodes", type=int, default=3)
     ap.add_argument("--eval-episode-steps", type=int, default=80)
     ap.add_argument("--eval-seed", type=int, default=9000)
     ap.add_argument("--eval-seed-list", default=None)
+    ap.add_argument("--learning-curve-every", type=int, default=0,
+                    help="evaluate the in-memory policy every N timesteps; 0 records only the final point")
+    ap.add_argument("--learning-curve-episodes", type=int, default=1)
     ap.add_argument("--save-rollout", action="store_true")
     ap.add_argument("--rollout-steps", type=int, default=None)
     ap.add_argument("--onnx", action="store_true", help="export deterministic policy to ONNX after training")
@@ -313,7 +384,8 @@ def main():
         f"device={args.device} | action={args.action_mode} | reward={args.reward_mode}"
     )
     t0 = time.time()
-    model.learn(total_timesteps=args.steps, progress_bar=False)
+    curve_callback = make_learning_curve_callback(args)
+    model.learn(total_timesteps=args.steps, progress_bar=False, callback=curve_callback)
     train_seconds = time.time() - t0
     model.save(checkpoint_path)
     checkpoint_zip = f"{checkpoint_path}.zip"
@@ -324,10 +396,45 @@ def main():
     env.close()
 
     protocol, result, rollout = evaluate_checkpoint(args, checkpoint_zip)
+    training = training_metadata(args, checkpoint_zip)
+    if onnx_path is not None:
+        training["onnx_path"] = onnx_path
+    training["legacy_report_path"] = report_path
+    learning_curve = list(curve_callback.history)
+    final_curve_point = learning_curve_point(args.steps, result, phase="final")
+    final_curve_point["timesteps"] = args.steps
+    learning_curve.append(final_curve_point)
+    artifact_payload = rl_payload(
+        kind="sb3_train_eval",
+        scenario=args.scenario,
+        objective=protocol.objective,
+        action_mode=args.action_mode,
+        training=training,
+        protocol=protocol.metadata(),
+        results=[result],
+        rows=[result_row(
+            result,
+            scenario=args.scenario,
+            action_mode=args.action_mode,
+            controller=f"SB3-{args.algo.upper()}",
+            suite_case=f"{protocol.objective}:{args.scenario}:sb3_{args.algo}",
+        )],
+        learning_curve=learning_curve,
+        rollouts=[rollout] if rollout is not None else [],
+        extra={
+            "training_runtime": {
+                "seconds": train_seconds,
+                "steps_per_second": args.steps / train_seconds if train_seconds > 0 else None,
+                "steps_per_second_per_env": (args.steps / train_seconds / args.n_envs) if train_seconds > 0 else None,
+            },
+        },
+    )
+    artifact_payload = write_rl_artifacts(artifact_dir_for(args, run_name), artifact_payload)
+
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "kind": "sb3_train_eval",
-        "training": training_metadata(args, checkpoint_zip),
+        "training": training,
         "training_runtime": {
             "seconds": train_seconds,
             "steps_per_second": args.steps / train_seconds if train_seconds > 0 else None,
@@ -335,9 +442,10 @@ def main():
         },
         "evaluation_protocol": protocol.metadata(),
         "evaluation": result,
+        "learning_curve": learning_curve,
+        "artifact_dir": artifact_payload.get("artifact_dir", artifact_dir_for(args, run_name)),
+        "artifacts": artifact_payload.get("artifacts", {}),
     }
-    if onnx_path is not None:
-        payload["training"]["onnx_path"] = onnx_path
     if rollout is not None:
         payload["rollout"] = rollout
     with open(report_path, "w") as f:
@@ -348,6 +456,7 @@ def main():
     if onnx_path is not None:
         print(f"exported onnx {onnx_path}")
     print(f"saved report {report_path}")
+    print(f"saved artifacts {artifact_dir_for(args, run_name)}")
     if train_seconds > 0:
         print(
             f"train throughput {args.steps / train_seconds:.1f} steps/s "

@@ -30,13 +30,13 @@ MIT License
 - notebooks/scripts/外部 Python 利用者向けの小さな public Python API.
 - shell/automation workflow 向けの console commands.
 
-リポジトリルートからインストールします。
+リポジトリルートから backend をインストールします。
 
 ```bash
-pip install -e .
-pip install -e ".[oracle]"   # optional: CasADi/IPOPT oracle support
-pip install -e ".[train]"    # optional: SB3/Torch training support
-pip install -e ".[export]"   # optional: ONNX export support
+pip install -e ./aiogym
+pip install -e "./aiogym[oracle]"   # optional: CasADi/IPOPT oracle support
+pip install -e "./aiogym[train]"    # optional: SB3/Torch training support
+pip install -e "./aiogym[export]"   # optional: ONNX export support
 ```
 
 よく使うコマンド:
@@ -71,7 +71,7 @@ figures = aiogym.plot_results(payload["run_dir"])
 
 | Area | AIO-Gym | AIO-Gym-temp |
 |---|---|---|
-| Package setup | `pyproject.toml` がなく、repo root から標準 package として install できない。 | `pyproject.toml`、optional dependency groups、package data、console scripts を持つ installable package。 |
+| Package setup | `pyproject.toml` がなく、標準 package として install できない。 | `aiogym/pyproject.toml`、optional dependency groups、package data、console scripts を持つ installable backend package。 |
 | User entrypoints | `python aiogym/train.py`, `python aiogym/train_rlpd.py`, `train_all.sh` などを直接実行。 | `aiogym-suite-benchmark`, `aiogym-report`, `aiogym-train-sb3`, `aiogym-train-rlpd` などの stable commands。 |
 | Python API | `aiogym.__init__` や internal modules から直接 import する形が中心。 | `aiogym.make_env`, `aiogym.run_benchmark`, `aiogym.plot_results` の小さな public API。 |
 | Backend layout | `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py` が flat に配置。 | `models/`, `controllers/`, `evaluation/`, `rl/`, `cli/` と薄い `api.py` に分割。 |

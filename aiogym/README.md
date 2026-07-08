@@ -9,9 +9,11 @@ against golden trajectory checkpoints (max delta <= 1e-15, i.e. bit-for-bit).
 
 ## Install & verify
 ```bash
+cd aiogym
 pip install -e .                                # core Gymnasium backend
 pip install -e ".[oracle]"                      # add NMPC oracle support
 pip install -e ".[train]"                       # add SB3/Torch training support
+cd ..
 node aiogym/tests/generate_golden.mjs --check     # verify golden data from JS source
 python aiogym/tests/test_parity.py               # verify native dynamics parity
 ```
@@ -37,21 +39,21 @@ AIO-Gym-temp exposes two user-facing entry points. They are intentionally separa
 Before installing the package, run CLI modules directly from the repository root:
 
 ```bash
-python -m aiogym.cli.suite_benchmark --suite standard-baselines
+python -m aiogym.cli.suite_benchmark --suite standard-baselines --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
 python -m aiogym.cli.artifact_tools report aiogym/runs/bench_suite_standard-baselines_artifacts
 ```
 
-After `pip install -e .`, the same workflows are available as shorter console
-commands:
+After installing with `pip install -e ./aiogym` from the repository root, the
+same workflows are available as shorter console commands:
 
 ```bash
-aiogym-suite-benchmark --suite standard-baselines
+aiogym-suite-benchmark --suite standard-baselines --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
 ```
 
-Generated files are written under `aiogym/runs/` by default. For example,
-`report.md` is created by `aiogym-report`; it is not a source file checked into
-the repository.
+Generated files are written under timestamped directories in `aiogym/runs/` by
+default. Pass `--artifact-dir` when you want a stable path for follow-up report
+or artifact-check commands.
 
 ## Contract
 - `obs = [levels(n), temps(n), t_sp(n), h_sp(controlled k), t_cold, t_amb]`
@@ -67,7 +69,7 @@ the repository.
 The common commands are:
 
 ```bash
-aiogym-suite-benchmark --suite standard-baselines --episodes 3
+aiogym-suite-benchmark --suite standard-baselines --episodes 3 --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-artifact-check aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
 ```
@@ -78,6 +80,7 @@ Use these when you need a narrower or more advanced workflow:
 aiogym-single-benchmark --scenario cstr --objective tracking --controllers pid,mpc
 aiogym-train-sb3 --scenario cstr --algo sac --n-envs 8 --vec-env subproc --steps 10000 --onnx
 aiogym-model-cards --check
+aiogym-model-cards --format markdown --out-dir aiogym/models/model_cards
 ```
 
 The `aiogym-train-rlpd` command is mainly for research training experiments.
@@ -116,14 +119,30 @@ Suite artifacts are written into one standard directory:
   metadata/
   summary/
   results/
+  training/
   figures/
 ```
 
 `metadata/` contains model-card JSON, `summary/` contains rows, CSV, and
 leaderboard data, `results/` contains full result/report payloads, and
-`figures/` contains reproducible SVG plots.
+`training/` contains RL training metadata and learning curves when present.
+`figures/` contains reproducible SVG plots, including `learning_curve.svg` for
+SB3/RLPD training artifacts.
+
+For human-readable process-model documentation, see `aiogym/models/model_cards/`. The
+Markdown cards are generated from the same model metadata used in benchmark
+artifacts, so updating a model contract and rerunning `aiogym-model-cards
+--format markdown --out-dir aiogym/models/model_cards` refreshes the docs.
+
+For extension templates, see `aiogym/models/examples/custom_model.py` and
+`aiogym/controllers/examples/custom_controller.py`.
 
 For the **offline-to-online** goal (RLPD / Cal-QL): generate a historian dataset
 from this env, seed the replay buffer, keep exploring online. RLPD = SAC +
 offline data in buffer + critic LayerNorm + critic ensemble + symmetric
 sampling (official JAX impl: ikostrikov/rlpd).
+
+SB3 and RLPD training entrypoints keep their legacy checkpoint/report outputs
+and also write standard benchmark artifacts. Use `--artifact-dir` to choose the
+directory; SB3 can add intermediate evaluation points with
+`--learning-curve-every`.
