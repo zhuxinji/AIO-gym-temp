@@ -6,7 +6,7 @@ editing built-in controller source.
 Run them from the repository root after installing the backend:
 
 ```bash
-pip install -e ./aiogym
+pip install -e .
 python aiogym/controllers/examples/custom_controller.py
 ```
 

@@ -12,7 +12,7 @@ cloning:
 Same machinery does offline pretraining (online buffer empty → samples the prior
 data) and online learning (keeps the prior data in the mix). Actions live in the
 SAC space [-1, 1]; the env uses [0, 1], so we map (a+1)/2 at the boundary and the
-exported ONNX policy emits [0, 1] to match the browser RL controller.
+exported ONNX policy emits normalized actions in [0, 1].
 """
 from __future__ import annotations
 import numpy as np
@@ -220,7 +220,7 @@ class RLPD:
 
     # ---- persistence ----
     def save_onnx(self, path):
-        """Export a deterministic obs -> action[0,1] policy for the browser RL controller."""
+        """Export a deterministic obs -> action[0,1] policy."""
         class Det(nn.Module):
             def __init__(self, actor):
                 super().__init__()

@@ -6,8 +6,8 @@ import argparse
 import os
 from datetime import datetime, timezone
 
-from aiogym._config import parse_seed_list
-from aiogym._serialization import write_json
+from aiogym._internal.config import parse_seed_list
+from aiogym._internal.serialization import write_json
 from aiogym.evaluation import (
     BenchmarkProtocol,
     build_evaluation_report,
@@ -55,7 +55,7 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
                 "config": config,
             })
             continue
-        if name in ("oracle", "nmpc"):
+        if name == "oracle":
             mode = "tracking" if args.objective == "tracking" else baseline_protocol.env_reward_mode
             specs.append({
                 "name": name,

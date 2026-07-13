@@ -245,9 +245,6 @@ class CrystallizationModel(ProcessModelContract):
         levels, temps = display["levels"], display["temps"]
         return [levels[0], temps[0]]
 
-    def legacy_observation_level_target_slots(self):
-        return [0]
-
     def default_setpoint_vector(self):
         return [self.p["CV_sp"], self.p["Ln_sp"]]
 
@@ -271,25 +268,8 @@ class CrystallizationModel(ProcessModelContract):
     def default_action(self):
         return {"pumps": [], "valves": [], "heaters": [0.5]}
 
-    def observation_dim(self):
-        return 13
-
     def action_dim(self):
         return 1
-
-    def observation(self, x=None, act=None, env=None, y_sp=None):
-        m = self.metrics(x, act, env)
-        ysp = list(y_sp) if y_sp is not None else self.default_setpoint_vector()
-        cv_sp = self._finite(ysp[0] if len(ysp) > 0 else None, self.p["CV_sp"])
-        ln_sp = self._finite(ysp[1] if len(ysp) > 1 else None, self.p["Ln_sp"])
-        return [
-            m["mu0"], m["mu1"], m["mu2"], m["mu3"], m["c"],
-            m["Ln"], m["CV"], ln_sp, cv_sp, m["Tc"],
-            m["growth_factor"], m["nucleation_factor"], m["solubility_bias"],
-        ]
-
-    def env_observation(self, x, act, env, y_sp):
-        return self.observation(x, act, env, y_sp)
 
     def _action_fraction(self, act=None):
         act = act or {}

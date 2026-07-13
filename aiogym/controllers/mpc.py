@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 
-from .._validation import nonnegative_float, positive_float, positive_int
+from .._internal.validation import nonnegative_float, positive_float, positive_int
 
 
 class MPCAgent:

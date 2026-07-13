@@ -22,7 +22,7 @@ import copy
 import math
 import numpy as np
 
-from .._validation import nonnegative_float, positive_float, positive_int
+from .._internal.validation import nonnegative_float, positive_float, positive_int
 
 try:
     import casadi as ca
@@ -50,7 +50,6 @@ class NMPCOracle:
         self.p = self.model.p
         self.N = positive_int("horizon", horizon)
         self.dt = positive_float("control_dt", control_dt)
-        mode = "tracking" if mode == "track" else mode
         if mode not in {"economic", "tracking"}:
             raise ValueError("mode must be one of: economic, tracking")
         self.mode = mode

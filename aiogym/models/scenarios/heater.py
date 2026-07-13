@@ -132,9 +132,6 @@ class FiredHeaterModel(ProcessModelContract):
         levels, temps = display["levels"], display["temps"]
         return [levels[0], temps[0]]
 
-    def legacy_observation_level_target_slots(self):
-        return [0]
-
     energy_scored = False
 
     def cv_scales(self):

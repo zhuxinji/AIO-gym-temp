@@ -1,18 +1,15 @@
-"""AIOGymNativeEnv - a Gymnasium-first, native (numpy) env over the same plant
-dynamics as the browser AIO-Gym. Fast, synchronous, seedable, and vectorizable,
-built for offline-data generation and online RL training (SAC / RLPD), where a
-browser-coupled env would be too slow and too loosely-coupled.
+"""AIOGymNativeEnv - a Gymnasium-first native process-control environment.
 
-Physics parity with the browser JS is enforced by tests/test_parity.py.
+Fast, synchronous, seedable, and vectorizable for benchmark evaluation,
+offline-data generation, and online RL training.
 
 Contract:
   generic obs    = [x, y_sp, disturbances]
   generic action = u in [0, 1]
-  legacy built-ins keep the browser-compatible physical observation/action adapter.
 
 reward_mode:
   "kpi"      (default) reward = -(instantaneous KPI penalty) using the same
-             tracking + excess-energy + safety KPI the gym/browser display
+             tracking + excess-energy + safety KPI
              (evaluation.metrics.kpi), so the RL optimizes exactly what it is judged on.
   "economic" CSTR production-maximisation (legacy economic demo).
   "tracking" PC-Gym-style setpoint tracking: reward = -(normalized squared
@@ -25,8 +22,6 @@ obs), so this trains the online adaptation a fixed-tuning MPC can't match.
 """
 from __future__ import annotations
 import copy
-from pathlib import Path
-from typing import Any, Mapping
 
 import numpy as np
 import gymnasium as gym
@@ -34,12 +29,10 @@ from gymnasium import spaces
 
 from .models import apply_model_params, make_model
 from .models import Integrator
-from .models.adapters import BrowserModelAdapter
 from .evaluation.metrics.kpi import KPIScorer
-from .objectives import stage_reward
-from ._deprecations import warn_deprecated
+from .evaluation.objectives import stage_reward
 
-# Advisory/interlock limits mirror frontend/js/sim/alarms.js (LIMITS).
+# Shared advisory/interlock limits for process safety scoring.
 T_HIGH, T_TRIP = 80.0, 92.0
 H_HIGH_FRAC, H_LOW_FRAC, H_OVERFLOW_FRAC = 0.90, 0.15, 0.97
 I_TEMP_MAX, I_LEVEL_MAX = 300.0, 8.0          # anti-windup clamp + obs normalizer for integral error
@@ -66,7 +59,7 @@ class AIOGymNativeEnv(gym.Env):
     def __init__(self, scenario="cascade", control_dt=0.5, episode_steps=600,
                  reward_mode="kpi", dynamic=True, randomize=True, randomize_setpoints=True,
                  randomize_plant=False, plant_drift=False, integral_obs=False, action_mode="actuator",
-                 noise=False, noise_pct=0.01, custom_reward=None, custom_stage_reward=None,
+                 noise=False, noise_pct=0.01, custom_stage_reward=None,
                  custom_model=None, model_params=None,
                  terminate_on_runaway=False, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
                  tracking_q_y=1.0, tracking_r_move=0.05,
@@ -77,7 +70,6 @@ class AIOGymNativeEnv(gym.Env):
             make_model(custom_model if custom_model is not None else scenario),
             model_params,
         )
-        self._browser_adapter = BrowserModelAdapter(self.model)
         self.scenario = self.model.scenario
         self.control_dt = float(control_dt)
         self.episode_steps = int(episode_steps)
@@ -85,9 +77,6 @@ class AIOGymNativeEnv(gym.Env):
             raise ValueError("control_dt must be finite and positive")
         if self.episode_steps <= 0:
             raise ValueError("episode_steps must be positive")
-        if reward_mode == "track":
-            warn_deprecated('reward_mode="track"', 'reward_mode="tracking"')
-            reward_mode = "tracking"
         if reward_mode not in {"kpi", "economic", "tracking"}:
             raise ValueError("reward_mode must be one of: economic, kpi, tracking")
         if action_mode not in {"actuator", "setpoint"}:
@@ -106,13 +95,8 @@ class AIOGymNativeEnv(gym.Env):
         self.randomize_setpoints = randomize_setpoints
         self.noise = noise                        # measurement noise on observed levels/temps
         # Measurement noise standard deviation as a fraction of each quantity scale.
-        if custom_reward is not None and not callable(custom_reward):
-            raise TypeError("custom_reward must be callable")
         if custom_stage_reward is not None and not callable(custom_stage_reward):
             raise TypeError("custom_stage_reward must be callable")
-        if custom_reward is not None and custom_stage_reward is not None:
-            raise ValueError("custom_reward and custom_stage_reward cannot be used together")
-        self.custom_reward = custom_reward         # legacy callable(env, levels, temps, act)
         self.custom_stage_reward = custom_stage_reward
         self.terminate_on_runaway = terminate_on_runaway
         # legacy economic-mode weights (CSTR)
@@ -152,20 +136,7 @@ class AIOGymNativeEnv(gym.Env):
         # integral-of-error obs (the I-term a memoryless policy otherwise lacks): lets
         # the RL policy do offset-free tracking like PID + adapt under operating-regime drift.
         self.integral_obs = integral_obs
-        self.nctrl = len(self.model.legacy_observation_level_target_slots())
-        model_obs = self.model.env_observation(
-            self.model.initial_state(),
-            self.model.default_action(),
-            self.model.runtime_env(self._disturbance_defaults),
-            self._ysp0,
-        )
-        self._uses_model_observation = model_obs is not None
-        if self._uses_model_observation:
-            obs_dim = len(model_obs)
-        elif self._browser_adapter.enabled:
-            obs_dim = self._browser_adapter.observation_dim
-        else:
-            obs_dim = len(self.model.initial_state()) + len(self._ysp0) + len(self.model.dynamics_disturbance_names())
+        obs_dim = len(self.model.initial_state()) + len(self._ysp0) + len(self.model.dynamics_disturbance_names())
         if integral_obs and self.model.supports_integral_observation:
             obs_dim += len(self._ysp0)       # integral controlled-output error
         # supervisory (RL-on-PID): action = setpoints, an inner PID does the regulation.
@@ -186,7 +157,7 @@ class AIOGymNativeEnv(gym.Env):
         self.action_space = spaces.Box(0.0, 1.0, (act_dim,), dtype=np.float32)
         self.observation_space = spaces.Box(-np.inf, np.inf, (obs_dim,), dtype=np.float32)
         self._k = 0
-        self.last_act = self.model.default_action()
+        self.last_act = self.model.action_vector(self.model.default_action())
         self.previous_act = copy.deepcopy(self.last_act)
 
     def _resolve_tracking_q_y(self, q_y):
@@ -233,33 +204,24 @@ class AIOGymNativeEnv(gym.Env):
         self._sync_known_disturbances()
         return self.model.runtime_env(self._disturbance_values)
 
-    def _legacy_obs_setpoints(self):
-        return self._browser_adapter.setpoints(self.y_sp)
-
-    def legacy_observation_setpoints(self):
-        """Return browser-observation target slices derived from generic y_sp."""
-        return self._legacy_obs_setpoints()
-
     def _split(self, action):
         a = np.clip(np.asarray(action, np.float64), 0.0, 1.0)
-        return self._browser_adapter.action(a)
+        return self.model.action_vector(a)
 
     def _obs(self):
-        if self._uses_model_observation:
-            o = self.model.env_observation(self.integ.x, self.last_act, self._env(), self.y_sp)
-            return np.asarray(o, dtype=np.float32)
-        if not self._browser_adapter.enabled:
-            o = self.model.state_vector(self.integ.x) + list(self.y_sp) + list(self.model.disturbance_vector(self._env()))
-            if self.integral_obs:
-                o = o + [iy / I_TEMP_MAX for iy in self._iy]
-            return np.asarray(o, dtype=np.float32)
-        out = self.model.outputs(self.integ.x)
-        levels, temps = out["levels"], out["temps"]
-        if self.noise:                            # measurement noise on observed state (reward uses true state)
-            rng = self.np_random
-            levels = [l + float(rng.normal(0, self.noise_pct * 0.5)) for l in levels]
-            temps = [t + float(rng.normal(0, self.noise_pct * 10.0)) for t in temps]
-        o = self._browser_adapter.observation(levels, temps, self.t_cold, self.t_amb, self.y_sp)
+        state = self.model.state_vector(self.integ.x)
+        if self.noise:
+            noisy = []
+            for value, row in zip(state, self.model.state_schema()):
+                bounds = row.get("bounds")
+                scale = max(abs(float(value)), 1.0)
+                if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
+                    lo, hi = bounds
+                    if lo is not None and hi is not None and float(hi) > float(lo):
+                        scale = float(hi) - float(lo)
+                noisy.append(float(value) + float(self.np_random.normal(0, self.noise_pct * scale)))
+            state = noisy
+        o = state + list(self.y_sp) + list(self.model.disturbance_vector(self._env()))
         if self.integral_obs:
             o = o + [iy / I_TEMP_MAX for iy in self._iy]
         return np.asarray(o, dtype=np.float32)
@@ -386,11 +348,6 @@ class AIOGymNativeEnv(gym.Env):
                 "evaluate_transition requires action_mode='actuator'; setpoint actions "
                 "depend on the stateful inner PID"
             )
-        if self.custom_reward is not None:
-            raise ValueError(
-                "evaluate_transition cannot use stateful custom_reward; "
-                "configure custom_stage_reward instead"
-            )
         action = self._validated_action(action)
         return self._evaluate_model_transition(
             state,
@@ -424,15 +381,10 @@ class AIOGymNativeEnv(gym.Env):
         result = self._evaluate_model_transition(state, act, self.integ.x)
         self.scorer.accumulate(result.kpi, self.control_dt)
 
-        reward = result.reward
         info = dict(result.info)
-        if self.custom_reward is not None:               # legacy stateful override
-            reward = float(self.custom_reward(self, info["levels"], info["temps"], act))
-            if result.terminated:
-                reward -= 50.0
         if self.randomize_plant or self.plant_drift:
             info["plant_mult"] = dict(getattr(self, "_regime_mult", {}))
-        return float(reward), result.terminated, info
+        return float(result.reward), result.terminated, info
 
     # ---- gym API ----
     def reset(self, *, seed=None, options=None):
@@ -468,7 +420,7 @@ class AIOGymNativeEnv(gym.Env):
             self.pid.reset()
         self._iy = [0.0] * len(self.y_sp)
         self._k = 0
-        self.last_act = self.model.default_action()
+        self.last_act = self.model.action_vector(self.model.default_action())
         self.previous_act = copy.deepcopy(self.last_act)
         self._schedule_disturbances()
         return self._obs(), {}
@@ -507,7 +459,7 @@ class AIOGymNativeEnv(gym.Env):
         act = self.pid.compute(self._meas(), {"y_sp": self.y_sp}, self.control_dt)
         for (kind, idx), v in mv.items():
             act[kind][idx] = v
-        return {"pumps": list(act["pumps"]), "valves": list(act["valves"]), "heaters": list(act["heaters"])}
+        return self.model.action_vector(act)
 
     def _validated_action(self, action):
         try:
@@ -540,23 +492,3 @@ class AIOGymNativeEnv(gym.Env):
 
     def render(self):
         pass
-
-
-def make_env(model: str = "cascade", objective: str | Mapping[str, Any] | None = None,
-             seed: int | None = None, config: str | Path | Mapping[str, Any] | None = None,
-             *, protocol: str | Mapping[str, Any] | None = None,
-             **overrides) -> AIOGymNativeEnv:
-    """Compatibility entrypoint for :mod:`aiogym.env_factory`."""
-
-    warn_deprecated("aiogym.env.make_env", "aiogym.make_env")
-
-    from .env_factory import make_env as _make_env
-
-    return _make_env(
-        model=model,
-        objective=objective,
-        seed=seed,
-        config=config,
-        protocol=protocol,
-        **overrides,
-    )

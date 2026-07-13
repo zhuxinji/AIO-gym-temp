@@ -7,7 +7,7 @@ from typing import Iterable, Mapping
 
 import numpy as np
 
-from .._serialization import jsonable as _jsonable
+from .._internal.serialization import jsonable as _jsonable
 from .registry import SCENARIOS, make_model
 
 MODEL_CARD_SCHEMA_VERSION = "aiogym.model_card.v1"

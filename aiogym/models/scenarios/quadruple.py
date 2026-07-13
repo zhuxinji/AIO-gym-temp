@@ -146,9 +146,6 @@ class QuadrupleModel(ProcessModelContract):
         levels, temps = display["levels"], display["temps"]
         return [levels[0], levels[1], temps[0], temps[1], temps[2], temps[3]]
 
-    def legacy_observation_level_target_slots(self):
-        return [0, 1]
-
     # ---- KPI support ----
     energy_scored = True
 

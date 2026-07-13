@@ -10,7 +10,6 @@ from .core import (
     RHO_CP,
     Integrator,
     ProcessModelContract,
-    obs_vector,
 )
 from .declarative import DeclarativeProcessModel, define_model
 from .scenarios import (
@@ -72,7 +71,6 @@ __all__ = [
     "gym_id_name",
     "iter_model_cards",
     "make_model",
-    "obs_vector",
     "render_model_card_markdown",
     "register_model",
     "unregister_model",

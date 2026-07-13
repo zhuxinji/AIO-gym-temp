@@ -15,12 +15,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from aiogym import make_env
-from aiogym._config import parse_seed_list
+from aiogym._internal.config import parse_seed_list
 from aiogym.cli.single_benchmark import main as single_benchmark_main
 from aiogym.cli.suite_benchmark import controller_config_for, run_case
 from aiogym.controllers import (
     ControllerContext,
-    LegacyComputeController,
     PolicyController,
     load_controller_config,
     make_controller,
@@ -94,7 +93,7 @@ def test_make_env_preserves_non_protocol_overrides():
     env = make_env(
         model="cstr",
         objective="tracking",
-        custom_reward=lambda *_: 123.0,
+        custom_stage_reward=lambda *_: 123.0,
         episode_steps=1,
         dynamic=False,
         randomize=False,
@@ -102,7 +101,7 @@ def test_make_env_preserves_non_protocol_overrides():
     )
     env.reset(seed=0)
     _, reward, _, _, _ = env.step(np.array([0.5, 0.5], dtype=np.float32))
-    assert callable(env.custom_reward)
+    assert callable(env.custom_stage_reward)
     assert reward == 123.0
 
 
@@ -182,18 +181,7 @@ def test_controller_registration_requires_explicit_replacement():
     assert make_controller("pid", scenario="cstr").metadata()["name"] == "PID"
 
 
-def test_compatibility_adapters_do_not_mask_internal_type_errors():
-    class BrokenResetAgent:
-        def reset(self, seed=None):
-            raise TypeError("reset implementation failed")
-
-    try:
-        LegacyComputeController(BrokenResetAgent()).reset(seed=1)
-    except TypeError as ex:
-        assert str(ex) == "reset implementation failed"
-    else:
-        raise AssertionError("adapter should preserve reset implementation errors")
-
+def test_policy_adapters_do_not_mask_internal_type_errors():
     class BrokenPolicy:
         def act(self, obs, deterministic=False):
             raise TypeError("policy implementation failed")
@@ -288,20 +276,6 @@ def test_onnx_policy_controller_validates_and_runs_export_contract():
         assert "outputs 2 actions" in str(ex)
     else:
         raise AssertionError("ONNX policies should reject mismatched action dimensions")
-
-    if importlib.util.find_spec("onnxruntime") is not None:
-        policy_path = Path(__file__).resolve().parents[2] / "frontend/models/rlpd_cstr.onnx"
-        protocol = BenchmarkProtocol.economic(
-            "cstr", action_mode="setpoint", episode_steps=1, dynamic=False
-        )
-        loaded = make_controller(
-            "onnx",
-            scenario="cstr",
-            config={"path": str(policy_path), "action_mode": "setpoint"},
-        )
-        result = evaluate_controller(loaded, protocol.make_env(), episodes=1, protocol=protocol)
-        assert result["controller"]["class"] == "ONNXPolicyController"
-
 
 def test_invalid_suite_controller_is_failed_not_skipped():
     protocol = BenchmarkProtocol.tracking("cstr", episode_steps=1)
@@ -501,6 +475,29 @@ def test_invalid_environment_configuration_fails_early():
             raise AssertionError(f"invalid {expected} should be rejected")
 
 
+def test_removed_compatibility_surfaces_stay_removed():
+    import aiogym.env as env_module
+    import aiogym.evaluation.core as evaluation_core
+    from aiogym.rl import TransitionDataset
+
+    assert importlib.util.find_spec("aiogym.objectives") is None
+    assert not hasattr(env_module, "make_env")
+    assert not hasattr(evaluation_core, "run_benchmark")
+    assert not hasattr(TransitionDataset(), "rl_tuples")
+
+    for build in (
+        lambda: AIOGymNativeEnv("cstr", reward_mode="track"),
+        lambda: BenchmarkProtocol.tracking("cstr", reward_mode="track"),
+        lambda: make_controller("nmpc", scenario="cstr"),
+    ):
+        try:
+            build()
+        except (KeyError, TypeError, ValueError):
+            pass
+        else:
+            raise AssertionError("removed compatibility input should be rejected")
+
+
 def test_invalid_actions_fail_before_reaching_dynamics():
     env = AIOGymNativeEnv("cstr", episode_steps=1)
     env.reset(seed=0)
@@ -654,7 +651,7 @@ if __name__ == "__main__":
     test_model_parameter_overrides_follow_schema_bounds()
     test_registered_name_must_match_model_scenario()
     test_controller_registration_requires_explicit_replacement()
-    test_compatibility_adapters_do_not_mask_internal_type_errors()
+    test_policy_adapters_do_not_mask_internal_type_errors()
     test_onnx_policy_controller_validates_and_runs_export_contract()
     test_invalid_suite_controller_is_failed_not_skipped()
     test_hvac_oracle_builds_with_casadi_outputs()
@@ -665,6 +662,7 @@ if __name__ == "__main__":
     test_pid_json_is_the_single_default_config_source()
     test_predictive_controller_configs_fail_at_construction()
     test_invalid_environment_configuration_fails_early()
+    test_removed_compatibility_surfaces_stay_removed()
     test_invalid_actions_fail_before_reaching_dynamics()
     test_explicit_seed_list_overrides_episode_count()
     test_training_outputs_are_unique_unless_explicitly_named()

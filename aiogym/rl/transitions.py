@@ -7,8 +7,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 import numpy as np
 
-from .._validation import nonnegative_int, positive_int
-from .._deprecations import warn_deprecated
+from .._internal.validation import nonnegative_int, positive_int
 
 
 TRANSITION_SCHEMA_VERSION = "aiogym.transition.v1"
@@ -157,22 +156,6 @@ class TransitionDataset:
         actions = np.asarray([item.action for item in self._items], dtype=np.float32)
         next_values = np.asarray([getattr(item, next_name) for item in self._items], dtype=np.float32)
         return current, actions, next_values
-
-    def rl_tuples(self):
-        """Return the legacy ``(obs, action, reward, next_obs, terminated)`` view."""
-
-        warn_deprecated("TransitionDataset.rl_tuples()", "TransitionDataset.to_rows() or supervised_arrays()")
-
-        return [
-            (
-                np.asarray(item.obs, dtype=np.float32),
-                np.asarray(item.action, dtype=np.float32),
-                item.reward,
-                np.asarray(item.next_obs, dtype=np.float32),
-                float(item.terminated),
-            )
-            for item in self._items
-        ]
 
     def to_rows(self) -> list[dict[str, Any]]:
         return [item.to_dict() for item in self._items]

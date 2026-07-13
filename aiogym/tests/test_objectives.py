@@ -9,8 +9,7 @@ import numpy as np
 
 from aiogym.env import AIOGymNativeEnv
 from aiogym.models import SCENARIOS
-from aiogym.objectives import stage_reward
-
+from aiogym.evaluation.objectives import stage_reward
 
 class StageRewardContractTests(unittest.TestCase):
     def test_stage_reward_matches_environment_step(self):
@@ -211,30 +210,7 @@ class StageRewardContractTests(unittest.TestCase):
         self.assertTrue(result.terminated)
         self.assertEqual(result.reward, -43.0)
 
-    def test_stateful_custom_reward_is_not_available_to_planners(self):
-        env = AIOGymNativeEnv(
-            "cstr",
-            custom_reward=lambda *_: 3.0,
-            dynamic=False,
-            randomize=False,
-            randomize_setpoints=False,
-        )
-        env.reset(seed=0)
-        state = list(env.integ.x)
-
-        with self.assertRaisesRegex(ValueError, "custom_stage_reward"):
-            env.evaluate_transition(state, np.array([0.5, 0.5], dtype=np.float32), state)
-        _, reward, _, _, _ = env.step(np.array([0.5, 0.5], dtype=np.float32))
-        self.assertEqual(reward, 3.0)
-
-    def test_custom_reward_contract_rejects_ambiguous_or_invalid_configuration(self):
-        with self.assertRaisesRegex(ValueError, "cannot be used together"):
-            AIOGymNativeEnv(
-                "cstr",
-                custom_reward=lambda *_: 1.0,
-                custom_stage_reward=lambda *_: 2.0,
-            )
-
+    def test_custom_stage_reward_rejects_invalid_result(self):
         env = AIOGymNativeEnv(
             "cstr",
             custom_stage_reward=lambda *_: float("nan"),

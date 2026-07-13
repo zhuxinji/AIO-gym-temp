@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import json
 import os
 import time
-from datetime import datetime, timezone
 
-from aiogym._config import parse_seed_list
+from aiogym._internal.config import parse_seed_list
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import evaluate_controller, resolve_protocol, rollout_controller
@@ -69,7 +67,7 @@ def build_algo(args, env):
     except ModuleNotFoundError as ex:
         raise SystemExit(
             "stable-baselines3 is not installed. Install the package dependencies "
-            "with `pip install -e ./aiogym` from the repository root."
+            "with `pip install -e .` from the repository root."
         ) from ex
 
     algo = args.algo.lower()
@@ -292,12 +290,12 @@ def require_onnx_export_dependencies():
     except ModuleNotFoundError as ex:
         raise SystemExit(
             "torch is required for ONNX export. Install the package dependencies "
-            "with `pip install -e ./aiogym` from the repository root."
+            "with `pip install -e .` from the repository root."
         ) from ex
     if importlib.util.find_spec("onnx") is None:
         raise SystemExit(
             "onnx is required for ONNX export. Install the package dependencies "
-            "with `pip install -e ./aiogym` from the repository root."
+            "with `pip install -e .` from the repository root."
         )
 
 
@@ -306,7 +304,7 @@ def main():
     ap.add_argument("--scenario", default="cstr")
     ap.add_argument("--algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--action-mode", default="actuator", choices=["actuator", "setpoint"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking", "track"])
+    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking"])
     ap.add_argument("--steps", type=int, default=10000)
     ap.add_argument("--n-envs", type=int, default=default_n_envs())
     ap.add_argument("--vec-env", default="subproc", choices=["subproc", "dummy"],
@@ -365,7 +363,7 @@ def main():
     except ModuleNotFoundError as ex:
         raise SystemExit(
             "stable-baselines3 is not installed. Install the package dependencies "
-            "with `pip install -e ./aiogym` from the repository root."
+            "with `pip install -e .` from the repository root."
         ) from ex
     args.device = args.device or best_device()
     torch.set_num_threads(max(1, int(args.torch_threads)))
@@ -373,7 +371,6 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     run_name = run_name_for(args)
     checkpoint_path = os.path.join(args.out_dir, run_name)
-    report_path = os.path.join(args.out_dir, f"{run_name}_report.json")
 
     vec_env_cls = SubprocVecEnv if args.vec_env == "subproc" else DummyVecEnv
     vec_env_kwargs = {"start_method": args.subproc_start_method} if args.vec_env == "subproc" else None
@@ -405,7 +402,6 @@ def main():
     training = training_metadata(args, checkpoint_zip)
     if onnx_path is not None:
         training["onnx_path"] = onnx_path
-    training["legacy_report_path"] = report_path
     learning_curve = list(curve_callback.history)
     final_curve_point = learning_curve_point(args.steps, result, phase="final")
     final_curve_point["timesteps"] = args.steps
@@ -435,33 +431,12 @@ def main():
             },
         },
     )
-    artifact_payload = write_rl_artifacts(artifact_dir_for(args, run_name), artifact_payload)
-
-    payload = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "kind": "sb3_train_eval",
-        "training": training,
-        "training_runtime": {
-            "seconds": train_seconds,
-            "steps_per_second": args.steps / train_seconds if train_seconds > 0 else None,
-            "steps_per_second_per_env": (args.steps / train_seconds / args.n_envs) if train_seconds > 0 else None,
-        },
-        "evaluation_protocol": protocol.metadata(),
-        "evaluation": result,
-        "learning_curve": learning_curve,
-        "artifact_dir": artifact_payload.get("artifact_dir", artifact_dir_for(args, run_name)),
-        "artifacts": artifact_payload.get("artifacts", {}),
-    }
-    if rollout is not None:
-        payload["rollout"] = rollout
-    with open(report_path, "w") as f:
-        json.dump(payload, f, indent=2)
+    write_rl_artifacts(artifact_dir_for(args, run_name), artifact_payload)
 
     metric = result["metric"]
     print(f"saved checkpoint {checkpoint_zip}")
     if onnx_path is not None:
         print(f"exported onnx {onnx_path}")
-    print(f"saved report {report_path}")
     print(f"saved artifacts {artifact_dir_for(args, run_name)}")
     if train_seconds > 0:
         print(

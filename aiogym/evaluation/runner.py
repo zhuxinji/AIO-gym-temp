@@ -1,4 +1,4 @@
-"""One benchmark-case execution path shared by all public frontends."""
+"""One benchmark-case execution path shared by all public entrypoints."""
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence

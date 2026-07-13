@@ -4,10 +4,10 @@
 Pipeline (the offline->online story):
   1. roll out the existing PID controller -> an offline "historian" dataset
   2. offline-pretrain RLPD, then keep learning online (symmetric sampling)
-  3. rank RLPD vs PID vs MPC by KPI score (metrics.kpi — the SAME composite the
-     browser shows: tracking + excess-energy + safety) under dynamic disturbed
+  3. rank RLPD vs PID vs MPC by the same composite KPI score
+     (tracking + excess-energy + safety) under dynamic disturbed
      conditions, so "RL beats MPC" is apples-to-apples
-  4. save a checkpoint + export ONNX (drop into the browser AIO-Gym RL mode)
+  4. save a checkpoint and export ONNX
 
     python -m aiogym.rl.train_rlpd --scenario cascade --online-steps 30000
 """
@@ -79,7 +79,7 @@ def output_base_for(args, run_id: str | None = None) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default="cascade", choices=["cascade", "quadruple", "cstr", "hvac"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking", "track"])
+    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking"])
     ap.add_argument("--control-dt", type=float, default=0.5)
     ap.add_argument("--episode-steps", type=int, default=400)
     ap.add_argument("--offline-episodes", type=int, default=40)
@@ -108,7 +108,6 @@ def main():
 
     protocol_cls = {"economic": BenchmarkProtocol.economic,
                     "tracking": BenchmarkProtocol.tracking,
-                    "track": BenchmarkProtocol.tracking,
                     "kpi": BenchmarkProtocol.kpi}[args.reward_mode]
 
     def protocol(mode=None):
@@ -235,8 +234,6 @@ def main():
 
     torch.save(rlpd.state_dict(), base + ".pt")
     rlpd.save_onnx(base + ".onnx")
-    with open(base + ".json", "w") as f:
-        json.dump(result, f, indent=2)
     rollouts = []
     if args.save_rollout:
         rollouts.append(rollout_controller(
@@ -261,7 +258,6 @@ def main():
         "n_critics": args.n_critics,
         "checkpoint_path": base + ".pt",
         "onnx_path": base + ".onnx",
-        "legacy_report_path": base + ".json",
     }
     standard_payload = rl_payload(
         kind="rlpd_train_eval",

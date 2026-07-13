@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from ._config import (
+from ._internal.config import (
     PROTOCOL_KEYS,
     load_config,
     protocol_data,

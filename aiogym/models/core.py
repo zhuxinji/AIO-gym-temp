@@ -1,11 +1,6 @@
-"""Native (numpy/pure-python) port of the AIO-Gym plant models.
+"""Native NumPy/pure-Python process models for AIO-Gym.
 
-A faithful re-implementation of frontend/js/sim/models.js: same ODE right-hand
-sides, same constants, same state layout, so a policy trained here transfers to
-the browser sim and vice-versa. Parity against the JS source of truth is checked
-by tests/test_parity.py (golden trajectories generated from the browser engine).
-
-State layout (matches the JS):
+State layout:
   cascade / quadruple : x = [h0, T0, h1, T1, ...]   (level, temp interleaved)
   cstr                : x = [Ca, T]
   hvac                : x = [T0, T1]
@@ -308,8 +303,8 @@ class ProcessModelContract:
         """Semantic outputs derived from x.
 
         ``y`` is the generic controlled-output vector used for calculations.
-        ``levels``/``temps`` are optional legacy display channels for built-in
-        browser-compatible scenarios.
+        ``levels``/``temps`` are optional physical display channels for built-in
+        process scenarios.
         """
         state = self.state_vector(x)
         display = self.display_outputs(state)
@@ -363,11 +358,6 @@ class ProcessModelContract:
         """Apply model-specific reset-time target sampling."""
 
         return list(y_sp)
-
-    def env_observation(self, x, act, env, y_sp):
-        """Return a model-specific observation, or None for the generic adapter."""
-
-        return None
 
     def setpoint_schema(self):
         output_rows = self.controlled_output_schema()
@@ -619,38 +609,6 @@ class ProcessModelContract:
 
     def ideal_energy_kw(self, x, y_sp, env, act):
         return 0.0
-
-    def legacy_observation_level_target_slots(self):
-        return []
-
-    def legacy_observation_setpoints(self, y_sp):
-        values = list(y_sp)
-        level_targets = [0.0] * int(self.n)
-        slots = list(self.legacy_observation_level_target_slots())
-        for j, slot in enumerate(slots):
-            if slot < len(level_targets):
-                level_targets[slot] = values[j] if j < len(values) else 0.0
-        offset = len(slots)
-        output_targets = [
-            values[offset + i] if offset + i < len(values) else 0.0
-            for i in range(int(self.n))
-        ]
-        return level_targets, output_targets
-
-
-def obs_vector(model, levels, temps, t_cold, t_amb, level_targets, output_targets):
-    """Legacy browser-compatible observation adapter.
-
-    New generic models use [x, y_sp, disturbances]. Built-in legacy scenarios
-    still expose this browser-compatible observation layout.
-    """
-
-    from .adapters import browser_observation_vector
-
-    return browser_observation_vector(
-        model, levels, temps, t_cold, t_amb, level_targets, output_targets
-    )
-
 
 class Integrator:
     """Fixed-step RK4 integrator for process models."""

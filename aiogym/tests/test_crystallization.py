@@ -31,14 +31,14 @@ def test_registered_model_contract():
     model = make_model("crystallization")
     assert model.scenario == "crystallization"
     assert model.actuator_counts() == (0, 0, 1)
-    assert model.observation_dim() == 13
+    assert len(model.initial_state()) == 5
 
 
 def test_reset_contract():
     env = _make_env()
     obs, _ = env.reset(seed=0)
-    assert obs.shape == (13,)
-    assert env.observation_space.shape == (13,)
+    assert obs.shape == (10,)
+    assert env.observation_space.shape == (10,)
     assert env.action_space.shape == (1,)
     assert np.all(np.isfinite(obs))
     assert np.allclose(obs[-3:], [1.0, 1.0, 0.0])
@@ -54,7 +54,7 @@ def test_action_to_temperature_mapping():
 def test_unified_reward_modes_are_finite():
     model = make_model("crystallization")
     assert not callable(getattr(model, "reward_terms", None))
-    for reward_mode in ("tracking", "track", "kpi", "economic"):
+    for reward_mode in ("tracking", "kpi", "economic"):
         env = _make_env(reward_mode=reward_mode, crystal_ln_sp=10.5, crystal_cv_sp=0.85, episode_steps=3)
         obs, _ = env.reset(seed=0)
         obs, reward, terminated, truncated, info = env.step(np.array([0.5], dtype=np.float32))
@@ -146,8 +146,8 @@ def test_nominal_rollout_no_nan():
 def test_custom_setpoint_observation():
     env = _make_env(crystal_ln_sp=10.5, crystal_cv_sp=0.85)
     obs, _ = env.reset(seed=0)
-    assert np.isclose(obs[7], 10.5)
-    assert np.isclose(obs[8], 0.85)
+    assert np.isclose(obs[5], 0.85)
+    assert np.isclose(obs[6], 10.5)
 
 
 def test_random_target_observation():
@@ -157,8 +157,8 @@ def test_random_target_observation():
         crystal_cv_range=(0.82, 0.82),
     )
     obs, _ = env.reset(seed=0)
-    assert np.isclose(obs[7], 10.25)
-    assert np.isclose(obs[8], 0.82)
+    assert np.isclose(obs[5], 0.82)
+    assert np.isclose(obs[6], 10.25)
 
 
 if __name__ == "__main__":

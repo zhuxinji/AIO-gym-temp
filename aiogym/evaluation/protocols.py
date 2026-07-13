@@ -6,9 +6,8 @@ import math
 from numbers import Integral
 from typing import Any, Mapping, Sequence
 
-from .._deprecations import warn_deprecated
 
-from .._serialization import jsonable as _jsonable
+from .._internal.serialization import jsonable as _jsonable
 
 EVALUATION_SCHEMA_VERSION = "aiogym.evaluation.v2"
 PUBLIC_BENCHMARK_SCHEMA_VERSION = "aiogym.public_benchmark.v1"
@@ -153,7 +152,7 @@ def metric_for_reward_mode(reward_mode: str) -> str:
 
     if reward_mode == "economic":
         return "profit"
-    if reward_mode in {"tracking", "track"}:
+    if reward_mode == "tracking":
         return "return"
     return "kpi"
 
@@ -215,10 +214,6 @@ def _empty_episode_totals(ep: int, seed: int):
 def _protocol_kwargs(defaults: Mapping[str, Any], overrides: Mapping[str, Any]):
     data = dict(defaults)
     data.update(overrides)
-    legacy_reward_mode = data.pop("reward_mode", None)
-    if legacy_reward_mode is not None and "env_reward_mode" not in overrides:
-        warn_deprecated("BenchmarkProtocol reward_mode", "env_reward_mode")
-        data["env_reward_mode"] = legacy_reward_mode
     return data
 
 
@@ -259,8 +254,7 @@ class BenchmarkProtocol:
             raise ValueError(
                 f"objective must be one of: {', '.join(PRIMARY_METRICS)}"
             )
-        env_reward_mode = "tracking" if self.env_reward_mode == "track" else self.env_reward_mode
-        if env_reward_mode not in {"economic", "kpi", "tracking"}:
+        if self.env_reward_mode not in {"economic", "kpi", "tracking"}:
             raise ValueError("env_reward_mode must be one of: economic, kpi, tracking")
         if self.action_mode not in {"actuator", "setpoint"}:
             raise ValueError("action_mode must be one of: actuator, setpoint")
@@ -282,7 +276,6 @@ class BenchmarkProtocol:
         if not isinstance(self.model_params, Mapping):
             raise TypeError("model_params must be a mapping")
         object.__setattr__(self, "control_dt", control_dt)
-        object.__setattr__(self, "env_reward_mode", env_reward_mode)
         object.__setattr__(self, "episode_steps", int(self.episode_steps))
         object.__setattr__(self, "noise_pct", noise_pct)
         object.__setattr__(self, "tracking_r_move", tracking_r_move)
@@ -321,13 +314,6 @@ class BenchmarkProtocol:
                         randomize_plant=True, plant_drift=True,
                         terminate_on_runaway=False)
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @property
-    def reward_mode(self):
-        """Backward-compatible alias for the environment reward mode."""
-
-        warn_deprecated("BenchmarkProtocol.reward_mode", "BenchmarkProtocol.env_reward_mode")
-        return self.env_reward_mode
 
     def env_kwargs(self, action_mode: str | None = None):
         data = asdict(self)

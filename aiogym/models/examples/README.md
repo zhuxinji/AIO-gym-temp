@@ -6,7 +6,7 @@ editing built-in model source.
 Run them from the repository root after installing the backend:
 
 ```bash
-pip install -e ./aiogym
+pip install -e .
 python aiogym/models/examples/declarative_model.py
 python aiogym/models/examples/custom_model.py
 ```

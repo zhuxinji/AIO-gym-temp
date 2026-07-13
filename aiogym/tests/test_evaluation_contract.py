@@ -192,7 +192,6 @@ def test_benchmark_config_and_report_schema():
     tracking_metrics = protocols["tracking"].metadata()["metrics"]
     tracking_meta = protocols["tracking"].metadata()
     tracking_env_kwargs = protocols["tracking"].env_kwargs()
-    legacy_protocol = BenchmarkProtocol.tracking("cstr", reward_mode="track", episode_steps=3)
     protocol_ok = (
         tracking_metrics[0] == "tracking_cost"
         and all(key.startswith("tracking_") for key in tracking_metrics)
@@ -202,10 +201,8 @@ def test_benchmark_config_and_report_schema():
         and tracking_meta["primary_metric_direction"] == "minimize"
         and tracking_meta["env_reward_mode"] == "tracking"
         and "reward_mode" not in tracking_meta
-        and protocols["tracking"].reward_mode == "tracking"
         and tracking_env_kwargs["reward_mode"] == "tracking"
         and "env_reward_mode" not in tracking_env_kwargs
-        and legacy_protocol.env_reward_mode == "tracking"
         and protocols["economic"].metadata()["metrics"][0] == "profit"
         and protocols["economic"].metadata()["primary_metric"] == "profit"
         and protocols["robustness"].metadata()["noise"] is True
@@ -254,7 +251,7 @@ def test_kpi_tracking_setpoint_alignment():
     from aiogym.evaluation import _tracking_step_metrics
     from aiogym.evaluation.metrics.kpi import W_TRACKING
 
-    env = AIOGymNativeEnv("heater", reward_mode="track", action_mode="actuator",
+    env = AIOGymNativeEnv("heater", reward_mode="tracking", action_mode="actuator",
                           dynamic=False, randomize=False, randomize_setpoints=False,
                           episode_steps=1)
     env.reset(seed=0)
@@ -323,7 +320,7 @@ def test_pure_tracking_reward_mode():
     """Tracking reward should be pure SP error; safety/energy stay report-only."""
     from aiogym.evaluation import metric_for_reward_mode, primary_metric_for_objective
 
-    env = AIOGymNativeEnv("hvac", reward_mode="track", action_mode="actuator",
+    env = AIOGymNativeEnv("hvac", reward_mode="tracking", action_mode="actuator",
                           dynamic=False, randomize=False, randomize_setpoints=False,
                           episode_steps=1)
     env.reset(seed=0)

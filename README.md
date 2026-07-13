@@ -1,225 +1,146 @@
-<div align="center">
+# AIO-Gym
 
-# AIO-Gym-temp
+AIO-Gym is a native Python backend for process-control reinforcement learning,
+controller benchmarking, offline-data generation, and model-based research. It
+provides synchronous, seedable, and vectorizable Gymnasium environments without
+requiring a browser or external simulator.
 
-**A cleaned-up Python backend for process-control benchmarking, controller
-evaluation, and reinforcement-learning training.**
+## Features
 
-[**English**](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
-
-MIT License
-
-</div>
-
----
-
-This checkout is referred to as **AIO-Gym-temp**. It is the reorganized backend
-version derived from **AIO-Gym**. In this document, **AIO-Gym** refers to the
-older backend snapshot before this reorganization.
-
-This README only describes backend changes: package layout, Python API,
-terminal commands, benchmark evaluation, controller organization, model
-registry, RL training, artifacts, and generated-output policy.
-
-The detailed backend usage guide lives in [aiogym/README.md](aiogym/README.md).
-
-## Backend Scope
-
-`AIO-Gym-temp` provides a native Python backend under `aiogym/`:
-
-- Native Gymnasium environments.
-- Seven registered backend scenarios: `cascade`, `quadruple`, `cstr`, `hvac`,
+- Seven process scenarios: `cascade`, `quadruple`, `cstr`, `hvac`,
   `extraction`, `heater`, and `crystallization`.
-- Controller evaluation for PID, MPC, oracle, generic policy objects, and SB3
-  policies.
-- Named benchmark suites with summary tables, reports, plots, and reusable
-  artifacts.
-- Human-readable model cards under `docs/model_cards/`.
-- Model extension examples under `aiogym/models/examples/`.
-- Controller extension examples under `aiogym/controllers/examples/`.
-- RL training entrypoints for SB3 and RLPD.
-- A small public Python API for notebooks, scripts, and external Python users.
-- Console commands for terminal and automation workflows.
+- A generic model contract based on state `x`, action `u`, controlled output
+  `y`, setpoint `y_sp`, and declared disturbances.
+- PID, linear MPC, nonlinear MPC oracle, Python policy, SB3, and ONNX
+  controller support.
+- Tracking, economic, KPI, robustness, and safety benchmark protocols.
+- Reproducible benchmark suites, reports, plots, leaderboards, and artifact
+  validation.
+- SB3 and RLPD training workflows with standard benchmark artifacts and ONNX
+  export.
+- Declarative and Python extension interfaces for custom process models and
+  controllers.
 
-Install the backend from the repository root:
+## Requirements
+
+- Python 3.10 or newer
+- NumPy and Gymnasium
+- CasADi for nonlinear MPC
+- PyTorch and Stable-Baselines3 for training
+- ONNX and ONNX Runtime for policy export and inference
+
+The default installation includes the complete backend dependency stack.
+
+## Installation
+
+Clone the repository and install it from the repository root:
 
 ```bash
-pip install -e ./aiogym
+python -m pip install -e .
 ```
 
-The default install includes the local benchmark, oracle, training, and ONNX
-export dependencies. Extras such as `[oracle]`, `[train]`, `[export]`, and
-`[all]` are deprecated compatibility aliases scheduled for removal in `aiogym 0.3`.
-
-Common commands:
+Install the test dependency as well:
 
 ```bash
-aiogym-suite-benchmark --suite standard-baselines --episodes 3 --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
-aiogym-single-benchmark --scenario cstr --objective tracking --controllers pid,mpc
-aiogym-suite-benchmark --suite economic-supervisory --scenarios cstr --controllers onnx --onnx-path frontend/models/rlpd_cstr.onnx --episodes 1
-aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
-aiogym-artifact-check aiogym/runs/bench_suite_standard-baselines_artifacts
-aiogym-train-sb3 --scenario cstr --algo sac --steps 10000 --onnx
-aiogym-model-cards --format markdown --out-dir docs/model_cards
+python -m pip install -e ".[dev]"
 ```
 
-Python API:
+A non-editable local installation is also supported:
+
+```bash
+python -m pip install .
+```
+
+## Quick Start
+
+Importing `aiogym` registers all built-in Gymnasium environment IDs:
+
+```python
+import gymnasium as gym
+import aiogym
+
+env = gym.make("AIOGym/CSTR-v0")
+obs, info = env.reset(seed=7)
+
+terminated = truncated = False
+while not (terminated or truncated):
+    action = env.action_space.sample()
+    obs, reward, terminated, truncated, info = env.step(action)
+
+env.close()
+```
+
+The direct factory accepts model and benchmark-objective options:
 
 ```python
 import aiogym
 
-env = aiogym.make_env(model="cstr", objective="tracking", seed=7)
+env = aiogym.make_env(
+    model="cstr",
+    objective="tracking",
+    seed=7,
+    episode_steps=200,
+    dynamic=True,
+)
+```
+
+Every scenario uses the same backend contracts:
+
+```text
+observation = [x, y_sp, disturbances]
+action      = flat u vector in [0, 1]
+```
+
+Set `action_mode="setpoint"` to evaluate supervisory policies over the built-in
+PID layer when the selected model declares a supervisory layout.
+
+## Benchmarking
+
+Run the standard controller-comparison suite:
+
+```bash
+aiogym-suite-benchmark \
+  --suite standard-baselines \
+  --episodes 3
+```
+
+Run a smaller single-scenario comparison:
+
+```bash
+aiogym-single-benchmark \
+  --scenario cstr \
+  --objective tracking \
+  --controllers pid,mpc
+```
+
+Use an ONNX policy:
+
+```bash
+aiogym-suite-benchmark \
+  --suite economic-supervisory \
+  --scenarios cstr \
+  --controllers onnx \
+  --onnx-path path/to/policy.onnx \
+  --episodes 1
+```
+
+The same workflow is available through Python:
+
+```python
+import aiogym
+
 payload = aiogym.run_benchmark({
     "scenario": "cstr",
     "objective": "tracking",
-    "controller": "pid",
+    "controllers": ["pid", "mpc"],
+    "seeds": [7, 8, 9],
+    "output_dir": "runs/cstr_tracking",
 })
-figures = aiogym.plot_results(payload["run_dir"])
 ```
 
-## AIO-Gym-temp vs AIO-Gym
+## Benchmark Artifacts
 
-**AIO-Gym** means the older backend layout before this reorganization. It was
-script-oriented: most backend source files lived directly under `aiogym/`, and
-users ran individual Python files.
-
-**AIO-Gym-temp** means the current reorganized backend. It is package-oriented:
-source code is split by responsibility, user entrypoints are explicit, and
-generated outputs are separated from source files.
-
-| Area | AIO-Gym | AIO-Gym-temp |
-|---|---|---|
-| Package setup | No `pyproject.toml`; not installable as a standard package. | Installable backend package with `aiogym/pyproject.toml`, optional dependency groups, package data, and console scripts. |
-| User entrypoints | Direct scripts such as `python aiogym/train.py`, `python aiogym/train_rlpd.py`, and `train_all.sh`. | Stable commands such as `aiogym-suite-benchmark`, `aiogym-report`, `aiogym-train-sb3`, and `aiogym-train-rlpd`. |
-| Python API | Mostly direct imports from `aiogym.__init__` and internal modules. | Small public API: `aiogym.define_model`, `aiogym.register_model`, `aiogym.make_model`, `aiogym.make_env`, `aiogym.run_benchmark`, and `aiogym.plot_results`. |
-| Backend layout | Flat files: `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py`. | Layered packages: `models/`, `env`, `controllers/`, `evaluation/`, `rl/`, and `cli/`, with common user functions re-exported from `aiogym`. |
-| Model coverage | Backend registry covered cascade, quadruple, CSTR, HVAC, and fired heater. | Backend registry covers cascade, quadruple, CSTR, HVAC, extraction, fired heater, and crystallization. |
-| Model metadata | Model-card behavior was not a first-class package concern. | Model cards and contract validation live with `aiogym.models`, and exports are checked by tests. |
-| Controllers | PID, MPC, evaluation helpers, and baseline concepts were concentrated in `baselines.py` plus `oracle.py`. | Controller interface, registry, configs, adapters, PID, MPC, oracle, and tuning tools live under `aiogym.controllers`. |
-| Evaluation | Evaluation was mostly script/helper driven. | `aiogym.evaluation` owns benchmark objectives/configs, rollout collection, metrics, reports, plots, artifact generation, and suites. |
-| Benchmark suites | No canonical suite config package. | Named suite JSON files live under `aiogym/evaluation/suites/`, including `standard-baselines`, tracking/economic suites, robustness, RL-direct, and crystallization. |
-| Reports and plots | Generated outputs were scattered around runs or produced by scripts. | Artifacts use one standard layout with `benchmark.json`, `config/`, `metadata/`, `summary/`, `results/`, and `figures/`. |
-| RL code | `rlpd.py`, `train_rlpd.py`, `train_sac.py`, and `train.py` lived beside core backend modules. | RL algorithms and training flows live under `aiogym.rl`; default outputs go under `aiogym/runs/rl/`. |
-| Generated outputs | Historical run JSON files were tracked under `aiogym/runs/`. | `aiogym/runs/` is treated as local output; only `.gitignore` is kept. |
-| Parity tooling | JS parity test existed. | Parity testing is retained, and the golden generator lives with backend tests as `aiogym/tests/generate_golden.mjs`. |
-| Documentation | Backend usage was spread across script comments, README text, and old helper locations. | Backend documentation is consolidated into README files with explicit package boundaries and commands. |
-
-## Implemented Backend Improvements
-
-### 1. Installable package and canonical commands
-
-`AIO-Gym-temp` is installable from the backend package directory. User-facing
-commands are defined in `aiogym/pyproject.toml`:
-
-```text
-aiogym-single-benchmark
-aiogym-suite-benchmark
-aiogym-report
-aiogym-artifact-check
-aiogym-model-cards
-aiogym-train-sb3
-aiogym-train-rlpd
-```
-
-Old compatibility wrappers and broad shell scripts were removed, including the
-old `train_all.sh` flow.
-
-### 2. Public Python Entrypoints
-
-The top-level `aiogym` package re-exports the ordinary user-facing functions:
-
-```python
-aiogym.make_env(...)
-aiogym.run_benchmark(...)
-aiogym.plot_results(...)
-aiogym.define_model(...)
-aiogym.register_model(...)
-aiogym.make_model(...)
-```
-
-For custom scenarios, use `define_model(...)` to define a model from a
-declarative spec and `register_model(...)` to bind it to a scenario name.
-`make_model(...)` mirrors `make_env(...)` at the model layer: it instantiates or
-validates an already defined model from a scenario name, model class, factory, or
-model instance.
-
-Lower-level artifact writing remains internal to `aiogym.evaluation.artifacts`
-instead of being exposed at the top level.
-
-### 3. Clear command-line layer
-
-`aiogym/cli/` contains only terminal entrypoints:
-
-```text
-aiogym/cli/
-  single_benchmark.py
-  suite_benchmark.py
-  artifact_tools.py
-```
-
-The CLI parses arguments, prints progress, sets process exit behavior, and calls
-shared implementation modules. It does not own core evaluation or RL logic.
-
-### 4. Model package instead of one large model file
-
-The old monolithic `models.py` and `kernel.py` were split into:
-
-```text
-aiogym/models/
-  core.py
-  kernel.py
-  registry.py
-  scenarios/
-```
-
-Scenario implementations live in `models/scenarios/`, while registry,
-validation, model-card export, and Gym ID helpers live in `models/registry.py`.
-
-### 5. Controller package with registry and tuning provenance
-
-The previous baseline-controller logic was reorganized into:
-
-```text
-aiogym/controllers/
-  __init__.py
-  pid.py
-  mpc.py
-  oracle.py
-  configs/
-  tuning/
-```
-
-This package owns the formal controller API, controller registry, policy/SB3
-adapters, default configs, and reproducible tuning scripts. PID, MPC, and oracle
-are now parallel controller implementations rather than being mixed in one
-baseline file.
-
-### 6. Evaluation, metrics, reports, plots, and artifacts in one area
-
-Evaluation-related code was consolidated under:
-
-```text
-aiogym/evaluation/
-  core.py
-  metrics/
-  reports.py
-  plots.py
-  artifacts.py
-  suites/
-```
-
-This boundary is now explicit:
-
-- `core.py` defines benchmark objectives/configs and rollout/evaluation logic.
-- `metrics/` contains metric calculators.
-- `reports.py` renders benchmark reports.
-- `plots.py` produces SVG plots.
-- `artifacts.py` writes benchmark artifact directories.
-- `suites/` contains named benchmark definitions.
-
-### 7. Standard benchmark artifacts
-
-Benchmark runs now write a reusable artifact directory:
+Suite and public benchmark runs write a standard artifact directory:
 
 ```text
 <artifact_dir>/
@@ -228,87 +149,111 @@ Benchmark runs now write a reusable artifact directory:
   metadata/
   summary/
   results/
+  rollouts/
   training/
   figures/
 ```
 
-This separates source code from generated outputs and gives reports, plots,
-model cards, summaries, RL learning curves, and full result payloads a
-predictable home.
-
-Human-readable model cards for every built-in process live in
-`docs/model_cards/`. They are generated from the same registered model metadata
-used by benchmark artifacts:
+Generate a Markdown report or validate an artifact directory:
 
 ```bash
-aiogym-model-cards --format markdown --out-dir docs/model_cards
+aiogym-report path/to/artifact_dir
+aiogym-artifact-check path/to/artifact_dir
 ```
 
-Extension templates live next to the layer they extend:
+Default suite outputs use timestamped directories under `aiogym/runs/`. Pass
+`--artifact-dir` when a stable path is required.
+
+## Training
+
+Train an SB3 policy and optionally export ONNX:
+
+```bash
+aiogym-train-sb3 \
+  --scenario cstr \
+  --algo sac \
+  --steps 10000 \
+  --onnx
+```
+
+Run the offline-to-online RLPD workflow:
+
+```bash
+aiogym-train-rlpd \
+  --scenario cstr \
+  --offline-episodes 20 \
+  --online-steps 10000
+```
+
+Training runs write checkpoints, exports, learning curves, evaluation results,
+and standard benchmark artifacts.
+
+## Custom Models and Controllers
+
+Start with the declarative model example when the dynamics can be expressed as
+formulas:
+
+```bash
+python aiogym/models/examples/declarative_model.py
+```
+
+Use the Python model example for lower-level behavior:
 
 ```bash
 python aiogym/models/examples/custom_model.py
+```
+
+The controller example implements the `aiogym.controller.v1` contract:
+
+```bash
 python aiogym/controllers/examples/custom_controller.py
 ```
 
-### 8. RL code grouped under `aiogym.rl`
-
-RL-specific source is grouped together:
-
-```text
-aiogym/rl/
-  rlpd.py
-  train_rlpd.py
-  train_sb3.py
-```
-
-Default trained-model outputs are written under:
-
-```text
-aiogym/runs/rl/
-  rlpd/
-  sb3/
-```
-
-`aiogym.rl` uses lazy imports so importing the package stays light, while the
-default install includes the Torch/SB3 training stack.
-
-### 9. Runs cleanup
-
-`aiogym/runs/` is treated as a local output area. Historical tracked run
-JSON/SVG files were removed, and the directory keeps only `.gitignore` in source
-control.
-
-### 10. Test and parity coverage retained
-
-The cleanup kept the important validation paths:
+Human-readable model documentation is generated under `docs/model_cards/`:
 
 ```bash
-python aiogym/tests/test_interface.py
-python aiogym/tests/test_parity.py
-node aiogym/tests/generate_golden.mjs --check
+aiogym-model-cards --format markdown --out-dir docs/model_cards
+aiogym-model-cards --check --format markdown --out-dir docs/model_cards
 ```
 
-The interface tests cover model contracts, public API entrypoints, controller
-evaluation, suite configs, reports/artifacts, setpoint alignment, and oracle
-baseline behavior. The parity test checks the native NumPy dynamics against
-golden trajectories from the JavaScript reference implementation.
-
-## Recommended Mental Model
-
-Use this structure when deciding where new backend code belongs:
+## Package Layout
 
 ```text
 aiogym/
-  cli/            # terminal entrypoints only
-  env.py          # Gymnasium environment and make_env helper
-  models/         # process models, contracts, registry, model cards
-  controllers/    # controller API, built-in controllers, configs, tuning
-  evaluation/     # benchmark objectives/configs, metrics, reports, plots, artifacts
-  rl/             # RL algorithms and training workflows
-  runs/           # local generated outputs
+  _internal/      private shared utilities
+  cli/            console entrypoints
+  controllers/    controller API, algorithms, configs, and tuning
+  evaluation/     protocols, objectives, metrics, reports, and artifacts
+  models/         model contracts, registry, scenarios, and model cards
+  rl/             transition data, RLPD, and training workflows
+  tests/          backend contract and regression tests
+  env.py          Gymnasium environment
+  env_factory.py  public environment factory
 ```
 
-The key design rule is that the top-level `aiogym` package and `cli/` are doors
-into the system, not places to hide core logic. Core behavior should live in
-`models/`, `env.py`, `controllers/`, `evaluation/`, or `rl/`.
+## Validation
+
+Run the backend test entrypoints from the repository root:
+
+```bash
+python aiogym/tests/test_interface.py
+python aiogym/tests/test_regressions.py
+python aiogym/tests/test_crystallization.py
+python -m unittest aiogym.tests.test_objectives aiogym.tests.test_transitions -v
+```
+
+Run a short end-to-end benchmark check:
+
+```bash
+aiogym-suite-benchmark \
+  --suite standard-baselines \
+  --scenarios cstr \
+  --objectives tracking \
+  --controllers pid,mpc \
+  --episodes 1 \
+  --episode-steps 2
+```
+
+## License
+
+MIT

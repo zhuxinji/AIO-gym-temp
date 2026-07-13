@@ -1,5 +1,7 @@
 """Evaluation protocols, metrics, and artifact reports."""
 
+from .objectives import StageRewardContext, StageRewardResult, stage_reward
+
 from .protocols import (
     EVALUATION_SCHEMA_VERSION,
     METRIC_DEFINITIONS,
@@ -34,6 +36,9 @@ from .artifacts import plot_results, write_benchmark_artifacts
 from .plots import plot_constraint_timeline, plot_leaderboard, plot_learning_curve, plot_rollouts, plot_summary
 
 __all__ = [
+    "StageRewardContext",
+    "StageRewardResult",
+    "stage_reward",
     "EVALUATION_SCHEMA_VERSION",
     "ROLLOUT_SCHEMA",
     "METRIC_DEFINITIONS",

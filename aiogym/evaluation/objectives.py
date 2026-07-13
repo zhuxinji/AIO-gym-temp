@@ -8,8 +8,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
-from .evaluation.metrics.kpi import KPIStep, kpi_step
-from .evaluation.metrics.tracking import normalized_tracking_error_sum, normalized_tracking_errors
+from .metrics.kpi import KPIStep, kpi_step
+from .metrics.tracking import normalized_tracking_error_sum, normalized_tracking_errors
 
 
 @dataclass(frozen=True)

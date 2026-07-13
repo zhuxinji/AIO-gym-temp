@@ -11,9 +11,8 @@ from time import perf_counter
 from typing import Any, Mapping, Sequence
 import numpy as np
 
-from .._deprecations import warn_deprecated
 
-from .._serialization import jsonable as _jsonable
+from .._internal.serialization import jsonable as _jsonable
 from ..controllers import as_controller, build_context, validate_action
 from .metrics.economic import economic_step_metrics
 from .metrics.robustness import robustness_extrema
@@ -253,16 +252,6 @@ def build_evaluation_report(results: Sequence[Mapping[str, Any]]):
     }
 
 
-def run_benchmark(config):
-    """Compatibility entrypoint for the public benchmark orchestrator."""
-
-    warn_deprecated("aiogym.evaluation.core.run_benchmark", "aiogym.run_benchmark")
-
-    from .benchmark import run_benchmark as _run_benchmark
-
-    return _run_benchmark(config)
-
-
 def _env_metadata(env):
     keys = (
         "scenario", "reward_mode", "action_mode", "control_dt", "episode_steps",
@@ -277,7 +266,7 @@ def _env_objective(env):
     reward_mode = getattr(env, "reward_mode", "")
     if reward_mode == "economic":
         return "economic"
-    if reward_mode in {"tracking", "track"}:
+    if reward_mode == "tracking":
         return "tracking"
     return "kpi"
 

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .._config import as_list, load_config, protocol_data
-from .._serialization import jsonable, write_json
+from .._internal.config import as_list, load_config, protocol_data
+from .._internal.serialization import jsonable, write_json
 from .protocols import (
     PUBLIC_BENCHMARK_SCHEMA_VERSION,
     BenchmarkConfig,

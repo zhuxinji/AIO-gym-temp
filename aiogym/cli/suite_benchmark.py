@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
-from aiogym._config import parse_seed_list
-from aiogym._serialization import write_json
+from aiogym._internal.config import parse_seed_list
+from aiogym._internal.serialization import write_json
 from aiogym.evaluation import (
     build_evaluation_report,
     primary_metric_for_objective,

@@ -1,8 +1,7 @@
-"""aiogym — native (numpy) Gymnasium env over the AIO-Gym plant dynamics.
+"""aiogym — native Gymnasium environments for process-control research.
 
-A fast, synchronous, seedable, vectorizable re-implementation of the browser
-AIO-Gym physics (frontend/js/sim), built for RL training (SAC / RLPD / Cal-QL).
-Dynamics parity with the browser JS is enforced by tests/test_parity.py.
+Fast, synchronous, seedable, and vectorizable for controller benchmarking,
+offline-data generation, and RL training (SAC / RLPD / Cal-QL).
 
     import gymnasium as gym, aiogym          # registers the ids on import
     env = gym.make("AIOGym/Cascade-v0")
@@ -19,7 +18,6 @@ from .models import (
     export_model_card_markdown,
     export_model_cards,
     make_model,
-    obs_vector,
     render_model_card_markdown,
     register_model,
     unregister_model,
@@ -27,7 +25,7 @@ from .models import (
 )
 from .env import AIOGymNativeEnv
 from .env_factory import make_env
-from .objectives import StageRewardContext, StageRewardResult, stage_reward
+from .evaluation.objectives import StageRewardContext, StageRewardResult, stage_reward
 from .evaluation import (
     ARTIFACT_CHECK_SCHEMA_VERSION,
     REPORT_SCHEMA_VERSION,
@@ -49,7 +47,7 @@ from .controllers import (
 )
 
 __all__ = ["AIOGymNativeEnv", "StageRewardContext", "StageRewardResult", "stage_reward",
-           "make_model", "register_model", "unregister_model", "obs_vector", "Integrator", "SCENARIOS",
+           "make_model", "register_model", "unregister_model", "Integrator", "SCENARIOS",
            "ProcessModelContract", "define_model",
            "BenchmarkProtocol", "BenchmarkConfig", "build_evaluation_report", "evaluate_controller",
            "make_controller", "register_controller", "registered_controllers", "unregister_controller",

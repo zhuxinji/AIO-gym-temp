@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def tracking_step_metrics(info, setpoint, time_sec: float, dt: float, env):
-    y = list(info.get("y") or _legacy_controlled_output(env.model, info))
+    y = list(info["y"])
     y_sp = list(setpoint.get("y_sp") or env.model.default_setpoint_vector())
     errors = normalized_tracking_errors(env.model, y, y_sp)
     overshoot = max(errors, default=0.0)
@@ -45,8 +45,3 @@ def normalized_tracking_errors(model, y, y_sp):
         scale = scales[i] if i < len(scales) else 1.0
         errors.append((float(value) - float(setpoint)) / max(float(scale), 1e-12))
     return errors
-
-
-def _legacy_controlled_output(model, info):
-    temps = list(info.get("temps", []))
-    return temps

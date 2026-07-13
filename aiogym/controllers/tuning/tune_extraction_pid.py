@@ -8,7 +8,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from aiogym._config import parse_seed_list
+from aiogym._internal.config import parse_seed_list
 from aiogym.controllers import make_controller
 from aiogym.evaluation import BenchmarkProtocol, evaluate_controller
 

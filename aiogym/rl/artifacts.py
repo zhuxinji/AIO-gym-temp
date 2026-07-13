@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from aiogym._serialization import jsonable as _jsonable, write_json as _write_json
+from aiogym._internal.serialization import jsonable as _jsonable, write_json as _write_json
 from aiogym.evaluation import build_evaluation_report, plot_results, render_benchmark_report
 from aiogym.evaluation.artifacts import write_benchmark_artifacts
 from aiogym.evaluation.rows import compact_result_row

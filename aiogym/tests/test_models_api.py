@@ -90,7 +90,7 @@ def test_model_card_export():
             markdown_ok = markdown_ok and "## State Vector" in text
             markdown_ok = markdown_ok and "## Dynamics And Assumptions" in text
 
-    docs_path = os.path.join(root, "aiogym", "README.md")
+    docs_path = os.path.join(root, "README.md")
     docs_ok = os.path.exists(docs_path)
     if docs_ok:
         with open(docs_path) as f:
@@ -180,7 +180,7 @@ def test_custom_model_entrypoints():
             ), dtype=float).reshape(-1)
             declarative_ok = declarative_ok and np.allclose(decl_casadi, decl_dx)
             from aiogym.controllers.oracle import OracleAgent
-            oracle_agent = OracleAgent("declarative_vector", horizon=2, mode="track", ipopt_max_iter=30)
+            oracle_agent = OracleAgent("declarative_vector", horizon=2, mode="tracking", ipopt_max_iter=30)
             declarative_ok = declarative_ok and oracle_agent.metadata()["mode"] == "tracking"
             oracle_env = AIOGymNativeEnv("declarative_vector", dynamic=False, randomize=False,
                                          randomize_setpoints=False, episode_steps=1)
@@ -209,7 +209,6 @@ def test_public_api_entrypoints():
     from aiogym import register_model as top_register_model
     from aiogym import run_benchmark as top_run_benchmark
     from aiogym import unregister_model as top_unregister_model
-    from aiogym.env import make_env as env_make_env
     from aiogym.env_factory import make_env as factory_make_env
     from aiogym.evaluation import plot_results as eval_plot_results
     from aiogym.evaluation import run_benchmark as eval_run_benchmark
@@ -225,7 +224,6 @@ def test_public_api_entrypoints():
     public_surface_ok = public_surface_ok and top_register_model is models_register_model
     public_surface_ok = public_surface_ok and top_unregister_model is models_unregister_model
     public_surface_ok = public_surface_ok and top_make_env is factory_make_env
-    public_surface_ok = public_surface_ok and env_make_env is not factory_make_env
     public_surface_ok = public_surface_ok and top_run_benchmark is eval_run_benchmark
     public_surface_ok = public_surface_ok and top_plot_results is eval_plot_results
 

@@ -9,7 +9,6 @@ from typing import Any, Callable, Mapping, Protocol
 
 import numpy as np
 
-from .._deprecations import warn_deprecated
 
 
 CONTROLLER_API_VERSION = "aiogym.controller.v1"
@@ -81,17 +80,6 @@ def make_meas(env):
     return env.model.measurement(env.integ.x, env._env())
 
 
-def action_dict_to_vector(act: Mapping[str, Any], model: Any = None) -> np.ndarray:
-    if not isinstance(act, Mapping):
-        return np.asarray(act, dtype=np.float32).reshape(-1)
-    if model is not None and callable(getattr(model, "action_vector", None)):
-        return np.asarray(model.action_vector(act), dtype=np.float32)
-    return np.asarray(
-        list(act.get("pumps", [])) + list(act.get("valves", [])) + list(act.get("heaters", [])),
-        dtype=np.float32,
-    )
-
-
 def validate_action(action: Any, env, controller_name: str) -> np.ndarray:
     out = np.asarray(action, dtype=np.float32).reshape(-1)
     expected = env.action_space.shape[0]
@@ -103,41 +91,6 @@ def validate_action(action: Any, env, controller_name: str) -> np.ndarray:
     if not np.all(np.isfinite(out)):
         raise ValueError(f"{controller_name} produced a non-finite action")
     return out
-
-
-class LegacyComputeController:
-    """Adapter for existing compute(meas, sp, dt) actuator controllers."""
-
-    controller_api_version = CONTROLLER_API_VERSION
-    action_mode = "actuator"
-
-    def __init__(self, agent, name: str | None = None,
-                 control_structure: str = "legacy_compute_direct"):
-        self.agent = agent
-        self.name = name or getattr(agent, "name", agent.__class__.__name__)
-        self.control_structure = control_structure
-
-    def reset(self, seed: int | None = None) -> None:
-        if hasattr(self.agent, "reset"):
-            _call_compatible(
-                self.agent.reset,
-                (((), {"seed": seed}), ((), {})),
-                f"{self.agent.__class__.__name__}.reset",
-            )
-
-    def act(self, obs: np.ndarray, context: ControllerContext) -> np.ndarray:
-        act = self.agent.compute(context.measurement, context.setpoint, context.control_dt)
-        return action_dict_to_vector(act, getattr(context.env, "model", None))
-
-    def metadata(self) -> dict[str, Any]:
-        data = _metadata(self.agent)
-        data.setdefault("name", self.name)
-        data.setdefault("class", self.agent.__class__.__name__)
-        data["api"] = self.controller_api_version
-        data["adapter"] = self.__class__.__name__
-        data["action_mode"] = self.action_mode
-        data.setdefault("control_structure", self.control_structure)
-        return data
 
 
 class PolicyController:
@@ -216,12 +169,6 @@ def as_controller(agent, action_mode: str = "actuator", name: str | None = None,
                   control_structure: str | None = None) -> Controller:
     if getattr(agent, "controller_api_version", None) == CONTROLLER_API_VERSION:
         return agent
-    if hasattr(agent, "compute"):
-        return LegacyComputeController(
-            agent,
-            name=name,
-            control_structure=control_structure or _metadata(agent).get("control_structure", "legacy_compute_direct"),
-        )
     if hasattr(agent, "predict") or hasattr(agent, "act"):
         return PolicyController(
             agent,
@@ -265,8 +212,6 @@ def unregister_controller(name: str) -> None:
 def make_controller(name: str, model=None, scenario: str | None = None,
                     config: Mapping[str, Any] | None = None, policy=None) -> Controller:
     key = name.lower()
-    if key == "nmpc":
-        warn_deprecated('controller="nmpc"', 'controller="oracle"')
     if key not in _REGISTRY:
         raise KeyError(f"unknown controller {name!r}; available: {', '.join(registered_controllers())}")
     requested_scenario = scenario or dict(config or {}).get("scenario")
@@ -282,11 +227,7 @@ def make_controller(name: str, model=None, scenario: str | None = None,
 def load_controller_config(name: str, scenario: str | None = None,
                            profile: str | None = None) -> dict[str, Any]:
     key = name.lower()
-    if key == "nmpc":
-        warn_deprecated('controller config "nmpc"', 'controller config "oracle"')
     path = Path(__file__).resolve().parent / "configs" / f"{key}.json"
-    if not path.exists() and key == "nmpc":
-        path = path.with_name("oracle.json")
     if not path.exists():
         return {}
     with path.open() as f:
@@ -307,8 +248,6 @@ def _merged_controller_config(name: str, scenario: str | None,
                               config: Mapping[str, Any] | None = None) -> dict[str, Any]:
     override = dict(config or {})
     profile = override.get("mode")
-    if profile == "track":
-        profile = "tracking"
     base = load_controller_config(name, scenario, profile=profile)
     params = dict(base.get("parameters", {}))
     params.update(override.pop("parameters", {}))
@@ -422,7 +361,6 @@ def _onnx_factory(model=None, scenario=None, config=None, policy=None):
 register_controller("pid", _pid_factory)
 register_controller("mpc", _mpc_factory)
 register_controller("oracle", _oracle_factory)
-register_controller("nmpc", _oracle_factory)
 register_controller("policy", _policy_factory)
 register_controller("sb3", _sb3_factory)
 register_controller("onnx", _onnx_factory)

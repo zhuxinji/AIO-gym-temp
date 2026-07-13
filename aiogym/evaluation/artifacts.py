@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from aiogym._serialization import jsonable as _jsonable, write_json as _write_json
+from aiogym._internal.serialization import jsonable as _jsonable, write_json as _write_json
 from aiogym.evaluation.plots import (
     plot_constraint_timeline,
     plot_grouped_leaderboard,

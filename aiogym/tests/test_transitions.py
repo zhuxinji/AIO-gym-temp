@@ -55,12 +55,6 @@ class TransitionDatasetTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(states)))
         self.assertTrue(np.all(np.isfinite(observations)))
 
-        rl_rows = dataset.rl_tuples()
-        self.assertEqual(len(rl_rows), len(dataset))
-        self.assertEqual(rl_rows[0][0].dtype, np.float32)
-        self.assertEqual(rl_rows[0][1].dtype, np.float32)
-        self.assertEqual(rl_rows[-1][-1], 0.0)
-
     def test_rows_round_trip_and_existing_dataset_append(self):
         dataset = collect_transitions(_environment(), episodes=1, seed=8)
         json.dumps(dataset.to_rows())
