@@ -1,6 +1,6 @@
 import math
 
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import ProcessModelContract, _maxv
 
 
 class CSTRModel(ProcessModelContract):
@@ -14,6 +14,10 @@ class CSTRModel(ProcessModelContract):
     state_units = {"Ca": "mol/L", "T": "degC"}
     state_bounds = {"Ca": (0.0, 1.5), "T": (0.0, 200.0)}
     action_names = ("feed_pump", "cooling")
+    output_names = ("reactor_temperature",)
+    output_units = {"reactor_temperature": "degC"}
+    output_bounds = {"reactor_temperature": (45, 90)}
+    default_y_sp = (60.0,)
     plant_regime = {"Uc": (0.5, 1.6), "k0": (0.55, 1.7), "Hr": (0.85, 1.2)}
     economic_config = {
         "temp_band": [(None, 88.0)],
@@ -23,7 +27,7 @@ class CSTRModel(ProcessModelContract):
         "w_energy": 0.7,
         "w_viol": 14.0,
     }
-    supervisory_layout = (("t_sp", 0, 45, 90), ("mv", "pumps", 0, 0.3, 1.0))
+    supervisory_layout = (("y_sp", 0, 45, 90), ("mv", "pumps", 0, 0.3, 1.0))
     param_units = {"Dmax": "1/s", "Caf": "mol/L", "k0": "1/s", "EaR": "K", "Hr": "degC/(mol/L)", "Uc": "1/s", "Tcool": "degC", "cool_max": "W", "feed_power_max": "W", "t_cold": "degC", "t_amb": "degC", "h_floor": "m"}
     param_bounds = {"Dmax": (0.0, 1.0), "Caf": (0.0, 5.0), "k0": (0.0, 1e12), "EaR": (0.0, 50000.0), "Hr": (0.0, 1000.0), "Uc": (0.0, 10.0), "Tcool": (-20.0, 50.0), "cool_max": (0.0, 500000.0), "feed_power_max": (0.0, 10000.0), "t_cold": (0.0, 60.0), "t_amb": (0.0, 45.0), "h_floor": (1e-6, 0.1)}
     input_disturbances = (
@@ -99,8 +103,11 @@ class CSTRModel(ProcessModelContract):
             D * (t_cold - T) + p["Hr"] * r - p["Uc"] * uc * (T - Tcool),
         ])
 
-    def levels_temps(self, x, backend="numeric", ca=None):
-        return [], [x[1]]
+    def display_outputs(self, x, backend="numeric", ca=None):
+        return {"levels": [], "temps": [x[1]]}
+
+    def controlled_output(self, x, backend="numeric", ca=None):
+        return [x[1]]
 
     def conc(self, x):
         return [_maxv(x[0], 0.0)]
@@ -119,30 +126,19 @@ class CSTRModel(ProcessModelContract):
             x[1] = 200.0
         return x
 
-    def controlled_levels(self):
-        return []
-
-    def default_setpoints(self):
-        return {}, [60.0]
-
     # ---- KPI support (CSTR scores tracking + safety; no excess-energy term) ----
     energy_scored = False
-
-    def heater_power(self, act):
-        return act["heaters"][0] * self.p["cool_max"]
-
-    def pump_power(self, act):
-        return act["pumps"][0] * self.p["feed_power_max"]
 
     def energy_kw(self, u, backend="numeric", ca=None):
         return u[1] * self.p["cool_max"] / 1000.0
 
+    def action_energy_kw(self, act, x=None, env=None):
+        u = self.action_vector(act)
+        return (u[0] * self.p["feed_power_max"] + u[1] * self.p["cool_max"]) / 1000.0
+
     def economic_value(self, x, u, env=None, backend="numeric", ca=None):
         env = env or {}
         return u[0] * self.p["Dmax"] * (env["Caf"] - x[0])
-
-    def ideal_power(self, levels, temps, t_sp, env, act):
-        return 0.0
 
     def production(self, x, act, env=None):
         """Reactant consumption-rate proxy used as the CSTR economic value."""

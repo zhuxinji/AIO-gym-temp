@@ -45,8 +45,32 @@ class _NumericOps:
         return math.exp(v)
 
     @staticmethod
+    def sin(v):
+        return math.sin(v)
+
+    @staticmethod
+    def cos(v):
+        return math.cos(v)
+
+    @staticmethod
+    def tan(v):
+        return math.tan(v)
+
+    @staticmethod
+    def log(v):
+        return math.log(v)
+
+    @staticmethod
     def max(a, b):
         return _maxv(a, b)
+
+    @staticmethod
+    def smooth_max(a, b, eps=1e-6):
+        return _maxv(a, b)
+
+    @staticmethod
+    def min(a, b):
+        return a if a < b else b
 
     @staticmethod
     def abs(v):
@@ -68,8 +92,32 @@ def _casadi_ops(ca):
             return ca.exp(v)
 
         @staticmethod
+        def sin(v):
+            return ca.sin(v)
+
+        @staticmethod
+        def cos(v):
+            return ca.cos(v)
+
+        @staticmethod
+        def tan(v):
+            return ca.tan(v)
+
+        @staticmethod
+        def log(v):
+            return ca.log(v)
+
+        @staticmethod
         def max(a, b):
             return ca.fmax(a, b)
+
+        @staticmethod
+        def smooth_max(a, b, eps=1e-6):
+            return 0.5 * (a + b + ca.sqrt((a - b) ** 2 + eps ** 2))
+
+        @staticmethod
+        def min(a, b):
+            return ca.fmin(a, b)
 
         @staticmethod
         def abs(v):
@@ -101,6 +149,16 @@ class ProcessModelContract:
     param_units = {}
     param_bounds = {}
     action_names = ()
+    action_units = {}
+    action_bounds = {}
+    action_kinds = {}
+    output_names = ()
+    output_units = {}
+    output_bounds = {}
+    setpoint_names = ()
+    setpoint_units = {}
+    setpoint_bounds = {}
+    default_y_sp = ()
     plant_regime = {}
     economic_config = {
         "temp_band": (),
@@ -111,6 +169,24 @@ class ProcessModelContract:
         "w_viol": 0.0,
     }
     supervisory_layout = ()
+    supports_generic_setpoint_randomization = True
+    supports_integral_observation = True
+    randomize_common_temperatures = True
+    disturbance_attributes = {
+        "t_cold": "t_cold",
+        "t_amb": "t_amb",
+        "extra_outflow": "extra_outflow",
+        "Caf": "caf",
+        "Tcool": "tcool",
+        "pump_flow_factor": "pump_flow_factor",
+        "heater_efficiency": "heater_efficiency",
+        "heat_loss_factor": "heat_loss_factor",
+        "heat_load": "heat_load",
+        "hvac_efficiency": "hvac_efficiency",
+        "growth_factor": "growth_factor",
+        "nucleation_factor": "nucleation_factor",
+        "solubility_bias": "solubility_bias",
+    }
     input_disturbances = (
         {"name": "t_cold", "event": "cold_inlet_step", "unit": "degC", "bounds": (0.0, 40.0), "description": "inlet or cold-source temperature"},
         {"name": "t_amb", "event": "ambient_step", "unit": "degC", "bounds": (0.0, 45.0), "description": "ambient temperature"},
@@ -128,20 +204,44 @@ class ProcessModelContract:
         return {"name": name, "unit": units.get(name, ""), "bounds": bounds.get(name)}
 
     def state_schema(self):
-        return [self._schema_row(name, self.state_units, self.state_bounds) for name in self.state_names]
+        names = self._vector_names(self.state_names, "x", len(self.initial_state()))
+        return [self._schema_row(name, self.state_units, self.state_bounds) for name in names]
 
     def action_schema(self):
-        n_pumps, n_valves, n_heaters = self.actuator_counts()
-        kinds = (["pump"] * n_pumps) + (["valve"] * n_valves) + (["heater"] * n_heaters)
-        names = list(self.action_names)
-        if len(names) != len(kinds):
-            names = [f"{kind}_{i}" for i, kind in enumerate(kinds)]
-        counters = {"pump": 0, "valve": 0, "heater": 0}
+        names = self._action_names()
+        legacy_kinds = self._legacy_action_kinds()
+        counters = {}
         rows = []
-        for name, kind in zip(names, kinds):
-            rows.append({"name": name, "kind": kind, "index": counters[kind], "unit": "fraction", "bounds": (0.0, 1.0)})
+        for i, name in enumerate(names):
+            kind = self.action_kinds.get(name, legacy_kinds[i] if i < len(legacy_kinds) else "input")
+            counters.setdefault(kind, 0)
+            rows.append({
+                "name": name,
+                "kind": kind,
+                "index": i,
+                "kind_index": counters[kind],
+                "unit": self.action_units.get(name, "fraction"),
+                "bounds": self.action_bounds.get(name, (0.0, 1.0)),
+            })
             counters[kind] += 1
         return rows
+
+    def action_dim(self):
+        return len(self._action_names())
+
+    def _action_names(self):
+        if self.action_names:
+            return list(self.action_names)
+        if self.action_bounds:
+            return list(self.action_bounds.keys())
+        return [f"u{i}" for i in range(sum(self.actuator_counts()))]
+
+    def _legacy_action_kinds(self):
+        if not self.uses_legacy_actions():
+            return []
+        n_pumps, n_valves, n_heaters = self.actuator_counts()
+        kinds = (["pump"] * n_pumps) + (["valve"] * n_valves) + (["heater"] * n_heaters)
+        return kinds if len(kinds) == len(self._action_names()) else []
 
     def action_vector(self, act):
         """Return the flat actuator vector u = [pumps..., valves..., heaters...]."""
@@ -166,9 +266,22 @@ class ProcessModelContract:
             "heaters": list(values[n_pumps + n_valves:]),
         }
 
+    def default_action(self):
+        u = [0.5] * self.action_dim()
+        return self.action_vector_to_dict(u) if self.uses_legacy_actions() else u
+
+    def uses_legacy_actions(self):
+        return type(self).actuator_counts is not ProcessModelContract.actuator_counts
+
     def state_vector(self, x):
         """Return the generic state vector x used by controllers and simulators."""
         return [float(v) for v in x]
+
+    def _vector_names(self, names, prefix: str, length: int):
+        values = list(names)
+        if len(values) != int(length):
+            values = [f"{prefix}{i}" for i in range(int(length))]
+        return values
 
     def dynamics(self, x, u, env=None, backend="numeric", ca=None):
         """Generic continuous dynamics dx/dt = f(x, u, env).
@@ -192,10 +305,22 @@ class ProcessModelContract:
         return self.dynamics(x, act, env)
 
     def outputs(self, x):
-        """Semantic outputs derived from x, preserving legacy physical names."""
+        """Semantic outputs derived from x.
+
+        ``y`` is the generic controlled-output vector used for calculations.
+        ``levels``/``temps`` are optional legacy display channels for built-in
+        browser-compatible scenarios.
+        """
         state = self.state_vector(x)
-        levels, temps = self.levels_temps(state)
-        out = {"x": state, "levels": levels, "temps": temps}
+        display = self.display_outputs(state)
+        out = {
+            "x": state,
+            "levels": list(display.get("levels", [])),
+            "temps": list(display.get("temps", [])),
+        }
+        for key, value in display.items():
+            if key not in out:
+                out[key] = value
         if callable(getattr(self, "conc", None)):
             out["conc"] = self.conc(state)
         out["y"] = self.controlled_output(state)
@@ -204,27 +329,87 @@ class ProcessModelContract:
     def measurement(self, x, env=None):
         """Measured state dict exposed to controllers.
 
-        New controllers can use x/y generically; legacy controllers can still use
-        levels, temps, conc, and disturbance names.
+        New controllers should use x/y generically; legacy display adapters can
+        still inspect levels, temps, conc, and disturbance names.
         """
         return {**self.outputs(x), **dict(env or {})}
 
     def controlled_output(self, x, backend="numeric", ca=None):
-        try:
-            levels, temps = self.levels_temps(x, backend=backend, ca=ca)
-        except TypeError:
-            if backend != "numeric":
-                raise
-            levels, temps = self.levels_temps(x)
-        return [levels[i] for i in self.controlled_levels()] + list(temps)
+        if backend == "casadi":
+            return [x[i] for i in range(len(self.initial_state()))]
+        return self.state_vector(x)
 
-    def setpoint_vector(self, h_sp=None, t_sp=None):
-        if h_sp is None:
-            h_sp = {}
-        if t_sp is None:
-            t_sp = [0.0] * int(self.n)
-        t_sp = list(t_sp)
-        return [h_sp[i] for i in self.controlled_levels()] + [t_sp[i] for i in range(int(self.n))]
+    def setpoint_vector(self, y_sp=None):
+        return list(y_sp) if y_sp is not None else self.default_setpoint_vector()
+
+    def default_setpoint_vector(self):
+        if self.default_y_sp:
+            return list(self.default_y_sp)
+        values = []
+        for row in self.setpoint_schema():
+            bounds = row.get("bounds")
+            if isinstance(bounds, (tuple, list)) and len(bounds) == 2 and bounds[0] is not None and bounds[1] is not None:
+                values.append(0.5 * (float(bounds[0]) + float(bounds[1])))
+            else:
+                values.append(0.0)
+        return values
+
+    def env_setpoint_vector(self, options=None):
+        """Return initial setpoints for an environment instance."""
+
+        return self.default_setpoint_vector()
+
+    def sample_env_setpoints(self, y_sp, rng, options=None):
+        """Apply model-specific reset-time target sampling."""
+
+        return list(y_sp)
+
+    def env_observation(self, x, act, env, y_sp):
+        """Return a model-specific observation, or None for the generic adapter."""
+
+        return None
+
+    def setpoint_schema(self):
+        output_rows = self.controlled_output_schema()
+        names = self._vector_names(self.setpoint_names or self.output_names, "y_sp", len(output_rows))
+        rows = []
+        for i, output in enumerate(output_rows):
+            output_name = output.get("name", f"y{i}")
+            name = names[i] if i < len(names) else f"y_sp{i}"
+            rows.append({
+                "name": name,
+                "unit": self.setpoint_units.get(name, self.output_units.get(output_name, output.get("unit", ""))),
+                "bounds": self.setpoint_bounds.get(name, output.get("bounds")),
+                "output": output_name,
+            })
+        return rows
+
+    def controlled_output_schema(self):
+        y0 = list(self.controlled_output(self.initial_state()))
+        names = self._vector_names(self.output_names, "y", len(y0))
+        legacy_bounds = self._legacy_controlled_output_bounds()
+        rows = []
+        for i, name in enumerate(names):
+            bounds = self.output_bounds.get(name)
+            if bounds is None and i < len(legacy_bounds):
+                bounds = legacy_bounds[i]
+            rows.append({"name": name, "unit": self.output_units.get(name, ""), "bounds": bounds})
+        return rows
+
+    def controlled_output_scales(self):
+        scales = []
+        for row in self.controlled_output_schema():
+            bounds = row.get("bounds")
+            scale = None
+            if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
+                lo, hi = bounds
+                if lo is not None and hi is not None and float(hi) > float(lo):
+                    scale = float(hi) - float(lo)
+            scales.append(max(float(scale if scale is not None else 1.0), 1e-12))
+        return scales
+
+    def _legacy_controlled_output_bounds(self):
+        return [None] * len(list(self.controlled_output(self.initial_state())))
 
     def dynamics_disturbance_specs(self):
         specs = []
@@ -275,11 +460,23 @@ class ProcessModelContract:
     def energy_kw(self, u, backend="numeric", ca=None):
         return 0.0
 
+    def action_energy_kw(self, act, x=None, env=None):
+        """Return total action energy rate in kW for numeric environment steps."""
+
+        return float(self.energy_kw(self.action_vector(act)))
+
+    def economic_energy_kw(self, act, x=None, env=None):
+        """Return the energy-rate term used by the model's economic objective."""
+
+        return float(self.energy_kw(self.action_vector(act)))
+
     def economic_value(self, x, u, env=None, backend="numeric", ca=None):
         return 0.0
 
-    def levels_temps(self, x, backend="numeric", ca=None):
-        return [], [x[i] for i in range(len(self.initial_state()))]
+    def display_outputs(self, x, backend="numeric", ca=None):
+        if backend == "casadi":
+            return {"levels": [], "temps": [x[i] for i in range(len(self.initial_state()))]}
+        return {"levels": [], "temps": list(x)}
 
     def parameter_schema(self):
         params = {k: _copy_value(v) for k, v in self.p.items()}
@@ -315,6 +512,14 @@ class ProcessModelContract:
             else:
                 defaults[name] = 0.0
         return defaults
+
+    def disturbance_attribute_map(self):
+        defaults = self.runtime_env(self.disturbance_defaults())
+        return {
+            name: attr
+            for name, attr in self.disturbance_attributes.items()
+            if name in defaults
+        }
 
     def runtime_env(self, disturbance_values):
         env = {name: _copy_value(value) for name, value in dict(disturbance_values or {}).items()}
@@ -384,8 +589,12 @@ class ProcessModelContract:
             "summary": self.summary,
             "states": self.state_schema(),
             "actions": self.action_schema(),
+            "controlled_outputs": self.controlled_output_schema(),
+            "setpoints": self.setpoint_schema(),
             "state_vector": {"name": "x", "length": len(self.initial_state())},
-            "action_vector": {"name": "u", "length": sum(self.actuator_counts())},
+            "action_vector": {"name": "u", "length": self.action_dim()},
+            "controlled_output_vector": {"name": "y", "length": len(self.controlled_output(self.initial_state()))},
+            "setpoint_vector": {"name": "y_sp", "length": len(self.default_setpoint_vector())},
             "dynamics_disturbances": list(self.dynamics_disturbance_names()),
             "parameters": self.parameter_schema(),
             "disturbances": self.disturbance_schema(),
@@ -405,17 +614,70 @@ class ProcessModelContract:
     def height_max(self):
         return [1.0] * int(self.n)
 
-    def controlled_levels(self):
+    def actuator_counts(self):
+        return (0, 0, self.action_dim())
+
+    def ideal_energy_kw(self, x, y_sp, env, act):
+        return 0.0
+
+    def legacy_observation_level_target_slots(self):
         return []
 
-    def default_setpoints(self):
-        return {}, [0.0] * int(self.n)
+    def legacy_observation_setpoints(self, y_sp):
+        values = list(y_sp)
+        level_targets = [0.0] * int(self.n)
+        slots = list(self.legacy_observation_level_target_slots())
+        for j, slot in enumerate(slots):
+            if slot < len(level_targets):
+                level_targets[slot] = values[j] if j < len(values) else 0.0
+        offset = len(slots)
+        output_targets = [
+            values[offset + i] if offset + i < len(values) else 0.0
+            for i in range(int(self.n))
+        ]
+        return level_targets, output_targets
 
-    def heater_power(self, act):
-        return 0.0
 
-    def pump_power(self, act):
-        return 0.0
+def obs_vector(model, levels, temps, t_cold, t_amb, level_targets, output_targets):
+    """Legacy browser-compatible observation adapter.
 
-    def ideal_power(self, levels, temps, t_sp, env, act):
-        return 0.0
+    New generic models use [x, y_sp, disturbances]. Built-in legacy scenarios
+    still expose this browser-compatible observation layout.
+    """
+
+    from .adapters import browser_observation_vector
+
+    return browser_observation_vector(
+        model, levels, temps, t_cold, t_amb, level_targets, output_targets
+    )
+
+
+class Integrator:
+    """Fixed-step RK4 integrator for process models."""
+
+    def __init__(self, model):
+        self.model = model
+        self.dt_micro = getattr(model, "dt_micro", 0.02) or 0.02
+        self.reset()
+
+    def reset(self, state=None):
+        self.x = list(state) if state is not None else list(self.model.initial_state())
+        self.t = 0.0
+
+    def step(self, dt, act, env):
+        m = self.model
+        u = m.action_vector(act)
+        f = lambda x: m.dynamics(x, u, env)
+        nsub = max(1, math.ceil(dt / self.dt_micro - 1e-9))
+        h = dt / nsub
+        for _ in range(nsub):
+            x = self.x
+            k1 = f(x)
+            k2 = f([v + 0.5 * h * k1[i] for i, v in enumerate(x)])
+            k3 = f([v + 0.5 * h * k2[i] for i, v in enumerate(x)])
+            k4 = f([v + h * k3[i] for i, v in enumerate(x)])
+            self.x = [v + (h / 6.0) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) for i, v in enumerate(x)]
+            if hasattr(m, "clamp_state"):
+                self.x = m.clamp_state(self.x)
+            self.t += h
+        return self.x

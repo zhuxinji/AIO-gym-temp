@@ -15,6 +15,7 @@ from .models import (
     ProcessModelContract,
     builtin_gym_ids,
     collect_model_cards,
+    define_model,
     export_model_card_markdown,
     export_model_cards,
     make_model,
@@ -25,6 +26,8 @@ from .models import (
     validate_model_card,
 )
 from .env import AIOGymNativeEnv
+from .env_factory import make_env
+from .objectives import StageRewardContext, StageRewardResult, stage_reward
 from .evaluation import (
     ARTIFACT_CHECK_SCHEMA_VERSION,
     REPORT_SCHEMA_VERSION,
@@ -33,26 +36,34 @@ from .evaluation import (
     build_evaluation_report,
     check_benchmark_artifacts,
     evaluate_controller,
+    plot_results,
     render_benchmark_report,
+    run_benchmark,
 )
-from .controllers import make_controller, register_controller, registered_controllers, load_controller_config
-from .api import make_env, plot_results, run_benchmark
+from .controllers import (
+    load_controller_config,
+    make_controller,
+    register_controller,
+    registered_controllers,
+    unregister_controller,
+)
 
-__all__ = ["AIOGymNativeEnv", "make_model", "register_model", "unregister_model", "obs_vector", "Integrator", "SCENARIOS",
-           "ProcessModelContract", "BenchmarkProtocol", "BenchmarkConfig", "build_evaluation_report", "evaluate_controller",
-           "make_controller", "register_controller", "registered_controllers", "load_controller_config",
+__all__ = ["AIOGymNativeEnv", "StageRewardContext", "StageRewardResult", "stage_reward",
+           "make_model", "register_model", "unregister_model", "obs_vector", "Integrator", "SCENARIOS",
+           "ProcessModelContract", "define_model",
+           "BenchmarkProtocol", "BenchmarkConfig", "build_evaluation_report", "evaluate_controller",
+           "make_controller", "register_controller", "registered_controllers", "unregister_controller",
+           "load_controller_config",
            "MODEL_CARD_SCHEMA_VERSION", "collect_model_cards", "export_model_card_markdown", "export_model_cards",
            "render_model_card_markdown", "validate_model_card",
            "make_env", "plot_results", "run_benchmark",
            "REPORT_SCHEMA_VERSION", "render_benchmark_report",
            "ARTIFACT_CHECK_SCHEMA_VERSION", "check_benchmark_artifacts"]
 
-try:
-    from gymnasium.envs.registration import register
+from gymnasium.envs.registration import register, registry
 
-    for _scn, _name in builtin_gym_ids().items():
+for _scn, _name in builtin_gym_ids().items():
+    _env_id = f"AIOGym/{_name}-v0"
+    if _env_id not in registry:
         register(id=f"AIOGym/{_name}-v0", entry_point="aiogym.env:AIOGymNativeEnv",
                  kwargs={"scenario": _scn})
-except Exception:
-    # gymnasium not installed yet — the env class is still importable directly
-    pass

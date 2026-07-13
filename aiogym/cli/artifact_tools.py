@@ -8,7 +8,12 @@ import sys
 from pathlib import Path
 
 from aiogym.evaluation import check_benchmark_artifacts, render_benchmark_report
-from aiogym.models import collect_model_cards, export_model_card_markdown, export_model_cards
+from aiogym.models import (
+    collect_model_cards,
+    export_model_card_markdown,
+    export_model_cards,
+    render_model_card_markdown,
+)
 
 
 def parse_scenarios(raw: str | None):
@@ -39,7 +44,29 @@ def model_cards_main():
     scenarios = parse_scenarios(args.scenarios)
     if args.check:
         cards = collect_model_cards(scenarios)
+        stale = []
+        if args.format in {"markdown", "both"}:
+            out = Path(args.out_dir)
+            expected = {
+                f"{scenario}.md": render_model_card_markdown(card)
+                for scenario, card in cards.items()
+            }
+            index_lines = [
+                "# AIO-Gym Model Cards",
+                "",
+                "Human-readable summaries generated from the registered process-model metadata.",
+                "",
+            ]
+            for scenario, card in cards.items():
+                index_lines.append(f"- [{card['name']} (`{scenario}`)]({scenario}.md)")
+            expected["README.md"] = "\n".join(index_lines) + "\n"
+            for name, content in expected.items():
+                path = out / name
+                if not path.exists() or path.read_text() != content:
+                    stale.append(str(path))
         print(json.dumps({"count": len(cards), "format": args.format, "scenarios": list(cards)}, indent=2))
+        if stale:
+            raise SystemExit("stale model-card docs: " + ", ".join(stale))
         return
 
     if args.format == "json":

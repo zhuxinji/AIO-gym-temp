@@ -8,19 +8,16 @@ from aiogym.models import make_model
 
 def plot_summary(rows: list[dict], path: str, scenario: str):
     labels = [row["name"] for row in rows]
-    metrics = [
-        ("profit", "Profit"),
-        ("kpi", "KPI"),
-        ("track", "Tracking error"),
-        ("constraint", "Constraint"),
-    ]
+    metrics = _summary_metrics(rows)
     colors = ["#3b82f6", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"]
-    width, height = 1200, 760
+    width = 1200
+    panel_w, panel_h = 500, 250
+    x_positions = (70, 650)
+    nrows = max(1, (len(metrics) + 1) // 2)
+    height = max(430, 95 + nrows * 335)
     panels = [
-        (70, 95, 500, 250),
-        (650, 95, 500, 250),
-        (70, 430, 500, 250),
-        (650, 430, 500, 250),
+        (x_positions[i % 2], 95 + (i // 2) * 335, panel_w, panel_h)
+        for i in range(len(metrics))
     ]
     title = f"{scenario} controller benchmark"
     parts = [_svg_header(width, height), _svg_text(60, 45, title, size=24, weight="700")]
@@ -55,12 +52,57 @@ def plot_summary(rows: list[dict], path: str, scenario: str):
     _write_text(path, "\n".join(parts))
 
 
+def _summary_metrics(rows: list[dict]) -> list[tuple[str, str]]:
+    objective = str(rows[0].get("objective", "")) if rows else ""
+    if objective == "tracking":
+        metrics = [
+            ("tracking_cost", "Tracking Cost"),
+            ("tracking_mse", "Normalized Tracking MSE"),
+            ("tracking_iae", "Normalized Tracking IAE"),
+        ]
+        if _has_nonzero(rows, "tracking_move_cost"):
+            metrics.append(("tracking_move_cost", "Move Cost"))
+        if _has_nonzero(rows, "constraint_violation_count"):
+            metrics.append(("constraint_violation_count", "Constraint violations"))
+        return metrics
+    if objective == "economic":
+        metrics = [
+            ("profit", "Profit"),
+            ("energy_kwh", "Energy kWh"),
+            ("constraint", "Constraint penalty"),
+        ]
+        if _has_nonzero(rows, "production"):
+            metrics.insert(1, ("production", "Production"))
+        return metrics
+    if objective == "safety":
+        return [
+            ("constraint_violation_count", "Constraint violations"),
+            ("constraint_violation_severity", "Violation severity"),
+            ("safety_margin_min", "Safety margin"),
+        ]
+    return [
+        ("kpi", "KPI"),
+        ("return", "Return"),
+        ("energy_kwh", "Energy kWh"),
+    ]
+
+
+def _has_nonzero(rows: list[dict], key: str) -> bool:
+    for row in rows:
+        try:
+            if abs(float(row.get(key, 0.0) or 0.0)) > 0.0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def plot_rollouts(rollouts: list[dict], path: str, scenario: str):
     model = make_model(scenario)
     if scenario == "cstr":
         panels = [
             {"title": "Concentration Ca", "series": [state_series(0)]},
-            {"title": "Temperature", "series": [info_series("temps", 0), setpoint_series("t_sp", 0, dashed=True)]},
+            {"title": "Temperature", "series": [info_series("temps", 0), setpoint_series("y_sp", 0, dashed=True)]},
             {"title": "Actuator commands", "series": action_series(model.action_names[:2])},
             {"title": "Stage profit", "series": [metric_series("profit")]},
             {"title": "Constraint penalty", "series": [metric_series("constraint")]},
@@ -68,7 +110,7 @@ def plot_rollouts(rollouts: list[dict], path: str, scenario: str):
     elif scenario == "hvac":
         panels = [
             {"title": "Zone temperatures", "series": info_vector_family("temps")},
-            {"title": "Temperature setpoints", "series": setpoint_vector_family("t_sp")},
+            {"title": "Temperature setpoints", "series": setpoint_vector_family("y_sp")},
             {"title": "Actuator commands", "series": action_series(model.action_names)},
             {"title": "Tracking error", "series": [metric_series("track")]},
             {"title": "Constraint penalty", "series": [metric_series("constraint")]},
@@ -87,26 +129,170 @@ def plot_rollouts(rollouts: list[dict], path: str, scenario: str):
 def plot_leaderboard(board: list[dict], path: str, title: str) -> None:
     metric = board[0]["metric"] if board else "metric"
     values = [0.0 if row["metric_value"] is None else float(row["metric_value"]) for row in board]
-    width = 980
+    width = 1080
     height = max(260, 130 + 54 * max(1, len(board)))
     left, top, bar_h = 220, 90, 26
+    scale_w = 500
+    value_x = left + scale_w + 118
+    status_x = width - 110
     lo = min([0.0] + values)
     hi = max([0.0] + values)
     if lo == hi:
         hi = lo + 1.0
     parts = [_svg_header(width, height), _svg_text(42, 46, f"{title} leaderboard", size=22, weight="700")]
     parts.append(_svg_text(42, 74, f"Primary metric: {metric}", size=12, fill="#475569"))
+    parts.append(_svg_text(value_x, 74, "Value", size=11, anchor="end", fill="#64748b"))
+    parts.append(_svg_text(status_x, 74, "Status", size=11, fill="#64748b"))
     for i, row in enumerate(board):
         y = top + i * 54
         value = 0.0 if row["metric_value"] is None else float(row["metric_value"])
-        x0 = left + _map_x(min(0.0, value), lo, hi, 0, 660)
-        x1 = left + _map_x(max(0.0, value), lo, hi, 0, 660)
+        x0 = left + _map_x(min(0.0, value), lo, hi, 0, scale_w)
+        x1 = left + _map_x(max(0.0, value), lo, hi, 0, scale_w)
         parts.append(_svg_text(42, y + 19, f"{row['rank']}. {row['controller']}", size=13, fill="#0f172a"))
         parts.append(f'<rect x="{min(x0, x1):.2f}" y="{y:.2f}" width="{max(2.0, abs(x1 - x0)):.2f}" height="{bar_h}" fill="#2563eb"/>')
-        parts.append(_svg_text(max(x0, x1) + 8, y + 18, _fmt(value), size=12, fill="#334155"))
-        parts.append(_svg_text(left + 675, y + 18, str(row.get("status") or ""), size=11, fill="#64748b"))
+        parts.append(_svg_text(value_x, y + 18, _fmt(value), size=12, anchor="end", fill="#334155"))
+        parts.append(_svg_text(status_x, y + 18, str(row.get("status") or ""), size=11, fill="#64748b"))
     parts.append("</svg>")
     _write_text(path, "\n".join(parts))
+
+
+def plot_grouped_leaderboard(sections: list[dict], path: str, title: str) -> None:
+    width = 1180
+    left, top = 250, 96
+    scale_w = 520
+    value_x = left + scale_w + 118
+    status_x = width - 120
+    section_gap = 28
+    row_h = 36
+    header_h = 46
+    height = max(300, 120 + sum(header_h + row_h * max(1, len(section.get("board", []))) + section_gap for section in sections))
+    parts = [_svg_header(width, height), _svg_text(42, 46, f"{title} leaderboard", size=22, weight="700")]
+    y = top
+    for section in sections:
+        board = list(section.get("board") or [])
+        section_title = str(section.get("title") or "benchmark")
+        metric = str(section.get("metric") or (board[0]["metric"] if board else "metric"))
+        values = [0.0 if row["metric_value"] is None else float(row["metric_value"]) for row in board]
+        lo = min([0.0] + values)
+        hi = max([0.0] + values)
+        if lo == hi:
+            hi = lo + 1.0
+        parts.append(_svg_text(42, y, section_title, size=16, weight="700", fill="#0f172a"))
+        parts.append(_svg_text(42, y + 22, f"Primary metric: {metric}", size=11, fill="#64748b"))
+        parts.append(_svg_text(value_x, y + 22, "Value", size=11, anchor="end", fill="#64748b"))
+        parts.append(_svg_text(status_x, y + 22, "Status", size=11, fill="#64748b"))
+        y += header_h
+        for row in board:
+            value = 0.0 if row["metric_value"] is None else float(row["metric_value"])
+            x0 = left + _map_x(min(0.0, value), lo, hi, 0, scale_w)
+            x1 = left + _map_x(max(0.0, value), lo, hi, 0, scale_w)
+            parts.append(_svg_text(42, y + 19, f"{row['rank']}. {row['controller']}", size=13, fill="#0f172a"))
+            parts.append(f'<rect x="{min(x0, x1):.2f}" y="{y:.2f}" width="{max(2.0, abs(x1 - x0)):.2f}" height="22" fill="#2563eb"/>')
+            parts.append(_svg_text(value_x, y + 17, _fmt(value), size=12, anchor="end", fill="#334155"))
+            parts.append(_svg_text(status_x, y + 17, str(row.get("status") or ""), size=11, fill="#64748b"))
+            y += row_h
+        y += section_gap
+    parts.append("</svg>")
+    _write_text(path, "\n".join(parts))
+
+
+def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> None:
+    controllers = []
+    for row in rows:
+        for key in row:
+            if key.endswith("_tracking_cost") and key != "best_tracking_cost":
+                controllers.append(key[: -len("_tracking_cost")])
+    controllers = list(dict.fromkeys(controllers))
+    display_labels = {
+        controller: "Oracle" if controller == "NMPC-oracle" else controller
+        for controller in controllers
+    }
+    cost_columns = [
+        ("scenario", "Scenario", 150),
+        ("best_controller", "Best", 150),
+        ("best_tracking_cost", "Best cost", 105),
+        ("oracle_gap_vs_best", "Oracle gap", 110),
+    ]
+    runtime_columns = [
+        ("scenario", "Scenario", 150),
+        ("fastest_controller", "Fastest", 150),
+        ("fastest_step_ms", "Fastest ms", 110),
+        ("best_step_ms", "Best cost ctrl ms", 130),
+    ]
+    for controller in controllers:
+        cost_columns.append((f"{controller}_tracking_cost", f"{display_labels[controller]} cost", 105))
+        runtime_columns.append((f"{controller}_step_ms", f"{display_labels[controller]} ms", 105))
+    table_rows = []
+    for row in rows:
+        runtime_values = [
+            (controller, _number_or_none(row.get(f"{controller}_step_ms")))
+            for controller in controllers
+        ]
+        runtime_values = [(controller, value) for controller, value in runtime_values if value is not None]
+        fastest_controller, fastest_ms = min(runtime_values, key=lambda item: item[1]) if runtime_values else ("", None)
+        enriched = dict(row)
+        enriched["fastest_controller"] = fastest_controller
+        enriched["fastest_step_ms"] = fastest_ms
+        table_rows.append(enriched)
+    left, top = 36, 104
+    row_h, header_h = 36, 42
+    table_gap = 62
+    cost_width = sum(col[2] for col in cost_columns)
+    runtime_width = sum(col[2] for col in runtime_columns)
+    width = max(1180, left * 2 + max(cost_width, runtime_width))
+    table_h = header_h + row_h * len(table_rows)
+    runtime_top = top + table_h + table_gap
+    height = max(360, runtime_top + table_h + 44)
+    parts = [_svg_header(width, height), _svg_text(36, 46, f"{title} tracking comparison", size=22, weight="700")]
+    parts.append(_svg_text(36, 70, "Lower tracking cost is better. Runtime is milliseconds per environment step.", size=12, fill="#64748b"))
+    parts.append(_svg_text(36, top - 16, "Tracking cost", size=16, weight="700", fill="#0f172a"))
+    _append_tracking_table(parts, table_rows, cost_columns, left, top, width - left * 2, row_h, header_h, "tracking")
+    parts.append(_svg_text(36, runtime_top - 16, "Runtime per step", size=16, weight="700", fill="#0f172a"))
+    _append_tracking_table(parts, table_rows, runtime_columns, left, runtime_top, width - left * 2, row_h, header_h, "runtime")
+    parts.append("</svg>")
+    _write_text(path, "\n".join(parts))
+
+
+def _append_tracking_table(
+    parts: list[str],
+    rows: list[dict],
+    columns: list[tuple[str, str, int]],
+    left: int,
+    top: int,
+    table_w: int,
+    row_h: int,
+    header_h: int,
+    mode: str,
+) -> None:
+    x = left
+    parts.append(f'<rect x="{left}" y="{top}" width="{table_w}" height="{header_h}" fill="#e2e8f0"/>')
+    for _, label, col_w in columns:
+        parts.append(_svg_text(x + 8, top + 26, label, size=11, weight="700", fill="#334155"))
+        x += col_w
+    for r, row in enumerate(rows):
+        y = top + header_h + r * row_h
+        fill = "#ffffff" if r % 2 == 0 else "#f8fafc"
+        parts.append(f'<rect x="{left}" y="{y}" width="{table_w}" height="{row_h}" fill="{fill}"/>')
+        x = left
+        best = str(row.get("best_controller") or "")
+        fastest = str(row.get("fastest_controller") or "")
+        for key, _, col_w in columns:
+            value = row.get(key)
+            text_fill = "#0f172a"
+            weight = "400"
+            if mode == "tracking" and (key == "best_controller" or key.startswith(f"{best}_")):
+                text_fill = "#047857"
+                weight = "700"
+            if mode == "runtime" and (key == "fastest_controller" or key == "fastest_step_ms" or key.startswith(f"{fastest}_")):
+                text_fill = "#047857"
+                weight = "700"
+            if key == "oracle_gap_vs_best":
+                gap = _number_or_none(value)
+                if gap is not None:
+                    text_fill = "#047857" if abs(gap) < 1e-9 else "#b45309"
+            parts.append(_svg_text(x + 8, y + 23, _table_value(value, key), size=11, fill=text_fill, weight=weight))
+            x += col_w
+    parts.append(f'<rect x="{left}" y="{top}" width="{table_w}" height="{header_h + row_h * len(rows)}" fill="none" stroke="#cbd5e1"/>')
 
 
 def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> None:
@@ -327,7 +513,7 @@ def _extract_series(rows: list[dict], spec: dict):
     if spec["kind"] == "info_vector":
         return [_list_value(row.get("info", {}).get(spec["key"]), spec["index"]) for row in rows]
     if spec["kind"] == "setpoint_vector":
-        return [_list_value(row.get("setpoint", {}).get(spec["key"]), spec["index"]) for row in rows]
+        return [_setpoint_value(row.get("setpoint", {}), spec["key"], spec["index"]) for row in rows]
     if spec["kind"] == "action":
         return [_list_value(row.get("action"), spec["index"]) for row in rows]
     if spec["kind"] == "metric":
@@ -339,6 +525,10 @@ def _list_value(value, index: int):
     if isinstance(value, list) and len(value) > index:
         return value[index]
     return None
+
+
+def _setpoint_value(setpoint: dict, key: str, index: int):
+    return _list_value(setpoint.get(key), index)
 
 
 def _is_number(value) -> bool:
@@ -393,6 +583,22 @@ def _fmt(value: float):
     if abs(value) >= 10:
         return f"{value:.1f}"
     return f"{value:.2f}"
+
+
+def _table_value(value, key: str) -> str:
+    number = _number_or_none(value)
+    if number is None:
+        return "" if value is None else str(value)
+    if key.endswith("_step_ms") or key == "best_step_ms":
+        return f"{number:.2f}"
+    return _fmt(number)
+
+
+def _number_or_none(value):
+    try:
+        return None if value is None or value == "" else float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _escape(text: str):

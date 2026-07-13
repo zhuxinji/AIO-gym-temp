@@ -6,48 +6,32 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from aiogym._serialization import jsonable as _jsonable, write_json as _write_json
 from aiogym.evaluation import build_evaluation_report, plot_results, render_benchmark_report
 from aiogym.evaluation.artifacts import write_benchmark_artifacts
+from aiogym.evaluation.rows import compact_result_row
 
 
 RL_ARTIFACT_SCHEMA_VERSION = "aiogym.rl_training_artifact.v1"
+
+
+def utc_run_id(now: datetime | None = None) -> str:
+    value = now or datetime.now(timezone.utc)
+    return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def result_row(result: Mapping[str, Any], scenario: str, action_mode: str,
                controller: str | None = None, suite_case: str | None = None) -> dict[str, Any]:
     """Return a summary row compatible with benchmark-suite artifacts."""
 
-    metric = str(result.get("metric") or "")
-    row = {
-        "suite_case": suite_case or f"{result.get('objective', '')}:{scenario}:{controller or result.get('name', '')}",
-        "scenario": scenario,
-        "objective": result.get("objective"),
-        "action_mode": action_mode,
-        "controller": controller or result.get("name"),
-        "control_structure": dict(result.get("controller", {})).get("control_structure"),
-        "status": "degraded" if result.get("controller_status") == "degraded" else "passed",
-        "metric": metric,
-        "episodes": result.get("episodes"),
-        "seed_list": result.get("seed_list", []),
-        "runtime_seconds_per_step": result.get("runtime_seconds_per_step"),
-    }
-    for key in (
-        metric,
-        "kpi",
-        "profit",
-        "return",
-        "track",
-        "tracking_iae",
-        "energy_kwh",
-        "constraint",
-        "constraint_violation_count",
-        "constraint_violation_severity",
-        "safety_margin_min",
-        "normalized_score",
-    ):
-        if key and key in result:
-            row[key] = result[key]
-    return row
+    return compact_result_row(
+        result,
+        scenario=scenario,
+        objective=result.get("objective"),
+        action_mode=action_mode,
+        suite_case=suite_case or f"{result.get('objective', '')}:{scenario}:{controller or result.get('name', '')}",
+        controller=controller,
+    )
 
 
 def learning_curve_point(step: int, result: Mapping[str, Any], phase: str = "eval") -> dict[str, Any]:
@@ -68,6 +52,11 @@ def learning_curve_point(step: int, result: Mapping[str, Any], phase: str = "eva
         "profit",
         "return",
         "track",
+        "tracking_cost",
+        "tracking_return",
+        "tracking_error_cost",
+        "tracking_move_cost",
+        "tracking_mse",
         "tracking_iae",
         "constraint_violation_count",
         "constraint_violation_severity",
@@ -128,28 +117,3 @@ def write_rl_artifacts(artifact_dir: str | Path, payload: Mapping[str, Any]) -> 
     payload["artifacts"]["markdown_report"] = str(report_path)
     _write_json(benchmark_path, payload)
     return payload
-
-
-def _write_json(path: Path, data: Mapping[str, Any]) -> None:
-    with path.open("w") as f:
-        json.dump(_jsonable(data), f, indent=2)
-        f.write("\n")
-
-
-def _jsonable(value):
-    if hasattr(value, "metadata") and callable(value.metadata):
-        return _jsonable(value.metadata())
-    if hasattr(value, "tolist") and callable(value.tolist):
-        return value.tolist()
-    if hasattr(value, "item") and callable(value.item):
-        try:
-            return value.item()
-        except Exception:
-            pass
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(v) for v in value]
-    return value

@@ -1,5 +1,5 @@
 // Plant models — pure-JS port of the Python `PlantModel`s. The model defines
-// the ODE right-hand side, topology metadata, default control pairing and the
+// the ODE right-hand side, topology metadata, default PID loops and the
 // ideal-power reference for scoring. Same equations and numbers as the Python
 // reference, so behaviour matches. A model is integrated by ../sim/kernel.js.
 import { t } from '../i18n.js?v=15';
@@ -53,14 +53,19 @@ class CascadeModel {
     };
   }
   initialState() { return [0.30, 20, 0.30, 20, 0.30, 20]; }
-  controlledLevels() { return [0, 1, 2]; }
+  legacyLevelTargetSlots() { return [0, 1, 2]; }
   defaultSetpoints() { return [{ 0: 0.45, 1: 0.45, 2: 0.45 }, [35, 50, 65]]; }
-  defaultGains() {
-    return { level_pump: { kp: 8, ki: 0.4, kd: 0 }, level_valve: { kp: 6, ki: 0.3, kd: 0 }, temp: { kp: 0.06, ki: 0.01, kd: 0 } };
+  defaultPidLoops() {
+    return [
+      { u_index: 0, y_index: 0, pid: { kp: 8, ki: 0.4, kd: 0 } },
+      { u_index: 1, y_index: 1, pid: { kp: 6, ki: 0.3, kd: 0 } },
+      { u_index: 2, y_index: 2, pid: { kp: 6, ki: 0.3, kd: 0 } },
+      { u_index: 4, y_index: 3, pid: { kp: 0.06, ki: 0.01, kd: 0 } },
+      { u_index: 5, y_index: 4, pid: { kp: 0.06, ki: 0.01, kd: 0 } },
+      { u_index: 6, y_index: 5, pid: { kp: 0.06, ki: 0.01, kd: 0 } },
+    ];
   }
-  controlPairing() {
-    return { level: [['pump', 0, 0], ['valve', 0, 1], ['valve', 1, 2]], temp: [[0, 0], [1, 1], [2, 2]], demand_valve_index: 2 };
-  }
+  pidDemandUIndex() { return 3; }
   idealPower(s, tsp) {
     const p = this.p, q = s.pump_flow[0]; let tot = 0;
     for (let i = 0; i < 3; i++) {
@@ -75,11 +80,11 @@ class CascadeModel {
       scenario: 'cascade', topology: 'cascade', name: t('多级加热水箱链', 'Heated-Tank Cascade', '多段加熱タンクチェーン'), n_tanks: 3,
       tank_labels: ['T-1', 'T-2', 'T-3'],
       actuators: { pumps: [t('进料泵 P-01', 'Feed Pump P-01', '供給ポンプ P-01')], valves: [t('出料阀 V-1', 'Outlet V-1', '排出バルブ V-1'), t('出料阀 V-2', 'Outlet V-2', '排出バルブ V-2'), t('出料阀 V-3', 'Outlet V-3', '排出バルブ V-3')], heaters: [t('加热器 E-1', 'Heater E-1', 'ヒーター E-1'), t('加热器 E-2', 'Heater E-2', 'ヒーター E-2'), t('加热器 E-3', 'Heater E-3', 'ヒーター E-3')] },
-      demand_valve_index: 2, controlled_levels: [0, 1, 2], height_max: this.heightMax,
+      demand_u_index: 3, level_target_slots: [0, 1, 2], height_max: this.heightMax,
       pump_flow_max: [0.0016], heater_max: [90000, 90000, 90000], config: {},
       trends: [
-        { label: t('液位 (m)', 'Level (m)', '液位 (m)'), field: 'levels', sp: 'h_sp', spIdx: [0, 1, 2], fmt: 2 },
-        { label: t('温度 (°C)', 'Temperature (°C)', '温度 (°C)'), field: 'temps', sp: 't_sp', spIdx: [0, 1, 2], fmt: 0 },
+        { label: t('液位 (m)', 'Level (m)', '液位 (m)'), field: 'levels', sp: 'level_targets', spIdx: [0, 1, 2], fmt: 2 },
+        { label: t('温度 (°C)', 'Temperature (°C)', '温度 (°C)'), field: 'temps', sp: 'output_targets', spIdx: [0, 1, 2], fmt: 0 },
         { label: t('加热功率 (kW)', 'Heater Power (kW)', 'ヒーター出力 (kW)'), field: 'heater_power', scale: 0.001, fmt: 0 },
       ],
     };
@@ -143,13 +148,17 @@ class QuadrupleModel {
     };
   }
   initialState() { return [0.25, 20, 0.25, 20, 0.12, 20, 0.12, 20]; }
-  controlledLevels() { return [0, 1]; }
+  legacyLevelTargetSlots() { return [0, 1]; }
   defaultSetpoints() { return [{ 0: 0.40, 1: 0.40 }, [50, 50, 35, 35]]; }
-  defaultGains() {
-    return { level_pump: { kp: 6, ki: 0.25, kd: 0 }, level_valve: { kp: 0, ki: 0, kd: 0 }, temp: { kp: 0.05, ki: 0.012, kd: 0 } };
-  }
-  controlPairing() {
-    return { level: [['pump', 0, 0], ['pump', 1, 1]], temp: [[0, 0], [1, 1], [2, 2], [3, 3]], demand_valve_index: null };
+  defaultPidLoops() {
+    return [
+      { u_index: 0, y_index: 0, pid: { kp: 6, ki: 0.25, kd: 0 } },
+      { u_index: 1, y_index: 1, pid: { kp: 6, ki: 0.25, kd: 0 } },
+      { u_index: 2, y_index: 2, pid: { kp: 0.05, ki: 0.012, kd: 0 } },
+      { u_index: 3, y_index: 3, pid: { kp: 0.05, ki: 0.012, kd: 0 } },
+      { u_index: 4, y_index: 4, pid: { kp: 0.05, ki: 0.012, kd: 0 } },
+      { u_index: 5, y_index: 5, pid: { kp: 0.05, ki: 0.012, kd: 0 } },
+    ];
   }
   idealPower(s, tsp) {
     const p = this.p, g1 = this.gamma1, g2 = this.gamma2, Q1 = s.pump_flow[0], Q2 = s.pump_flow[1], out = s.tank_outflow;
@@ -174,12 +183,12 @@ class QuadrupleModel {
       scenario: 'quadruple', topology: 'quadruple', name: t('四水箱过程 (Johansson 基准)', 'Quadruple-Tank (Johansson)', '4タンクプロセス (Johansson ベンチマーク)'), n_tanks: 4,
       tank_labels: [t('T-1 下', 'T-1 low', 'T-1 下'), t('T-2 下', 'T-2 low', 'T-2 下'), t('T-3 上', 'T-3 up', 'T-3 上'), t('T-4 上', 'T-4 up', 'T-4 上')],
       actuators: { pumps: [t('泵 P-1', 'Pump P-1', 'ポンプ P-1'), t('泵 P-2', 'Pump P-2', 'ポンプ P-2')], valves: [], heaters: [t('加热器 E-1', 'Heater E-1', 'ヒーター E-1'), t('加热器 E-2', 'Heater E-2', 'ヒーター E-2'), t('加热器 E-3', 'Heater E-3', 'ヒーター E-3'), t('加热器 E-4', 'Heater E-4', 'ヒーター E-4')] },
-      controlled_levels: [0, 1], height_max: this.heightMax,
+      level_target_slots: [0, 1], height_max: this.heightMax,
       pump_flow_max: [1.3e-3, 1.3e-3], heater_max: this.p.heater_max,
       config: { gamma1: +this.gamma1.toFixed(3), gamma2: +this.gamma2.toFixed(3), gamma_sum: +(this.gamma1 + this.gamma2).toFixed(3), phase },
       trends: [
-        { label: t('液位 (m)', 'Level (m)', '液位 (m)'), field: 'levels', sp: 'h_sp', spIdx: [0, 1], fmt: 2 },
-        { label: t('温度 (°C)', 'Temperature (°C)', '温度 (°C)'), field: 'temps', sp: 't_sp', spIdx: [0, 1, 2, 3], fmt: 0 },
+        { label: t('液位 (m)', 'Level (m)', '液位 (m)'), field: 'levels', sp: 'level_targets', spIdx: [0, 1], fmt: 2 },
+        { label: t('温度 (°C)', 'Temperature (°C)', '温度 (°C)'), field: 'temps', sp: 'output_targets', spIdx: [0, 1, 2, 3], fmt: 0 },
         { label: t('加热功率 (kW)', 'Heater Power (kW)', 'ヒーター出力 (kW)'), field: 'heater_power', scale: 0.001, fmt: 0 },
       ],
     };
@@ -221,14 +230,14 @@ class CSTRModel {
   }
   initialState() { return [0.5, 50]; }   // warm start near the operating point
   clampState(x) { if (x[0] < 0) x[0] = 0; if (x[1] > 200) x[1] = 200; return x; }
-  controlledLevels() { return []; }
+  legacyLevelTargetSlots() { return []; }
   defaultSetpoints() { return [{}, [60]]; }
-  defaultGains() { return { level_pump: { kp: 0, ki: 0, kd: 0 }, level_valve: { kp: 0, ki: 0, kd: 0 }, temp: { kp: 0.08, ki: 0.02, kd: 0 } }; }
-  controlPairing() {
+  defaultPidLoops() {
     // cooling controls reactor temperature (reverse-acting: hotter -> cool more);
     // feed is held at a nominal rate by the auto-controller.
-    return { level: [], temp: [[0, 0, true]], demand_valve_index: null, holds: [['pump', 0, 0.5]] };
+    return [{ u_index: 1, y_index: 0, pid: { kp: 0.08, ki: 0.02, kd: 0 }, reverse: true }];
   }
+  pidHolds() { return [{ u_index: 0, value: 0.5 }]; }
   idealPower() { return 0; }
   energyScored() { return false; }
   safety() { return { dryFire: false, overflow: false, overTempAction: 'pump' }; }
@@ -238,10 +247,10 @@ class CSTRModel {
       scenario: 'cstr', topology: 'cstr', name: t('放热反应器 CSTR', 'Exothermic CSTR', '発熱反応器 CSTR'), n_tanks: 1,
       tank_labels: [t('R-1 反应器', 'R-1 reactor', 'R-1 反応器')],
       actuators: { pumps: [t('进料', 'Feed', '供給')], valves: [], heaters: [t('冷却', 'Cooling', '冷却')] },
-      controlled_levels: [], height_max: [1],
+      level_target_slots: [], height_max: [1],
       pump_flow_max: [this.p.Dmax], heater_max: [this.p.cool_max], config: {},
       trends: [
-        { label: t('反应器温度 (°C)', 'Reactor Temp (°C)', '反応器温度 (°C)'), field: 'temps', sp: 't_sp', spIdx: [0], fmt: 1 },
+        { label: t('反应器温度 (°C)', 'Reactor Temp (°C)', '反応器温度 (°C)'), field: 'temps', sp: 'output_targets', spIdx: [0], fmt: 1 },
         { label: t('反应物浓度 Cₐ (mol/L)', 'Concentration Cₐ (mol/L)', '反応物濃度 Cₐ (mol/L)'), field: 'conc', fmt: 3 },
         { label: t('冷却功率 (kW)', 'Cooling Power (kW)', '冷却出力 (kW)'), field: 'heater_power', scale: 0.001, fmt: 1 },
       ],
@@ -278,10 +287,14 @@ class HVACModel {
   }
   initialState() { return [10, 10]; }
   clampState(x) { return x; }
-  controlledLevels() { return []; }
+  legacyLevelTargetSlots() { return []; }
   defaultSetpoints() { return [{}, [22, 22]]; }
-  defaultGains() { return { level_pump: { kp: 0, ki: 0, kd: 0 }, level_valve: { kp: 0, ki: 0, kd: 0 }, temp: { kp: 0.18, ki: 0.03, kd: 0 } }; }
-  controlPairing() { return { level: [], temp: [[0, 0], [1, 1]], demand_valve_index: null }; }
+  defaultPidLoops() {
+    return [
+      { u_index: 0, y_index: 0, pid: { kp: 0.18, ki: 0.03, kd: 0 } },
+      { u_index: 1, y_index: 1, pid: { kp: 0.18, ki: 0.03, kd: 0 } },
+    ];
+  }
   idealPower() { return 0; }
   energyScored() { return false; }
   safety() { return { dryFire: false, overflow: false, overTempAction: 'heater' }; }
@@ -291,10 +304,10 @@ class HVACModel {
       scenario: 'hvac', topology: 'hvac', name: t('双区 HVAC 温控', 'Two-Zone HVAC', '2ゾーン HVAC 温度制御'), n_tanks: 2,
       tank_labels: [t('Z-1 房间', 'Z-1 room', 'Z-1 部屋'), t('Z-2 房间', 'Z-2 room', 'Z-2 部屋')],
       actuators: { pumps: [], valves: [], heaters: ['HVAC Z-1', 'HVAC Z-2'] },
-      controlled_levels: [], height_max: [1, 1],
+      level_target_slots: [], height_max: [1, 1],
       pump_flow_max: [], heater_max: [this.p.Pmax * 2, this.p.Pmax * 2], config: {},
       trends: [
-        { label: t('室温 (°C)', 'Room Temp (°C)', '室温 (°C)'), field: 'temps', sp: 't_sp', spIdx: [0, 1], fmt: 1 },
+        { label: t('室温 (°C)', 'Room Temp (°C)', '室温 (°C)'), field: 'temps', sp: 'output_targets', spIdx: [0, 1], fmt: 1 },
         { label: t('HVAC 功率 (kW)', 'HVAC Power (kW)', 'HVAC 出力 (kW)'), field: 'heater_power', scale: 0.001, fmt: 2 },
       ],
     };

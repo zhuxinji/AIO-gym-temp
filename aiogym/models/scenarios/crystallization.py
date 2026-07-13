@@ -19,6 +19,9 @@ class CrystallizationModel(ProcessModelContract):
     state_units = {"mu0": "moment", "mu1": "moment", "mu2": "moment", "mu3": "moment", "c": "kg/L"}
     state_bounds = {"mu0": (0.0, 1e4), "mu1": (0.0, 1e6), "mu2": (0.0, 1e8), "mu3": (0.0, 1e10), "c": (0.0, 2.0)}
     action_names = ("cooling_temperature_fraction",)
+    output_names = ("coefficient_variation", "mean_crystal_size")
+    output_units = {"coefficient_variation": "dimensionless", "mean_crystal_size": "um"}
+    output_bounds = {"coefficient_variation": (0.0, 5.0), "mean_crystal_size": (0.0, 50.0)}
     param_units = {
         "ka": "1/s", "kb": "K", "kc": "dimensionless", "kd": "dimensionless",
         "kg": "1/s", "k1": "K", "k2": "dimensionless", "a": "dimensionless",
@@ -56,6 +59,9 @@ class CrystallizationModel(ProcessModelContract):
     )
     energy_scored = False
     oracle_temperature_cap = False
+    supports_generic_setpoint_randomization = False
+    supports_integral_observation = False
+    randomize_common_temperatures = False
 
     def __init__(self):
         self.p = dict(
@@ -191,7 +197,7 @@ class CrystallizationModel(ProcessModelContract):
         m = self.metrics(state, self.default_action(), self.clean_env())
         return {
             "x": state,
-            "y": [m["Ln"], m["CV"]],
+            "y": self.controlled_output(state),
             "levels": [m["CV"]],
             "temps": [m["Tc"]],
             "conc": [m["c"]],
@@ -223,27 +229,44 @@ class CrystallizationModel(ProcessModelContract):
     def clamp_state(self, x):
         return self._clean_state(x)
 
-    def levels_temps(self, x, backend="numeric", ca=None):
+    def display_outputs(self, x, backend="numeric", ca=None):
         if backend == "casadi":
             cv = ca.sqrt(ca.fmax((x[2] * x[0]) / (x[1] * x[1] + self.p["eps"]) - 1.0, 0.0))
             ln = x[1] / (x[0] + self.p["eps"])
-            return [cv], [ln]
+            return {"levels": [cv], "temps": [ln]}
         m = self.metrics(x, self.default_action(), self.clean_env())
-        return [m["CV"]], [m["Ln"]]
+        return {"levels": [m["CV"]], "temps": [m["Ln"]]}
 
     def conc(self, x):
         return [self._clean_state(x)[4]]
 
-    def controlled_levels(self):
+    def controlled_output(self, x, backend="numeric", ca=None):
+        display = self.display_outputs(x, backend=backend, ca=ca)
+        levels, temps = display["levels"], display["temps"]
+        return [levels[0], temps[0]]
+
+    def legacy_observation_level_target_slots(self):
         return [0]
 
-    def default_setpoints(self):
-        return {0: self.p["CV_sp"]}, [self.p["Ln_sp"]]
+    def default_setpoint_vector(self):
+        return [self.p["CV_sp"], self.p["Ln_sp"]]
 
-    def setpoint_vector(self, h_sp=None, t_sp=None):
-        h_sp = h_sp if h_sp is not None else {0: self.p["CV_sp"]}
-        t_sp = list(t_sp if t_sp is not None else [self.p["Ln_sp"]])
-        return [h_sp[0], t_sp[0]]
+    def env_setpoint_vector(self, options=None):
+        options = dict(options or {})
+        y_sp = self.default_setpoint_vector()
+        if options.get("crystal_ln_sp") is not None:
+            y_sp[1] = float(options["crystal_ln_sp"])
+        if options.get("crystal_cv_sp") is not None:
+            y_sp[0] = float(options["crystal_cv_sp"])
+        return y_sp
+
+    def sample_env_setpoints(self, y_sp, rng, options=None):
+        options = dict(options or {})
+        sampled = list(y_sp)
+        if options.get("crystal_random_targets"):
+            sampled[1] = float(rng.uniform(*options["crystal_ln_range"]))
+            sampled[0] = float(rng.uniform(*options["crystal_cv_range"]))
+        return sampled
 
     def default_action(self):
         return {"pumps": [], "valves": [], "heaters": [0.5]}
@@ -254,17 +277,19 @@ class CrystallizationModel(ProcessModelContract):
     def action_dim(self):
         return 1
 
-    def observation(self, x=None, act=None, env=None, t_sp=None, h_sp=None):
+    def observation(self, x=None, act=None, env=None, y_sp=None):
         m = self.metrics(x, act, env)
-        tsp = list(t_sp) if t_sp is not None else [self.p["Ln_sp"]]
-        hsp = list(h_sp) if h_sp is not None else [self.p["CV_sp"]]
-        ln_sp = self._finite(tsp[0] if len(tsp) > 0 else None, self.p["Ln_sp"])
-        cv_sp = self._finite(hsp[0] if len(hsp) > 0 else (tsp[1] if len(tsp) > 1 else None), self.p["CV_sp"])
+        ysp = list(y_sp) if y_sp is not None else self.default_setpoint_vector()
+        cv_sp = self._finite(ysp[0] if len(ysp) > 0 else None, self.p["CV_sp"])
+        ln_sp = self._finite(ysp[1] if len(ysp) > 1 else None, self.p["Ln_sp"])
         return [
             m["mu0"], m["mu1"], m["mu2"], m["mu3"], m["c"],
             m["Ln"], m["CV"], ln_sp, cv_sp, m["Tc"],
             m["growth_factor"], m["nucleation_factor"], m["solubility_bias"],
         ]
+
+    def env_observation(self, x, act, env, y_sp):
+        return self.observation(x, act, env, y_sp)
 
     def _action_fraction(self, act=None):
         act = act or {}

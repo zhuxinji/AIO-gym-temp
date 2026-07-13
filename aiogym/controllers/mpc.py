@@ -1,38 +1,65 @@
 """Successive-linearization fixed-setpoint MPC baseline."""
 from __future__ import annotations
 
+import math
+
 import numpy as np
+
+from .._validation import nonnegative_float, positive_float, positive_int
 
 
 class MPCAgent:
     """Successive-linearization, velocity-form (M=1) constrained MPC."""
     name = "MPC"
+    controller_api_version = "aiogym.controller.v1"
+    action_mode = "actuator"
+    control_structure = "fixed_sp_mpc"
 
-    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15,
-                 cv_scale_level=0.1, cv_scale_temp=12.0):
+    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15, cv_scale=None):
         self.m = model
         self.nP, self.nV, self.nH = model.actuator_counts()
-        self.nu = self.nP + self.nV + self.nH
+        self.nu = model.action_dim()
         self.nx = len(model.initial_state())
-        self.ctrl = model.controlled_levels()
-        self.Ts, self.P, self.move_supp, self.du_max = Ts, P, move_supp, du_max
-        self.csl, self.cst = cv_scale_level, cv_scale_temp
+        self.ncv = len(model.controlled_output(model.initial_state()))
+        self.Ts = positive_float("Ts", Ts)
+        self.P = positive_int("P", P)
+        self.move_supp = nonnegative_float("move_supp", move_supp)
+        self.du_max = nonnegative_float("du_max", du_max)
+        self.cv_scale = self._resolve_cv_scale(cv_scale)
         self.reset()
+
+    def _resolve_cv_scale(self, cv_scale):
+        if cv_scale is not None:
+            values = cv_scale if isinstance(cv_scale, (list, tuple)) else [cv_scale]
+            values = [float(v) for v in values]
+            if len(values) == 1:
+                values *= self.ncv
+        else:
+            values = [float(value) for value in self.m.controlled_output_scales()]
+        if len(values) != self.ncv:
+            raise ValueError(f"cv_scale must contain 1 or {self.ncv} values, got {len(values)}")
+        if any(not math.isfinite(value) or value <= 0 for value in values):
+            raise ValueError("cv_scale values must be finite and positive")
+        return values
 
     def metadata(self):
         return {"name": self.name, "class": self.__class__.__name__,
                 "kind": "successive_linearization_mpc", "scenario": self.m.scenario,
-                "action_mode": "actuator", "control_structure": "fixed_sp_mpc",
+                "api": self.controller_api_version,
+                "action_mode": self.action_mode, "control_structure": self.control_structure,
                 "Ts": self.Ts, "horizon": self.P,
                 "move_supp": self.move_supp, "du_max": self.du_max,
-                "cv_scale_level": self.csl, "cv_scale_temp": self.cst}
+                "cv_scale": self.cv_scale}
 
-    def reset(self):
-        if callable(getattr(self.m, "default_action", None)):
-            self.u = np.asarray(self.m.action_vector(self.m.default_action()), dtype=np.float64)
-        else:
-            self.u = np.array([0.35] * self.nP + [0.5] * self.nV + [0.0] * self.nH, dtype=np.float64)
+    def reset(self, seed=None):
+        initializer = getattr(self.m, "mpc_init", None)
+        initial_action = initializer() if callable(initializer) else self.m.default_action()
+        self.u = np.asarray(self.m.action_vector(initial_action), dtype=np.float64)
         self._clock = 1e9
+
+    def act(self, obs, context):
+        action = self.compute(context.measurement, context.setpoint, context.control_dt)
+        return np.asarray(self.m.action_vector(action), dtype=np.float32)
 
     def _unpack(self, u):
         return self.m.action_vector_to_dict(u)
@@ -44,7 +71,7 @@ class MPCAgent:
         return np.asarray(self.m.controlled_output(list(x)), dtype=np.float64)
 
     def _wcv(self):
-        return np.array([1 / self.csl ** 2] * len(self.ctrl) + [1 / self.cst ** 2] * self.m.n)
+        return np.array([1.0 / max(float(scale), 1e-12) ** 2 for scale in self.cv_scale], dtype=np.float64)
 
     def compute(self, meas, sp, dt):
         self._clock += dt
@@ -81,7 +108,7 @@ class MPCAgent:
         for j in range(nx):
             xp = x0.copy(); xp[j] += eps
             C[:, j] = (self._cv(xp) - cv0) / eps
-        target = np.asarray(m.setpoint_vector(sp["h_sp"], sp["t_sp"]), dtype=np.float64)
+        target = np.asarray(m.setpoint_vector(sp.get("y_sp")), dtype=np.float64)
         Wcv = self._wcv()
         c0 = (x0 + f0 * Ts) - Ad @ x0 - Bd @ u0
         xf = x0.copy()
@@ -92,7 +119,7 @@ class MPCAgent:
             xf = Ad @ xf + Bd @ u0 + c0
             S = Ad @ S + Bd
             G = C @ S
-            e = C @ xf - target
+            e = cv0 + C @ (xf - x0) - target
             WG = Wcv[:, None] * G
             H += G.T @ WG
             g += G.T @ (Wcv * e)

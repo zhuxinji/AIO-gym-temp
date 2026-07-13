@@ -167,9 +167,9 @@ function buildCascade(host, meta) {
       for (let i = 0; i < n; i++) {
         const t = refs.tanks[i];
         paintTank(t, s.levels[i], s.temps[i], hmax[i], lim.t_high);
-        t.tspT.textContent = `SP ${sp.t_sp[i].toFixed(0)}°`;
+        t.tspT.textContent = `SP ${sp.output_targets[i].toFixed(0)}°`;
         const yOf = (h) => t.bottomY - clamp(h / hmax[i], 0, 1) * t.innerH;
-        t.spLine.setAttribute('opacity', 0.85); t.spLine.setAttribute('y1', yOf(sp.h_sp[i])); t.spLine.setAttribute('y2', yOf(sp.h_sp[i]));
+        t.spLine.setAttribute('opacity', 0.85); t.spLine.setAttribute('y1', yOf(sp.level_targets[i])); t.spLine.setAttribute('y2', yOf(sp.level_targets[i]));
         paintHeater(t.coil, act.heaters[i], il.heater_trip[i]);
         const v = act.valves[i];
         t.valveBow.setAttribute('fill', v > 0.02 ? `rgb(56,${120 + Math.round(v * 80)},${180 + Math.round(v * 40)})` : '#CDCED0');
@@ -249,7 +249,7 @@ function buildQuadruple(host, meta) {
   svg.appendChild(refs.phase);
   host.appendChild(svg);
 
-  const ctrl = meta.controlled_levels || [0, 1];
+  const levelSlots = meta.level_target_slots || [0, 1];
   return {
     update(f) {
       const s = f.state, sp = f.setpoints, act = f.actuators, lim = f.limits || {};
@@ -261,11 +261,11 @@ function buildQuadruple(host, meta) {
         const t = refs.tanks[i];
         paintTank(t, s.levels[i], s.temps[i], hmax[i], lim.t_high);
         paintHeater(t.coil, act.heaters[i], il.heater_trip[i]);
-        if (ctrl.includes(i)) {
+        if (levelSlots.includes(i)) {
           const yOf = (h) => t.bottomY - clamp(h / hmax[i], 0, 1) * t.innerH;
-          t.spLine.setAttribute('opacity', 0.85); t.spLine.setAttribute('y1', yOf(sp.h_sp[i])); t.spLine.setAttribute('y2', yOf(sp.h_sp[i]));
+          t.spLine.setAttribute('opacity', 0.85); t.spLine.setAttribute('y1', yOf(sp.level_targets[i])); t.spLine.setAttribute('y2', yOf(sp.level_targets[i]));
         }
-        t.tspT.textContent = `SP ${sp.t_sp[i].toFixed(0)}°`;
+        t.tspT.textContent = `SP ${sp.output_targets[i].toFixed(0)}°`;
       }
       const Q1 = s.pump_flow[0], Q2 = s.pump_flow[1];
       const g1 = cfg.gamma1 != null ? cfg.gamma1 : 0.7, g2 = cfg.gamma2 != null ? cfg.gamma2 : 0.7;
@@ -329,7 +329,7 @@ function buildCSTR(host, meta) {
       liquid.setAttribute('fill', tempColor(T));
       tempT.textContent = T.toFixed(1); tempT.setAttribute('fill', T >= (lim.t_high || 80) ? '#C0392B' : '#0B1220');
       caT.textContent = `Cₐ ${Ca.toFixed(3)}`;
-      spT.textContent = `SP ${f.setpoints.t_sp[0].toFixed(0)}°`;
+      spT.textContent = `SP ${f.setpoints.output_targets[0].toFixed(0)}°`;
       // jacket cooling glow (blue)
       if (uc > 0.02) { jacket.setAttribute('stroke', `rgb(${Math.round(150 - uc * 130)},${Math.round(200 - uc * 40)},220)`); jacket.setAttribute('filter', 'url(#glowPump)'); jacket.setAttribute('stroke-width', 6 + uc * 3); }
       else { jacket.setAttribute('stroke', '#cdd6da'); jacket.setAttribute('filter', ''); jacket.setAttribute('stroke-width', 6); }
@@ -382,7 +382,7 @@ function buildHVAC(host, meta) {
         const r = rooms[i], T = s.temps[i], u = act.heaters[i];
         r.fill.setAttribute('fill', tempColor(T));
         r.tempT.textContent = T.toFixed(1);
-        r.spT.textContent = `SP ${f.setpoints.t_sp[i].toFixed(0)}°`;
+        r.spT.textContent = `SP ${f.setpoints.output_targets[i].toFixed(0)}°`;
         if (u > 0.52) { const k = (u - 0.5) * 2; r.unit.setAttribute('fill', `rgb(${Math.round(230 - k * 20)},${Math.round(150 - k * 90)},60)`); r.unit.setAttribute('filter', 'url(#glowHeat)'); }
         else if (u < 0.48) { const k = (0.5 - u) * 2; r.unit.setAttribute('fill', `rgb(${Math.round(120 - k * 60)},${Math.round(180 - k * 20)},230)`); r.unit.setAttribute('filter', 'url(#glowPump)'); }
         else { r.unit.setAttribute('fill', '#eef1f4'); r.unit.setAttribute('filter', ''); }

@@ -35,10 +35,32 @@ The executable source of truth is the model implementation under `aiogym.models.
 | --- | --- | --- | --- |
 | pump_0 | pump | 0 | [0, 1] |
 | pump_1 | pump | 1 | [0, 1] |
-| heater_0 | heater | 0 | [0, 1] |
-| heater_1 | heater | 1 | [0, 1] |
-| heater_2 | heater | 2 | [0, 1] |
-| heater_3 | heater | 3 | [0, 1] |
+| heater_0 | heater | 2 | [0, 1] |
+| heater_1 | heater | 3 | [0, 1] |
+| heater_2 | heater | 4 | [0, 1] |
+| heater_3 | heater | 5 | [0, 1] |
+
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| lower_tank_0_level | m | [0, 0.8] |
+| lower_tank_1_level | m | [0, 0.8] |
+| tank_0_temperature | degC | [25, 72] |
+| tank_1_temperature | degC | [25, 72] |
+| tank_2_temperature | degC | [20, 58] |
+| tank_3_temperature | degC | [20, 58] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| lower_tank_0_level | lower_tank_0_level | m | [0, 0.8] |
+| lower_tank_1_level | lower_tank_1_level | m | [0, 0.8] |
+| tank_0_temperature | tank_0_temperature | degC | [25, 72] |
+| tank_1_temperature | tank_1_temperature | degC | [25, 72] |
+| tank_2_temperature | tank_2_temperature | degC | [20, 58] |
+| tank_3_temperature | tank_3_temperature | degC | [20, 58] |
 
 ## Disturbances
 
@@ -79,6 +101,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 8
 - Action vector length: 6
+- Controlled output vector length: 6
+- Setpoint vector length: 6
 - Dynamics disturbances: [t_cold, t_amb, extra_outflow, pump_flow_factor, heater_efficiency, heat_loss_factor]
 - Micro integration step: 0.02 s
 - Energy is scored: True
@@ -107,7 +131,7 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 | Entry | Meaning |
 | --- | --- |
-| 0 | [t_sp, 0, 25, 72] |
-| 1 | [t_sp, 1, 25, 72] |
-| 2 | [t_sp, 2, 20, 58] |
-| 3 | [t_sp, 3, 20, 58] |
+| 0 | [y_sp, 2, 25, 72] |
+| 1 | [y_sp, 3, 25, 72] |
+| 2 | [y_sp, 4, 20, 58] |
+| 3 | [y_sp, 5, 20, 58] |

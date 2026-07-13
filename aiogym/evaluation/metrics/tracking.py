@@ -3,40 +3,50 @@ from __future__ import annotations
 
 
 def tracking_step_metrics(info, setpoint, time_sec: float, dt: float, env):
-    errors = []
-    overshoot = 0.0
-    temps = list(info.get("temps", []))
-    levels = list(info.get("levels", []))
-    t_sp = list(setpoint.get("t_sp", []))
-    h_sp = list(setpoint.get("h_sp", []))
-    level_scale = float(getattr(env.model, "kpi_level_scale", 1.0))
-    for i, temp in enumerate(temps):
-        if i < len(t_sp):
-            err = float(temp) - float(t_sp[i])
-            errors.append(err)
-            overshoot = max(overshoot, err)
-    for i in getattr(env.model, "controlled_levels", lambda: [])():
-        if i < len(levels) and i < len(h_sp):
-            err = (float(levels[i]) - float(h_sp[i])) / level_scale
-            errors.append(err)
-            overshoot = max(overshoot, err)
+    y = list(info.get("y") or _legacy_controlled_output(env.model, info))
+    y_sp = list(setpoint.get("y_sp") or env.model.default_setpoint_vector())
+    errors = normalized_tracking_errors(env.model, y, y_sp)
+    overshoot = max(errors, default=0.0)
     abs_errors = [abs(err) for err in errors]
+    error_cost = sum(err * err for err in errors)
+    move_cost = float(info.get("tracking_move_cost", 0.0) or 0.0)
+    cost = float(info.get("tracking_cost", error_cost + move_cost) or 0.0)
     iae = sum(abs_errors) * dt
-    ise = sum(err * err for err in errors) * dt
+    ise = error_cost * dt
+    mse = error_cost / max(len(errors), 1)
     itae = time_sec * sum(abs_errors) * dt
     settled = True
-    temp_tol = 1.0
-    level_tol = 0.02
-    for i, temp in enumerate(temps):
-        if i < len(t_sp) and abs(float(temp) - float(t_sp[i])) > temp_tol:
-            settled = False
-    for i in getattr(env.model, "controlled_levels", lambda: [])():
-        if i < len(levels) and i < len(h_sp) and abs((float(levels[i]) - float(h_sp[i])) / level_scale) > level_tol:
+    normalized_tol = 0.02
+    for err in errors:
+        if abs(err) > normalized_tol:
             settled = False
     return {
+        "tracking_cost": float(cost),
+        "tracking_return": float(-cost),
+        "tracking_error_cost": float(info.get("tracking_error_cost", error_cost) or 0.0),
+        "tracking_move_cost": float(move_cost),
         "tracking_iae": float(iae),
+        "tracking_mse": float(mse * dt),
         "tracking_ise": float(ise),
         "tracking_itae": float(itae),
         "tracking_overshoot": float(max(0.0, overshoot)),
         "tracking_settled": settled,
     }
+
+
+def normalized_tracking_error_sum(model, y, y_sp) -> float:
+    return float(sum(abs(err) for err in normalized_tracking_errors(model, y, y_sp)))
+
+
+def normalized_tracking_errors(model, y, y_sp):
+    errors = []
+    scales = list(model.controlled_output_scales())
+    for i, (value, setpoint) in enumerate(zip(y, y_sp)):
+        scale = scales[i] if i < len(scales) else 1.0
+        errors.append((float(value) - float(setpoint)) / max(float(scale), 1e-12))
+    return errors
+
+
+def _legacy_controlled_output(model, info):
+    temps = list(info.get("temps", []))
+    return temps

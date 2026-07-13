@@ -1,6 +1,4 @@
-import math
-
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import ProcessModelContract
 
 
 class ExtractionModel(ProcessModelContract):
@@ -13,6 +11,10 @@ class ExtractionModel(ProcessModelContract):
     state_units = {name: "concentration" for name in state_names}
     state_bounds = {name: (0.0, 1.0) for name in state_names}
     action_names = ("liquid_flow_L", "gas_flow_G")
+    output_names = ("stage_1_liquid_concentration", "stage_2_liquid_concentration", "stage_3_liquid_concentration", "stage_4_liquid_concentration", "stage_5_liquid_concentration")
+    output_units = {name: "concentration" for name in output_names}
+    output_bounds = {name: (0.0, 1.0) for name in output_names}
+    default_y_sp = (0.0, 0.0, 0.0, 0.0, 0.0040)
     param_units = {
         "Vl": "volume", "Vg": "volume", "m": "dimensionless", "Kla": "1/s",
         "e": "dimensionless", "CX0": "concentration", "CY6": "concentration",
@@ -91,11 +93,16 @@ class ExtractionModel(ProcessModelContract):
             ])
         return ops.vector(dx)
 
-    def levels_temps(self, x, backend="numeric", ca=None):
+    def controlled_output(self, x, backend="numeric", ca=None):
+        if backend == "casadi":
+            return [x[2 * i] for i in range(5)]
+        return [max(0.0, min(1.0, x[2 * i])) for i in range(5)]
+
+    def display_outputs(self, x, backend="numeric", ca=None):
         cx = [x[2 * i] for i in range(5)]
         if backend == "casadi":
-            return [], cx
-        return [], [max(0.0, min(1.0, v)) for v in cx]
+            return {"levels": [], "temps": cx}
+        return {"levels": [], "temps": [max(0.0, min(1.0, v)) for v in cx]}
 
     def outputs(self, x):
         state = self.state_vector(x)
@@ -118,13 +125,7 @@ class ExtractionModel(ProcessModelContract):
     def clamp_state(self, x):
         return [max(0.0, min(1.0, v)) for v in x]
 
-    def default_setpoints(self):
-        return {}, [0.0, 0.0, 0.0, 0.0, 0.0040]
-
     energy_scored = False
-
-    def pump_power(self, act):
-        return sum(u * self.p["pump_power_max"][i] for i, u in enumerate(act["pumps"]))
 
     def energy_kw(self, u, backend="numeric", ca=None):
         return sum(u[i] * self.p["pump_power_max"][i] for i in range(2)) / 1000.0

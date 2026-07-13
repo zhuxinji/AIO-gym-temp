@@ -32,6 +32,20 @@ The executable source of truth is the model implementation under `aiogym.models.
 | --- | --- | --- | --- |
 | cooling_temperature_fraction | heater | 0 | [0, 1] |
 
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| coefficient_variation | dimensionless | [0, 5] |
+| mean_crystal_size | um | [0, 50] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| coefficient_variation | coefficient_variation | dimensionless | [0, 5] |
+| mean_crystal_size | mean_crystal_size | um | [0, 50] |
+
 ## Disturbances
 
 | Name | Event | Unit | Bounds | Default |
@@ -77,6 +91,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 5
 - Action vector length: 1
+- Controlled output vector length: 2
+- Setpoint vector length: 2
 - Dynamics disturbances: [growth_factor, nucleation_factor, solubility_bias]
 - Micro integration step: 0.02 s
 - Energy is scored: False

@@ -8,6 +8,7 @@ import json
 import os
 from datetime import datetime, timezone
 
+from aiogym._config import parse_seed_list
 from aiogym.controllers import make_controller
 from aiogym.evaluation import BenchmarkProtocol, evaluate_controller
 
@@ -19,24 +20,11 @@ def parse_float_list(raw: str):
     return values
 
 
-def parse_seed_list(raw: str | None, seed: int, episodes: int):
-    if not raw:
-        return [seed + i for i in range(episodes)]
-    seeds = [int(part.strip()) for part in raw.split(",") if part.strip()]
-    if not seeds:
-        raise ValueError("--seed-list must contain at least one integer seed")
-    return seeds
-
-
 def extraction_pid_config(kp: float, ki: float, kd: float, gas_hold: float):
     return {
-        "gains": {"temp": [kp, ki, kd]},
-        "pairing": {
-            "level": [],
-            "temp": [["pump", 0, 4, False]],
-            "demand_valve_index": None,
-            "holds": [["pump", 1, gas_hold]],
-        },
+        "loops": [{"u_index": 0, "y_index": 4, "pid": [kp, ki, kd]}],
+        "demand_u_index": None,
+        "holds": [{"u_index": 1, "value": gas_hold}],
     }
 
 

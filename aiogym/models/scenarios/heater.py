@@ -1,6 +1,4 @@
-import math
-
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import ProcessModelContract
 
 
 class FiredHeaterModel(ProcessModelContract):
@@ -13,6 +11,10 @@ class FiredHeaterModel(ProcessModelContract):
     state_units = {"T_firebox": "degC", "T_out": "degC", "O2": "%"}
     state_bounds = {"T_firebox": (20.0, 1400.0), "T_out": (20.0, 650.0), "O2": (0.0, 20.9)}
     action_names = ("air_damper", "fuel_valve")
+    output_names = ("flue_o2", "outlet_temperature")
+    output_units = {"flue_o2": "%", "outlet_temperature": "degC"}
+    output_bounds = {"flue_o2": (1.8, 5.0), "outlet_temperature": (364.0, 372.0)}
+    default_y_sp = (3.0, 370.0)
     param_units = {
         "Fmax": "kg/s", "lhv": "J/kg", "stoich": "kg_air/kg_fuel", "Amax": "kg/s",
         "cp_g": "J/kg/K", "UA": "W/K", "Cfb": "J/K", "Cc": "J/K",
@@ -35,7 +37,7 @@ class FiredHeaterModel(ProcessModelContract):
         "w_viol": 2100.0,
         "level_scale": 1.0,
     }
-    supervisory_layout = (("t_sp", 0, 364.0, 372.0), ("h_sp", 0, 1.8, 5.0))
+    supervisory_layout = (("y_sp", 1, 364.0, 372.0), ("y_sp", 0, 1.8, 5.0))
     input_disturbances = (
         {"name": "t_cold", "event": "cold_inlet_step", "unit": "degC", "bounds": (240.0, 330.0), "description": "process feed inlet temperature"},
         {"name": "t_amb", "event": "ambient_step", "unit": "degC", "bounds": (-10.0, 45.0), "description": "ambient temperature"},
@@ -82,9 +84,15 @@ class FiredHeaterModel(ProcessModelContract):
         fuel = u[1] * p["Fmax"]
         air = u[0] * p["Amax"]
         stoich_air = p["stoich"] * fuel
-        completeness = 1.0 - ops.max(0.0, 1.0 - air / ops.max(stoich_air, 1e-6))
+        completeness = 1.0 - ops.smooth_max(
+            0.0,
+            1.0 - air / ops.smooth_max(stoich_air, 1e-6),
+        )
         duty = fuel * completeness * p["lhv"] * env.get("lhv_factor", 1.0)
-        o2_eq = 20.9 * ops.max(0.0, air - stoich_air * completeness) / ops.max(air + fuel * completeness, 1e-6)
+        o2_eq = 20.9 * ops.smooth_max(0.0, air - stoich_air * completeness) / ops.smooth_max(
+            air + fuel * completeness,
+            1e-6,
+        )
         flue_mass = air + fuel * completeness
         return fuel, air, duty, o2_eq, flue_mass
 
@@ -104,10 +112,10 @@ class FiredHeaterModel(ProcessModelContract):
             (o2_eq - o2) / p["tau_o2"],
         ])
 
-    def levels_temps(self, x, backend="numeric", ca=None):
+    def display_outputs(self, x, backend="numeric", ca=None):
         if backend == "casadi":
-            return [x[2]], [x[1]]
-        return [max(0.0, min(20.9, x[2]))], [x[1]]
+            return {"levels": [x[2]], "temps": [x[1]]}
+        return {"levels": [max(0.0, min(20.9, x[2]))], "temps": [x[1]]}
 
     def initial_state(self):
         return [700.0, 350.0, 3.5]
@@ -119,14 +127,15 @@ class FiredHeaterModel(ProcessModelContract):
             max(0.0, min(20.9, x[2])),
         ]
 
-    def controlled_levels(self):
+    def controlled_output(self, x, backend="numeric", ca=None):
+        display = self.display_outputs(x, backend=backend, ca=ca)
+        levels, temps = display["levels"], display["temps"]
+        return [levels[0], temps[0]]
+
+    def legacy_observation_level_target_slots(self):
         return [0]
 
-    def default_setpoints(self):
-        return {0: 3.0}, [370.0]
-
     energy_scored = False
-    kpi_level_scale = 25.0
 
     def cv_scales(self):
         return {"level": 1.2, "temp": 12.0}
@@ -134,17 +143,8 @@ class FiredHeaterModel(ProcessModelContract):
     def mpc_init(self):
         return [0.30, 0.55]
 
-    def heater_power(self, act):
-        return act["heaters"][0] * self.p["Fmax"] * self.p["lhv"]
-
-    def pump_power(self, act):
-        return 0.0
-
     def energy_kw(self, u, backend="numeric", ca=None):
         return u[1] * self.p["Fmax"] * self.p["lhv"] / 1000.0
-
-    def ideal_power(self, levels, temps, t_sp, env, act):
-        return 0.0
 
     def process_constraint_info(self, x, levels, temps, env):
         o2 = float(levels[0]) if levels else 0.0

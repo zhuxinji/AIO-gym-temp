@@ -11,15 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
-from aiogym.controllers import make_controller
+from aiogym._config import parse_seed_list
+from aiogym._serialization import write_json
 from aiogym.evaluation import (
-    BenchmarkConfig,
-    BenchmarkProtocol,
     build_evaluation_report,
-    evaluate_controller,
     primary_metric_for_objective,
+    resolve_protocol,
 )
 from aiogym.evaluation.artifacts import plot_results, write_benchmark_artifacts
+from aiogym.evaluation.runner import run_evaluation_case
 from aiogym.models import SCENARIOS
 
 
@@ -41,8 +41,14 @@ SUMMARY_COLUMNS = (
     "metric_std",
     "kpi",
     "profit",
+    "production",
     "return",
     "track",
+    "tracking_cost",
+    "tracking_return",
+    "tracking_error_cost",
+    "tracking_move_cost",
+    "tracking_mse",
     "tracking_iae",
     "energy_kwh",
     "constraint",
@@ -55,16 +61,6 @@ SUMMARY_COLUMNS = (
     "episodes",
     "seed_list",
 )
-
-
-def protocol_factory(objective: str):
-    return {
-        "economic": BenchmarkProtocol.economic,
-        "tracking": BenchmarkProtocol.tracking,
-        "robustness": BenchmarkProtocol.robustness,
-        "safety": BenchmarkProtocol.safety,
-        "kpi": BenchmarkProtocol.kpi,
-    }[objective]
 
 
 def builtin_suites():
@@ -111,58 +107,6 @@ def parse_csv(raw: str | None, default):
     if not values:
         raise ValueError("comma-separated options must contain at least one value")
     return values
-
-
-def seed_list(raw: str | None, seed: int, episodes: int):
-    if not raw:
-        return [seed + i for i in range(episodes)]
-    seeds = [int(part.strip()) for part in raw.split(",") if part.strip()]
-    if not seeds:
-        raise ValueError("--seed-list must contain at least one integer seed")
-    return seeds
-
-
-def compact_row(result: dict, suite_case: dict):
-    controller = result["controller"]
-    metric = result["metric"]
-    diagnostics = dict(result.get("controller_diagnostics") or {})
-    controller_status = result.get("controller_status", "ok")
-    status = "degraded" if controller_status == "degraded" else "passed"
-    row = {
-        "suite_case": suite_case["name"],
-        "scenario": suite_case["scenario"],
-        "objective": suite_case["objective"],
-        "controller": result["name"],
-        "control_structure": controller.get("control_structure"),
-        "action_mode": suite_case["action_mode"],
-        "status": status,
-        "controller_status": controller_status,
-        "controller_solve_count": diagnostics.get("solve_count", 0),
-        "controller_solver_success_count": diagnostics.get("solver_success_count", 0),
-        "controller_solver_failure_count": diagnostics.get("solver_failure_count", 0),
-        "controller_fallback_count": diagnostics.get("fallback_count", 0),
-        "controller_last_solver_error": diagnostics.get("last_solver_error"),
-        "metric": metric,
-        metric: result[metric],
-        f"{metric}_std": result[f"{metric}_std"],
-        "kpi": result["kpi"],
-        "profit": result["profit"],
-        "return": result["return"],
-        "track": result["track"],
-        "constraint": result["constraint"],
-        "tracking_iae": result.get("tracking_iae"),
-        "energy_kwh": result.get("energy_kwh"),
-        "runtime_seconds": result.get("runtime_seconds"),
-        "runtime_seconds_per_step": result.get("runtime_seconds_per_step"),
-        "runtime_total_seconds": result.get("runtime_total_seconds"),
-        "constraint_violation_count": result.get("constraint_violation_count"),
-        "constraint_violation_severity": result.get("constraint_violation_severity"),
-        "safety_margin_min": result.get("safety_margin_min"),
-        "episodes": result["episodes"],
-        "seed": result["seed"],
-        "seed_list": result["seed_list"],
-    }
-    return row
 
 
 def skipped_row(suite_case: dict, status: str, message: str):
@@ -215,33 +159,28 @@ def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int, c
     return config
 
 
-def _write_json(path: str, data):
-    out_dir = os.path.dirname(path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-
 def build_cases(args):
     suite = load_suite(args.suite)
     scenarios = parse_csv(args.scenarios, suite["scenarios"])
     objectives = parse_csv(args.objectives, suite["objectives"])
     controllers = parse_csv(args.controllers, suite["controllers"])
-    seeds = seed_list(args.seed_list, args.seed, args.episodes)
+    seeds = parse_seed_list(args.seed_list, args.seed, args.episodes)
     episode_steps = int(args.episode_steps if args.episode_steps is not None else suite.get("episode_steps", 80))
     control_dt = float(args.control_dt if args.control_dt is not None else suite.get("control_dt", 0.5))
     cases = []
     for objective in objectives:
         for scenario in scenarios:
-            protocol = protocol_factory(objective)(
+            protocol = resolve_protocol(
                 scenario,
-                action_mode=suite["action_mode"],
-                episode_steps=episode_steps,
-                control_dt=control_dt,
+                objective,
+                {
+                    "action_mode": suite["action_mode"],
+                    "episode_steps": episode_steps,
+                    "control_dt": control_dt,
+                },
             )
             for controller in controllers:
-                controller_config = controller_config_for(args, controller, suite["action_mode"])
+                controller_config = controller_config_for(args, controller, suite["action_mode"], objective)
                 cases.append({
                     "name": f"{objective}:{scenario}:{controller}",
                     "scenario": scenario,
@@ -255,50 +194,44 @@ def build_cases(args):
     return suite, cases
 
 
-def controller_config_for(args, controller: str, action_mode: str):
-    if controller != "sb3":
-        return {}
-    if not args.sb3_path:
-        raise SystemExit("controller 'sb3' requires --sb3-path")
-    return {
-        "path": args.sb3_path,
-        "algo": args.sb3_algo,
-        "action_mode": action_mode,
-    }
+def controller_config_for(args, controller: str, action_mode: str, objective: str | None = None):
+    if controller == "sb3":
+        if not args.sb3_path:
+            raise SystemExit("controller 'sb3' requires --sb3-path")
+        return {
+            "path": args.sb3_path,
+            "algo": args.sb3_algo,
+            "action_mode": action_mode,
+        }
+    if controller == "onnx":
+        if not args.onnx_path:
+            raise SystemExit("controller 'onnx' requires --onnx-path")
+        return {"path": args.onnx_path, "action_mode": action_mode}
+    if controller == "oracle" and objective == "tracking":
+        return {"mode": "tracking"}
+    return {}
 
 
 def run_case(suite_case: dict, include_tracebacks: bool):
     started = perf_counter()
     try:
-        controller = make_controller(
-            suite_case["controller"],
+        case = run_evaluation_case(
             scenario=suite_case["scenario"],
-            config=suite_case.get("controller_config") or {},
-        )
-        result = evaluate_controller(
-            controller,
-            suite_case["protocol"].make_env(),
-            episodes=len(suite_case["seeds"]),
-            seed=suite_case["seeds"][0],
-            seed_list=suite_case["seeds"],
+            controller=suite_case["controller"],
             protocol=suite_case["protocol"],
+            seeds=suite_case["seeds"],
+            controller_config=suite_case.get("controller_config") or {},
             include_episodes=True,
+            suite_case=suite_case["name"],
         )
-    except (KeyError, ValueError) as ex:
-        row = skipped_row(suite_case, "skipped", str(ex))
-        return {"status": "skipped", "row": row, "error": _error_payload(ex, include_tracebacks)}
+        result = case["result"]
     except Exception as ex:
         row = skipped_row(suite_case, "failed", str(ex))
         return {"status": "failed", "row": row, "error": _error_payload(ex, include_tracebacks)}
 
-    row = compact_row(result, suite_case)
+    row = case["row"]
     row["suite_runtime_seconds"] = float(perf_counter() - started)
-    config = BenchmarkConfig.from_protocol(
-        suite_case["protocol"],
-        controller=suite_case["controller"],
-        seeds=suite_case["seeds"],
-        controller_config=suite_case.get("controller_config") or {},
-    ).metadata()
+    config = case["config"]
     return {"status": row["status"], "row": row, "result": result, "config": config}
 
 
@@ -343,6 +276,7 @@ def main():
     ap.add_argument("--control-dt", type=float, default=None)
     ap.add_argument("--sb3-path", default=None)
     ap.add_argument("--sb3-algo", default="sac", choices=["sac", "ppo", "td3"])
+    ap.add_argument("--onnx-path", default=None)
     ap.add_argument("--fail-fast", action="store_true")
     ap.add_argument("--fail-on-degraded", action="store_true",
                     help="exit non-zero when any controller reports fallback/degraded diagnostics")
@@ -401,7 +335,7 @@ def main():
             "episodes": args.episodes,
             "episode_steps": episode_steps,
             "seed": args.seed,
-            "seed_list": seed_list(args.seed_list, args.seed, args.episodes),
+            "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
             "control_dt": control_dt,
             "fail_on_degraded": bool(args.fail_on_degraded),
         },
@@ -418,14 +352,24 @@ def main():
     artifact_dir = artifact_dir_for(suite["name"], args.artifact_dir)
     payload["artifact_dir"] = artifact_dir
     payload["artifacts"] = write_benchmark_artifacts(artifact_dir, payload)
-    _write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
+    write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
     figures = plot_results(artifact_dir)
-    payload["artifacts"].update({
-        f"{key}_figure": path
-        for key, path in figures.items()
-        if key in {"summary", "leaderboard", "rollout", "constraint_timeline"}
-    })
-    _write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
+    figure_artifacts = {}
+    for key, path in figures.items():
+        if key in {"summary", "leaderboard", "rollout", "constraint_timeline"}:
+            figure_artifacts[f"{key}_figure"] = path
+        elif key == "tracking_comparison":
+            figure_artifacts["tracking_comparison_figure"] = path
+        elif key == "summary_by_objective":
+            figure_artifacts["summary_figures"] = path
+        elif key == "leaderboard_by_objective":
+            figure_artifacts["leaderboard_figures"] = path
+        elif key == "summary_by_scenario":
+            figure_artifacts["summary_figures"] = path
+        elif key == "leaderboard_by_scenario":
+            figure_artifacts["leaderboard_figure"] = path
+    payload["artifacts"].update(figure_artifacts)
+    write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
 
     print(
         f"saved artifacts {artifact_dir} "

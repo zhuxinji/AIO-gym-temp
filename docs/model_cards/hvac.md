@@ -30,6 +30,20 @@ The executable source of truth is the model implementation under `aiogym.models.
 | hvac_zone_0 | heater | 0 | [0, 1] |
 | hvac_zone_1 | heater | 1 | [0, 1] |
 
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| zone_0_temperature | degC | [18, 26] |
+| zone_1_temperature | degC | [18, 26] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| zone_0_temperature | zone_0_temperature | degC | [18, 26] |
+| zone_1_temperature | zone_1_temperature | degC | [18, 26] |
+
 ## Disturbances
 
 | Name | Event | Unit | Bounds | Default |
@@ -61,6 +75,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 2
 - Action vector length: 2
+- Controlled output vector length: 2
+- Setpoint vector length: 2
 - Dynamics disturbances: [t_amb, heat_load[0], heat_load[1], hvac_efficiency]
 - Micro integration step: 0.02 s
 - Energy is scored: False
@@ -89,5 +105,5 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 | Entry | Meaning |
 | --- | --- |
-| 0 | [t_sp, 0, 18, 26] |
-| 1 | [t_sp, 1, 18, 26] |
+| 0 | [y_sp, 0, 18, 26] |
+| 1 | [y_sp, 1, 18, 26] |

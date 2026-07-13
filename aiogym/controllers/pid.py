@@ -1,50 +1,37 @@
 """Fixed-setpoint PID baseline controller."""
 from __future__ import annotations
 
+import numpy as np
+
 
 def _clip01(v):
     return 0.0 if v < 0 else 1.0 if v > 1 else v
 
 
-GAINS = {
-    "cascade": {"level_pump": (8.0, 0.4, 0.0), "level_valve": (6.0, 0.3, 0.0), "temp": (0.06, 0.01, 0.0)},
-    "quadruple": {"level_pump": (6.0, 0.25, 0.0), "level_valve": (0.0, 0.0, 0.0), "temp": (0.05, 0.012, 0.0)},
-    "cstr": {"level_pump": (0.0, 0.0, 0.0), "level_valve": (0.0, 0.0, 0.0), "temp": (0.08, 0.02, 0.0)},
-    "hvac": {"temp": (0.18, 0.03, 0.0)},
-    "extraction": {"temp": (0.0, 0.25, 0.0)},
-    "heater": {"level_pump": (0.0, 0.0, 0.0), "level_valve": (0.15, 0.05, 0.0), "temp": (0.035, 0.010, 0.0)},
-    "crystallization": {"temp": (0.08, 0.02, 0.0)},
-}
-PAIRING = {
-    "cascade": {"level": [("pump", 0, 0), ("valve", 0, 1), ("valve", 1, 2)],
-                "temp": [(0, 0, False), (1, 1, False), (2, 2, False)], "demand_valve_index": 2, "holds": []},
-    "quadruple": {"level": [("pump", 0, 0), ("pump", 1, 1)],
-                  "temp": [(0, 0, False), (1, 1, False), (2, 2, False), (3, 3, False)], "demand_valve_index": None, "holds": []},
-    "cstr": {"level": [], "temp": [(0, 0, True)], "demand_valve_index": None, "holds": [("pump", 0, 0.5)]},
-    "hvac": {"level": [], "temp": [(0, 0, False), (1, 1, False)], "demand_valve_index": None, "holds": []},
-    "extraction": {"level": [], "temp": [("pump", 0, 4, False)], "demand_valve_index": None, "holds": [("pump", 1, 0.0)]},
-    "heater": {"level": [("valve", 0, 0)], "temp": [(0, 0, False)], "demand_valve_index": None, "holds": []},
-    "crystallization": {"level": [], "temp": [(0, 0, True)], "demand_valve_index": None, "holds": []},
-}
 
 
-def _actuator_array(act, kind):
-    return {"pump": act["pumps"], "valve": act["valves"], "heater": act["heaters"]}[kind]
-
-
-def _parse_temp_pairing(row):
+def _loop_spec(row):
+    if isinstance(row, dict):
+        return int(row["u_index"]), int(row["y_index"]), row["pid"], bool(row.get("reverse", False))
     if len(row) == 3:
-        hi, ti, rev = row
-        return "heater", hi, ti, rev
+        u_index, y_index, pid = row
+        return int(u_index), int(y_index), pid, False
     if len(row) == 4:
-        kind, ai, ti, rev = row
-        return kind, ai, ti, rev
-    raise ValueError(f"temperature pairing must have 3 or 4 fields, got {row!r}")
+        u_index, y_index, pid, reverse = row
+        return int(u_index), int(y_index), pid, bool(reverse)
+    raise ValueError(f"PID loop must be a mapping or 3/4-field row, got {row!r}")
+
+
+def _hold_spec(row):
+    if isinstance(row, dict):
+        return int(row["u_index"]), float(row["value"])
+    u_index, value = row
+    return int(u_index), float(value)
 
 
 class PIDLoop:
     def __init__(self, g, reverse=False):
-        self.kp, self.ki, self.kd = g
+        self.kp, self.ki, self.kd = (float(value) for value in g)
         self.reverse = reverse
         self.reset()
 
@@ -68,46 +55,83 @@ class PIDLoop:
 
 class PIDAgent:
     name = "PID"
+    controller_api_version = "aiogym.controller.v1"
+    action_mode = "actuator"
+    control_structure = "fixed_sp_pid"
 
-    def __init__(self, model, gains=None, pairing=None):
+    def __init__(self, model, loops=None, holds=None, demand_u_index=None):
         self.model = model
         self.nP, self.nV, self.nH = model.actuator_counts()
-        self.gains = gains or GAINS[model.scenario]
-        self.pairing = pairing or PAIRING[model.scenario]
-        g = self.gains
-        pr = self.pairing
-        self.demand_idx = pr.get("demand_valve_index")
+        self.nu = model.action_dim()
+        cfg = _default_pid_config(model) if loops is None else {}
+        self.loops_config = list(loops if loops is not None else cfg["loops"])
+        self.demand_u_index = cfg.get("demand_u_index") if demand_u_index is None else demand_u_index
         self.demand_valve = 0.5
-        self.holds = pr.get("holds", [])
-        self.level_loops = [(kind, ai, li, PIDLoop(g["level_pump" if kind == "pump" else "level_valve"], False))
-                            for (kind, ai, li) in pr.get("level", [])]
-        self.temp_loops = [(kind, ai, ti, PIDLoop(g["temp"], rev)) for (kind, ai, ti, rev) in
-                           (_parse_temp_pairing(row) for row in pr.get("temp", []))]
+        self.holds = list(holds if holds is not None else cfg.get("holds", []))
+        self.hold_specs = [_hold_spec(row) for row in self.holds]
+        loop_specs = [_loop_spec(row) for row in self.loops_config]
+        _validate_pid_config(model, loop_specs, self.hold_specs, self.demand_u_index)
+        self.loops = [
+            (u_index, y_index, PIDLoop(pid, reverse))
+            for u_index, y_index, pid, reverse in loop_specs
+        ]
 
     def metadata(self):
         return {"name": self.name, "class": self.__class__.__name__,
                 "kind": "fixed_setpoint_pid", "scenario": self.model.scenario,
-                "action_mode": "actuator", "control_structure": "fixed_sp_pid",
-                "gains": self.gains,
-                "pairing": self.pairing}
+                "api": self.controller_api_version,
+                "action_mode": self.action_mode, "control_structure": self.control_structure,
+                "loops": self.loops_config,
+                "holds": self.holds,
+                "demand_u_index": self.demand_u_index}
 
-    def reset(self):
-        for *_, loop in self.level_loops:
+    def reset(self, seed=None):
+        for *_, loop in self.loops:
             loop.reset()
-        for *_, loop in self.temp_loops:
-            loop.reset()
+
+    def act(self, obs, context):
+        action = self.compute(context.measurement, context.setpoint, context.control_dt)
+        return np.asarray(self.model.action_vector(action), dtype=np.float32)
 
     def compute(self, meas, sp, dt):
-        act = {"pumps": [0.0] * self.nP, "valves": [0.0] * self.nV, "heaters": [0.0] * self.nH}
-        for kind, idx, value in self.holds:
-            arr = _actuator_array(act, kind)
-            if idx < len(arr):
-                arr[idx] = value
-        for kind, ai, li, loop in self.level_loops:
-            out = loop.update(sp["h_sp"][li], meas["levels"][li], dt)
-            _actuator_array(act, kind)[ai] = out
-        if self.demand_idx is not None and self.nV:
-            act["valves"][self.demand_idx] = self.demand_valve
-        for kind, ai, ti, loop in self.temp_loops:
-            _actuator_array(act, kind)[ai] = loop.update(sp["t_sp"][ti], meas["temps"][ti], dt)
-        return act
+        y_sp = list(sp.get("y_sp") or self.model.default_setpoint_vector())
+        y = list(meas.get("y") or self.model.controlled_output(meas["x"]))
+        u = [0.0] * self.nu
+        for u_index, value in self.hold_specs:
+            if 0 <= u_index < len(u):
+                u[u_index] = value
+        for u_index, y_index, loop in self.loops:
+            u[u_index] = loop.update(y_sp[y_index], y[y_index], dt)
+        if self.demand_u_index is not None and 0 <= self.demand_u_index < len(u):
+            u[self.demand_u_index] = self.demand_valve
+        return self.model.action_vector_to_dict(u) if self.model.uses_legacy_actions() else u
+
+
+def _default_pid_config(model):
+    from . import load_controller_config
+
+    params = dict(load_controller_config("pid", model.scenario).get("parameters", {}))
+    if not params.get("loops"):
+        raise ValueError(
+            f"no PID loop config for {model.scenario!r}; pass loops explicitly or add it to pid.json"
+        )
+    return params
+
+
+def _validate_pid_config(model, loop_specs, hold_specs, demand_u_index):
+    ny = len(model.controlled_output(model.initial_state()))
+    for u_index, y_index, pid, _ in loop_specs:
+        if not 0 <= u_index < model.action_dim():
+            raise ValueError(f"PID u_index {u_index} is outside action vector length {model.action_dim()}")
+        if not 0 <= y_index < ny:
+            raise ValueError(f"PID y_index {y_index} is outside controlled-output length {ny}")
+        if not isinstance(pid, (list, tuple)) or len(pid) != 3:
+            raise ValueError(f"PID gains must be a three-item sequence, got {pid!r}")
+        tuple(float(value) for value in pid)
+    for u_index, _ in hold_specs:
+        if not 0 <= u_index < model.action_dim():
+            raise ValueError(f"PID hold u_index {u_index} is outside action vector length {model.action_dim()}")
+    if demand_u_index is not None and not 0 <= int(demand_u_index) < model.action_dim():
+        raise ValueError(
+            f"PID demand_u_index {demand_u_index} is outside action vector length {model.action_dim()}"
+        )

@@ -38,6 +38,26 @@ The executable source of truth is the model implementation under `aiogym.models.
 | liquid_flow_L | pump | 0 | [0, 1] |
 | gas_flow_G | pump | 1 | [0, 1] |
 
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| stage_1_liquid_concentration | concentration | [0, 1] |
+| stage_2_liquid_concentration | concentration | [0, 1] |
+| stage_3_liquid_concentration | concentration | [0, 1] |
+| stage_4_liquid_concentration | concentration | [0, 1] |
+| stage_5_liquid_concentration | concentration | [0, 1] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| stage_1_liquid_concentration | stage_1_liquid_concentration | concentration | [0, 1] |
+| stage_2_liquid_concentration | stage_2_liquid_concentration | concentration | [0, 1] |
+| stage_3_liquid_concentration | stage_3_liquid_concentration | concentration | [0, 1] |
+| stage_4_liquid_concentration | stage_4_liquid_concentration | concentration | [0, 1] |
+| stage_5_liquid_concentration | stage_5_liquid_concentration | concentration | [0, 1] |
+
 ## Disturbances
 
 | Name | Event | Unit | Bounds | Default |
@@ -77,6 +97,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 10
 - Action vector length: 2
+- Controlled output vector length: 5
+- Setpoint vector length: 5
 - Dynamics disturbances: [CX0, CY6, Kla]
 - Micro integration step: 0.01 s
 - Energy is scored: False

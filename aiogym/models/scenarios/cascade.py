@@ -1,6 +1,6 @@
 import math
 
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import RHO_CP, ProcessModelContract, _maxv
 
 
 class CascadeModel(ProcessModelContract):
@@ -13,6 +13,10 @@ class CascadeModel(ProcessModelContract):
     state_units = {"h0": "m", "h1": "m", "h2": "m", "T0": "degC", "T1": "degC", "T2": "degC"}
     state_bounds = {"h0": (0.0, 0.8), "h1": (0.0, 0.8), "h2": (0.0, 0.8), "T0": (0.0, 120.0), "T1": (0.0, 120.0), "T2": (0.0, 120.0)}
     action_names = ("feed_pump", "outlet_valve_0", "outlet_valve_1", "outlet_valve_2", "heater_0", "heater_1", "heater_2")
+    output_names = ("tank_0_level", "tank_1_level", "tank_2_level", "tank_0_temperature", "tank_1_temperature", "tank_2_temperature")
+    output_units = {"tank_0_level": "m", "tank_1_level": "m", "tank_2_level": "m", "tank_0_temperature": "degC", "tank_1_temperature": "degC", "tank_2_temperature": "degC"}
+    output_bounds = {"tank_0_level": (0.0, 0.8), "tank_1_level": (0.0, 0.8), "tank_2_level": (0.0, 0.8), "tank_0_temperature": (25, 80), "tank_1_temperature": (30, 82), "tank_2_temperature": (35, 85)}
+    default_y_sp = (0.45, 0.45, 0.45, 35.0, 50.0, 65.0)
     plant_regime = {"ua_loss": (0.4, 2.6), "heater_max": (0.6, 1.15), "pump_flow_max": (0.7, 1.3), "cv_out": (0.7, 1.4)}
     economic_config = {
         "temp_band": [(34, 44), (48, 58), (60, 72)],
@@ -22,7 +26,7 @@ class CascadeModel(ProcessModelContract):
         "w_energy": 0.7,
         "w_viol": 29.0,
     }
-    supervisory_layout = (("t_sp", 0, 25, 80), ("t_sp", 1, 30, 82), ("t_sp", 2, 35, 85))
+    supervisory_layout = (("y_sp", 3, 25, 80), ("y_sp", 4, 30, 82), ("y_sp", 5, 35, 85))
     param_units = {"area": "m2", "height_max": "m", "cv_out": "m2.5/s", "ua_loss": "W/K", "heater_max": "W", "pump_flow_max": "m3/s", "pump_power_max": "W", "t_cold": "degC", "t_amb": "degC", "h_floor": "m"}
     param_bounds = {"area": (0.01, 2.0), "height_max": (0.1, 5.0), "cv_out": (0.0, 0.02), "ua_loss": (0.0, 1000.0), "heater_max": (0.0, 500000.0), "pump_flow_max": (0.0, 0.02), "pump_power_max": (0.0, 10000.0), "t_cold": (0.0, 40.0), "t_amb": (0.0, 45.0), "h_floor": (1e-6, 0.1)}
     input_disturbances = ProcessModelContract.input_disturbances + (
@@ -108,10 +112,10 @@ class CascadeModel(ProcessModelContract):
             dx += [(qin - qo[i]) / p["area"], qin * (tin - T[i]) / vol + (pheat - qloss) / (RHO_CP * vol)]
         return ops.vector(dx)
 
-    def levels_temps(self, x, backend="numeric", ca=None):
+    def display_outputs(self, x, backend="numeric", ca=None):
         if backend == "casadi":
-            return [x[0], x[2], x[4]], [x[1], x[3], x[5]]
-        return [_maxv(x[0], 0.0), _maxv(x[2], 0.0), _maxv(x[4], 0.0)], [x[1], x[3], x[5]]
+            return {"levels": [x[0], x[2], x[4]], "temps": [x[1], x[3], x[5]]}
+        return {"levels": [_maxv(x[0], 0.0), _maxv(x[2], 0.0), _maxv(x[4], 0.0)], "temps": [x[1], x[3], x[5]]}
 
     def initial_state(self):
         return [0.30, 20.0, 0.30, 20.0, 0.30, 20.0]
@@ -119,29 +123,34 @@ class CascadeModel(ProcessModelContract):
     def clamp_state(self, x):
         return x
 
-    def controlled_levels(self):
+    def controlled_output(self, x, backend="numeric", ca=None):
+        display = self.display_outputs(x, backend=backend, ca=ca)
+        levels, temps = display["levels"], display["temps"]
+        return [levels[0], levels[1], levels[2], temps[0], temps[1], temps[2]]
+
+    def legacy_observation_level_target_slots(self):
         return [0, 1, 2]
 
-    def default_setpoints(self):
-        return {0: 0.45, 1: 0.45, 2: 0.45}, [35.0, 50.0, 65.0]
-
-    # ---- KPI support (mirrors models.js idealPower + heater/pump power) ----
+    # ---- KPI support ----
     energy_scored = True
-
-    def heater_power(self, act):
-        return sum(u * self.p["heater_max"] for u in act["heaters"])
-
-    def pump_power(self, act):
-        return sum(u * self.p["pump_power_max"] for u in act["pumps"])
 
     def energy_kw(self, u, backend="numeric", ca=None):
         return sum(u[4 + i] * self.p["heater_max"] for i in range(3)) / 1000.0
 
-    def ideal_power(self, levels, temps, t_sp, env, act):
+    def action_energy_kw(self, act, x=None, env=None):
+        u = self.action_vector(act)
+        input_energy_kw = u[0] * self.p["pump_power_max"] / 1000.0
+        thermal_energy_kw = sum(u[4 + i] * self.p["heater_max"] for i in range(3)) / 1000.0
+        return input_energy_kw + thermal_energy_kw
+
+    def ideal_energy_kw(self, x, y_sp, env, act):
         p = self.p
-        q = act["pumps"][0] * p["pump_flow_max"] * self.pump_flow_factor(env)
+        u = self.action_vector(act)
+        target = list(y_sp)
+        output_targets = target[-int(self.n):]
+        q = u[0] * p["pump_flow_max"] * self.pump_flow_factor(env)
         tot = 0.0
         for i in range(3):
-            tin = env["t_cold"] if i == 0 else t_sp[i - 1]
-            tot += _maxv(0.0, RHO_CP * q * (t_sp[i] - tin) + p["ua_loss"] * self.heat_loss_factor(env) * (t_sp[i] - env["t_amb"]))
-        return tot
+            tin = env["t_cold"] if i == 0 else output_targets[i - 1]
+            tot += _maxv(0.0, RHO_CP * q * (output_targets[i] - tin) + p["ua_loss"] * self.heat_loss_factor(env) * (output_targets[i] - env["t_amb"]))
+        return tot / 1000.0

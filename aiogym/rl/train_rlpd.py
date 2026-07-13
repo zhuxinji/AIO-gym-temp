@@ -26,6 +26,7 @@ from aiogym.rl.artifacts import (
     learning_curve_point,
     result_row,
     rl_payload,
+    utc_run_id,
     write_rl_artifacts,
 )
 
@@ -69,10 +70,16 @@ def artifact_dir_for(args, base: str) -> str:
     return args.artifact_dir or f"{base}_artifacts"
 
 
+def output_base_for(args, run_id: str | None = None) -> str:
+    if args.out:
+        return args.out
+    return f"aiogym/runs/rl/rlpd/{args.scenario}_{run_id or utc_run_id()}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default="cascade", choices=["cascade", "quadruple", "cstr", "hvac"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "track"])
+    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking", "track"])
     ap.add_argument("--control-dt", type=float, default=0.5)
     ap.add_argument("--episode-steps", type=int, default=400)
     ap.add_argument("--offline-episodes", type=int, default=40)
@@ -86,7 +93,7 @@ def main():
     ap.add_argument("--n-critics", type=int, default=5)
     ap.add_argument("--eval-every", type=int, default=2500)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out", default=None, help="stable output basename; defaults to a timestamped path")
     ap.add_argument("--artifact-dir", default=None,
                     help="standard benchmark artifact directory; defaults to <out>_artifacts")
     ap.add_argument("--save-rollout", action="store_true")
@@ -100,6 +107,7 @@ def main():
     torch.manual_seed(args.seed)
 
     protocol_cls = {"economic": BenchmarkProtocol.economic,
+                    "tracking": BenchmarkProtocol.tracking,
                     "track": BenchmarkProtocol.tracking,
                     "kpi": BenchmarkProtocol.kpi}[args.reward_mode]
 
@@ -173,8 +181,8 @@ def main():
     print(f"[pretrain] done in {time.time()-t0:.0f}s  {metric}={pre:.1f}")
 
     # 2b) online learning (symmetric offline+online sampling), best-checkpoint by KPI
-    base = args.out or f"aiogym/runs/rl/rlpd/{args.scenario}"
-    os.makedirs(os.path.dirname(base), exist_ok=True)
+    base = output_base_for(args)
+    os.makedirs(os.path.dirname(base) or ".", exist_ok=True)
     best, best_path = -1e18, base + "_best.pt"
     obs, _ = env.reset(seed=args.seed)
     hist = []

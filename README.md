@@ -34,7 +34,7 @@ The detailed backend usage guide lives in [aiogym/README.md](aiogym/README.md).
   policies.
 - Named benchmark suites with summary tables, reports, plots, and reusable
   artifacts.
-- Human-readable model cards under `aiogym/models/model_cards/`.
+- Human-readable model cards under `docs/model_cards/`.
 - Model extension examples under `aiogym/models/examples/`.
 - Controller extension examples under `aiogym/controllers/examples/`.
 - RL training entrypoints for SB3 and RLPD.
@@ -45,20 +45,22 @@ Install the backend from the repository root:
 
 ```bash
 pip install -e ./aiogym
-pip install -e "./aiogym[oracle]"   # optional: CasADi/IPOPT oracle support
-pip install -e "./aiogym[train]"    # optional: SB3/Torch training support
-pip install -e "./aiogym[export]"   # optional: ONNX export support
 ```
+
+The default install includes the local benchmark, oracle, training, and ONNX
+export dependencies. Extras such as `[oracle]`, `[train]`, `[export]`, and
+`[all]` are deprecated compatibility aliases scheduled for removal in `aiogym 0.3`.
 
 Common commands:
 
 ```bash
 aiogym-suite-benchmark --suite standard-baselines --episodes 3 --artifact-dir aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-single-benchmark --scenario cstr --objective tracking --controllers pid,mpc
+aiogym-suite-benchmark --suite economic-supervisory --scenarios cstr --controllers onnx --onnx-path frontend/models/rlpd_cstr.onnx --episodes 1
 aiogym-report aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-artifact-check aiogym/runs/bench_suite_standard-baselines_artifacts
 aiogym-train-sb3 --scenario cstr --algo sac --steps 10000 --onnx
-aiogym-model-cards --format markdown --out-dir aiogym/models/model_cards
+aiogym-model-cards --format markdown --out-dir docs/model_cards
 ```
 
 Python API:
@@ -66,7 +68,7 @@ Python API:
 ```python
 import aiogym
 
-env = aiogym.make_env(model="cstr", protocol="tracking", seed=7)
+env = aiogym.make_env(model="cstr", objective="tracking", seed=7)
 payload = aiogym.run_benchmark({
     "scenario": "cstr",
     "objective": "tracking",
@@ -89,12 +91,12 @@ generated outputs are separated from source files.
 |---|---|---|
 | Package setup | No `pyproject.toml`; not installable as a standard package. | Installable backend package with `aiogym/pyproject.toml`, optional dependency groups, package data, and console scripts. |
 | User entrypoints | Direct scripts such as `python aiogym/train.py`, `python aiogym/train_rlpd.py`, and `train_all.sh`. | Stable commands such as `aiogym-suite-benchmark`, `aiogym-report`, `aiogym-train-sb3`, and `aiogym-train-rlpd`. |
-| Python API | Mostly direct imports from `aiogym.__init__` and internal modules. | Small public API: `aiogym.make_env`, `aiogym.run_benchmark`, and `aiogym.plot_results`. |
-| Backend layout | Flat files: `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py`. | Layered packages: `models/`, `controllers/`, `evaluation/`, `rl/`, `cli/`, plus a thin `api.py`. |
+| Python API | Mostly direct imports from `aiogym.__init__` and internal modules. | Small public API: `aiogym.define_model`, `aiogym.register_model`, `aiogym.make_model`, `aiogym.make_env`, `aiogym.run_benchmark`, and `aiogym.plot_results`. |
+| Backend layout | Flat files: `models.py`, `kernel.py`, `baselines.py`, `oracle.py`, `rlpd.py`, `train.py`, `train_sac.py`, `train_rlpd.py`. | Layered packages: `models/`, `env`, `controllers/`, `evaluation/`, `rl/`, and `cli/`, with common user functions re-exported from `aiogym`. |
 | Model coverage | Backend registry covered cascade, quadruple, CSTR, HVAC, and fired heater. | Backend registry covers cascade, quadruple, CSTR, HVAC, extraction, fired heater, and crystallization. |
 | Model metadata | Model-card behavior was not a first-class package concern. | Model cards and contract validation live with `aiogym.models`, and exports are checked by tests. |
 | Controllers | PID, MPC, evaluation helpers, and baseline concepts were concentrated in `baselines.py` plus `oracle.py`. | Controller interface, registry, configs, adapters, PID, MPC, oracle, and tuning tools live under `aiogym.controllers`. |
-| Evaluation | Evaluation was mostly script/helper driven. | `aiogym.evaluation` owns benchmark protocols, rollout collection, metrics, reports, plots, artifact generation, and suites. |
+| Evaluation | Evaluation was mostly script/helper driven. | `aiogym.evaluation` owns benchmark objectives/configs, rollout collection, metrics, reports, plots, artifact generation, and suites. |
 | Benchmark suites | No canonical suite config package. | Named suite JSON files live under `aiogym/evaluation/suites/`, including `standard-baselines`, tracking/economic suites, robustness, RL-direct, and crystallization. |
 | Reports and plots | Generated outputs were scattered around runs or produced by scripts. | Artifacts use one standard layout with `benchmark.json`, `config/`, `metadata/`, `summary/`, `results/`, and `figures/`. |
 | RL code | `rlpd.py`, `train_rlpd.py`, `train_sac.py`, and `train.py` lived beside core backend modules. | RL algorithms and training flows live under `aiogym.rl`; default outputs go under `aiogym/runs/rl/`. |
@@ -122,15 +124,24 @@ aiogym-train-rlpd
 Old compatibility wrappers and broad shell scripts were removed, including the
 old `train_all.sh` flow.
 
-### 2. Thin public API
+### 2. Public Python Entrypoints
 
-`aiogym/api.py` intentionally exposes only ordinary user-facing functions:
+The top-level `aiogym` package re-exports the ordinary user-facing functions:
 
 ```python
 aiogym.make_env(...)
 aiogym.run_benchmark(...)
 aiogym.plot_results(...)
+aiogym.define_model(...)
+aiogym.register_model(...)
+aiogym.make_model(...)
 ```
+
+For custom scenarios, use `define_model(...)` to define a model from a
+declarative spec and `register_model(...)` to bind it to a scenario name.
+`make_model(...)` mirrors `make_env(...)` at the model layer: it instantiates or
+validates an already defined model from a scenario name, model class, factory, or
+model instance.
 
 Lower-level artifact writing remains internal to `aiogym.evaluation.artifacts`
 instead of being exposed at the top level.
@@ -199,7 +210,7 @@ aiogym/evaluation/
 
 This boundary is now explicit:
 
-- `core.py` defines benchmark protocols and rollout/evaluation logic.
+- `core.py` defines benchmark objectives/configs and rollout/evaluation logic.
 - `metrics/` contains metric calculators.
 - `reports.py` renders benchmark reports.
 - `plots.py` produces SVG plots.
@@ -226,11 +237,11 @@ model cards, summaries, RL learning curves, and full result payloads a
 predictable home.
 
 Human-readable model cards for every built-in process live in
-`aiogym/models/model_cards/`. They are generated from the same registered model metadata
+`docs/model_cards/`. They are generated from the same registered model metadata
 used by benchmark artifacts:
 
 ```bash
-aiogym-model-cards --format markdown --out-dir aiogym/models/model_cards
+aiogym-model-cards --format markdown --out-dir docs/model_cards
 ```
 
 Extension templates live next to the layer they extend:
@@ -259,8 +270,8 @@ aiogym/runs/rl/
   sb3/
 ```
 
-`aiogym.rl` uses lazy imports so viewing training help does not require optional
-Torch/SB3 dependencies.
+`aiogym.rl` uses lazy imports so importing the package stays light, while the
+default install includes the Torch/SB3 training stack.
 
 ### 9. Runs cleanup
 
@@ -289,15 +300,15 @@ Use this structure when deciding where new backend code belongs:
 
 ```text
 aiogym/
-  api.py          # stable Python user entrypoint
   cli/            # terminal entrypoints only
-  models/         # process models, kernel, registry, model cards
+  env.py          # Gymnasium environment and make_env helper
+  models/         # process models, contracts, registry, model cards
   controllers/    # controller API, built-in controllers, configs, tuning
-  evaluation/     # benchmark protocols, metrics, reports, plots, artifacts
+  evaluation/     # benchmark objectives/configs, metrics, reports, plots, artifacts
   rl/             # RL algorithms and training workflows
   runs/           # local generated outputs
 ```
 
-The key design rule is that `api.py` and `cli/` are doors into the system, not
-places to hide core logic. Core behavior should live in `models/`,
-`controllers/`, `evaluation/`, or `rl/`.
+The key design rule is that the top-level `aiogym` package and `cli/` are doors
+into the system, not places to hide core logic. Core behavior should live in
+`models/`, `env.py`, `controllers/`, `evaluation/`, or `rl/`.

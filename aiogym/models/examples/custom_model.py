@@ -17,14 +17,21 @@ from aiogym.models import ProcessModelContract, register_model, unregister_model
 class MiniHeatedTank(ProcessModelContract):
     scenario = "mini_heated_tank"
     display_name = "Mini heated tank"
-    summary = "One liquid level and one temperature state with feed and heater actions."
+    summary = "One liquid level and one temperature state with generic action-vector inputs."
     n = 1
     dt_micro = 0.02
 
     state_names = ("h0", "T0")
     state_units = {"h0": "m", "T0": "degC"}
     state_bounds = {"h0": (0.0, 1.0), "T0": (0.0, 120.0)}
-    action_names = ("feed_pump", "heater_0")
+    action_names = ("feed_flow", "heater_power")
+    action_units = {"feed_flow": "fraction", "heater_power": "fraction"}
+    action_bounds = {"feed_flow": (0.0, 1.0), "heater_power": (0.0, 1.0)}
+    action_kinds = {"feed_flow": "flow", "heater_power": "heat"}
+    output_names = ("tank_temperature",)
+    output_units = {"tank_temperature": "degC"}
+    output_bounds = {"tank_temperature": (20.0, 80.0)}
+    default_y_sp = (50.0,)
     param_units = {
         "area": "m2",
         "pump_flow_max": "m3/s",
@@ -75,15 +82,13 @@ class MiniHeatedTank(ProcessModelContract):
             "t_amb": 20.0,
         }
 
-    def actuator_counts(self):
-        return (1, 0, 1)
-
     def initial_state(self):
         return [0.25, 20.0]
 
-    def derivatives(self, x, act, env):
-        pump = float(act["pumps"][0])
-        heater = float(act["heaters"][0])
+    def dynamics(self, x, u, env=None, backend="numeric", ca=None):
+        env = env or {}
+        pump = float(u[0])
+        heater = float(u[1])
         feed = pump * self.p["pump_flow_max"] + float(env.get("feed_bias", 0.0))
         dh = feed / self.p["area"]
         dT = (
@@ -93,8 +98,8 @@ class MiniHeatedTank(ProcessModelContract):
         )
         return [dh, dT]
 
-    def levels_temps(self, x):
-        return [x[0]], [x[1]]
+    def controlled_output(self, x, backend="numeric", ca=None):
+        return [x[1]]
 
     def clamp_state(self, x):
         return [float(np.clip(x[0], 0.0, 1.0)), float(x[1])]
@@ -115,7 +120,7 @@ def main():
         print({
             "scenario": env.scenario,
             "obs_shape": tuple(obs.shape),
-            "temperature": round(info["temps"][0], 3),
+            "temperature": round(info["y"][0], 3),
             "total_reward": round(total_reward, 3),
         })
     finally:

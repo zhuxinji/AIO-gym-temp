@@ -1,6 +1,6 @@
 import math
 
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import G, RHO_CP, ProcessModelContract, _maxv
 
 
 class QuadrupleModel(ProcessModelContract):
@@ -13,6 +13,10 @@ class QuadrupleModel(ProcessModelContract):
     state_units = {"h0": "m", "h1": "m", "h2": "m", "h3": "m", "T0": "degC", "T1": "degC", "T2": "degC", "T3": "degC"}
     state_bounds = {"h0": (0.0, 0.8), "h1": (0.0, 0.8), "h2": (0.0, 0.8), "h3": (0.0, 0.8), "T0": (0.0, 120.0), "T1": (0.0, 120.0), "T2": (0.0, 120.0), "T3": (0.0, 120.0)}
     action_names = ("pump_0", "pump_1", "heater_0", "heater_1", "heater_2", "heater_3")
+    output_names = ("lower_tank_0_level", "lower_tank_1_level", "tank_0_temperature", "tank_1_temperature", "tank_2_temperature", "tank_3_temperature")
+    output_units = {"lower_tank_0_level": "m", "lower_tank_1_level": "m", "tank_0_temperature": "degC", "tank_1_temperature": "degC", "tank_2_temperature": "degC", "tank_3_temperature": "degC"}
+    output_bounds = {"lower_tank_0_level": (0.0, 0.8), "lower_tank_1_level": (0.0, 0.8), "tank_0_temperature": (25, 72), "tank_1_temperature": (25, 72), "tank_2_temperature": (20, 58), "tank_3_temperature": (20, 58)}
+    default_y_sp = (0.40, 0.40, 50.0, 50.0, 35.0, 35.0)
     plant_regime = {"ua_loss": (0.4, 2.6), "heater_max": (0.6, 1.15), "pump_flow_max": (0.7, 1.3), "a_out": (0.8, 1.25)}
     economic_config = {
         "temp_band": [(46, 58), (46, 58), (32, 46), (32, 46)],
@@ -22,7 +26,7 @@ class QuadrupleModel(ProcessModelContract):
         "w_energy": 0.7,
         "w_viol": 29.0,
     }
-    supervisory_layout = (("t_sp", 0, 25, 72), ("t_sp", 1, 25, 72), ("t_sp", 2, 20, 58), ("t_sp", 3, 20, 58))
+    supervisory_layout = (("y_sp", 2, 25, 72), ("y_sp", 3, 25, 72), ("y_sp", 4, 20, 58), ("y_sp", 5, 20, 58))
     param_units = {"area": "m2", "height_max": "m", "a_out": "m2", "ua_loss": "W/K", "heater_max": "W", "pump_flow_max": "m3/s", "pump_power_max": "W", "t_cold": "degC", "t_amb": "degC", "h_floor": "m", "gamma1": "fraction", "gamma2": "fraction"}
     param_bounds = {"area": (0.01, 2.0), "height_max": (0.1, 5.0), "a_out": (0.0, 0.01), "ua_loss": (0.0, 1000.0), "heater_max": (0.0, 500000.0), "pump_flow_max": (0.0, 0.02), "pump_power_max": (0.0, 10000.0), "t_cold": (0.0, 40.0), "t_amb": (0.0, 45.0), "h_floor": (1e-6, 0.1), "gamma1": (0.05, 0.95), "gamma2": (0.05, 0.95)}
     input_disturbances = ProcessModelContract.input_disturbances + (
@@ -126,10 +130,10 @@ class QuadrupleModel(ProcessModelContract):
             dx += [(qin - out[i]) / p["area"], mix / vol + (pheat - qloss) / (RHO_CP * vol)]
         return ops.vector(dx)
 
-    def levels_temps(self, x, backend="numeric", ca=None):
+    def display_outputs(self, x, backend="numeric", ca=None):
         if backend == "casadi":
-            return [x[2 * i] for i in range(4)], [x[2 * i + 1] for i in range(4)]
-        return [_maxv(x[2 * i], 0.0) for i in range(4)], [x[2 * i + 1] for i in range(4)]
+            return {"levels": [x[2 * i] for i in range(4)], "temps": [x[2 * i + 1] for i in range(4)]}
+        return {"levels": [_maxv(x[2 * i], 0.0) for i in range(4)], "temps": [x[2 * i + 1] for i in range(4)]}
 
     def initial_state(self):
         return [0.25, 20.0, 0.25, 20.0, 0.12, 20.0, 0.12, 20.0]
@@ -137,39 +141,45 @@ class QuadrupleModel(ProcessModelContract):
     def clamp_state(self, x):
         return x
 
-    def controlled_levels(self):
-        return [0, 1]
+    def controlled_output(self, x, backend="numeric", ca=None):
+        display = self.display_outputs(x, backend=backend, ca=ca)
+        levels, temps = display["levels"], display["temps"]
+        return [levels[0], levels[1], temps[0], temps[1], temps[2], temps[3]]
 
-    def default_setpoints(self):
-        return {0: 0.40, 1: 0.40}, [50.0, 50.0, 35.0, 35.0]
+    def legacy_observation_level_target_slots(self):
+        return [0, 1]
 
     # ---- KPI support ----
     energy_scored = True
 
-    def heater_power(self, act):
-        return sum(u * self.p["heater_max"][i] for i, u in enumerate(act["heaters"]))
-
-    def pump_power(self, act):
-        return sum(u * self.p["pump_power_max"] for u in act["pumps"])
-
     def energy_kw(self, u, backend="numeric", ca=None):
         return sum(u[2 + i] * self.p["heater_max"][i] for i in range(4)) / 1000.0
 
-    def ideal_power(self, levels, temps, t_sp, env, act):
+    def action_energy_kw(self, act, x=None, env=None):
+        u = self.action_vector(act)
+        input_energy_kw = sum(u[i] * self.p["pump_power_max"] for i in range(2)) / 1000.0
+        thermal_energy_kw = sum(u[2 + i] * self.p["heater_max"][i] for i in range(4)) / 1000.0
+        return input_energy_kw + thermal_energy_kw
+
+    def ideal_energy_kw(self, x, y_sp, env, act):
         p = self.p
         g1, g2, tc = self.gamma1, self.gamma2, env["t_cold"]
         flow_factor = self.pump_flow_factor(env)
-        Q1 = act["pumps"][0] * p["pump_flow_max"] * flow_factor
-        Q2 = act["pumps"][1] * p["pump_flow_max"] * flow_factor
+        u = self.action_vector(act)
+        target = list(y_sp)
+        output_targets = target[-int(self.n):]
+        Q1 = u[0] * p["pump_flow_max"] * flow_factor
+        Q2 = u[1] * p["pump_flow_max"] * flow_factor
+        levels = self.display_outputs(self.state_vector(x))["levels"]
         out = self._out(levels)
         inflow = [
-            [(g1 * Q1, tc), (out[2], t_sp[2])],
-            [(g2 * Q2, tc), (out[3], t_sp[3])],
+            [(g1 * Q1, tc), (out[2], output_targets[2])],
+            [(g2 * Q2, tc), (out[3], output_targets[3])],
             [((1 - g2) * Q2, tc)],
             [((1 - g1) * Q1, tc)],
         ]
         tot = 0.0
         for i in range(4):
-            mix = sum(q * (t_sp[i] - tin) for q, tin in inflow[i])
-            tot += _maxv(0.0, RHO_CP * mix + p["ua_loss"] * self.heat_loss_factor(env) * (t_sp[i] - env["t_amb"]))
-        return tot
+            mix = sum(q * (output_targets[i] - tin) for q, tin in inflow[i])
+            tot += _maxv(0.0, RHO_CP * mix + p["ua_loss"] * self.heat_loss_factor(env) * (output_targets[i] - env["t_amb"]))
+        return tot / 1000.0

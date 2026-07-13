@@ -3,33 +3,22 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from datetime import datetime, timezone
 
-from aiogym.controllers import make_controller
+from aiogym._config import parse_seed_list
+from aiogym._serialization import write_json
 from aiogym.evaluation import (
-    BenchmarkConfig,
     BenchmarkProtocol,
     build_evaluation_report,
-    evaluate_controller,
     metric_direction,
     primary_metric_for_objective,
-    rollout_controller,
+    resolve_protocol,
     plot_rollouts,
     plot_summary,
 )
+from aiogym.evaluation.runner import run_evaluation_case
 from aiogym.models import SCENARIOS
-
-
-def protocol_factory(objective: str):
-    return {
-        "economic": BenchmarkProtocol.economic,
-        "tracking": BenchmarkProtocol.tracking,
-        "robustness": BenchmarkProtocol.robustness,
-        "safety": BenchmarkProtocol.safety,
-        "kpi": BenchmarkProtocol.kpi,
-    }[objective]
 
 
 def parse_controllers(raw: str):
@@ -39,76 +28,35 @@ def parse_controllers(raw: str):
     return names
 
 
-def parse_seed_list(raw: str | None, seed: int, episodes: int):
-    if not raw:
-        return [seed + i for i in range(episodes)]
-    seeds = [int(part.strip()) for part in raw.split(",") if part.strip()]
-    if not seeds:
-        raise ValueError("--seed-list must contain at least one integer seed")
-    return seeds
-
-
-def compact_row(result: dict):
-    controller = result["controller"]
-    metric = result["metric"]
-    diagnostics = dict(result.get("controller_diagnostics") or {})
-    return {
-        "name": result["name"],
-        "control_structure": controller.get("control_structure"),
-        "controller_status": result.get("controller_status", "ok"),
-        "controller_solve_count": diagnostics.get("solve_count", 0),
-        "controller_solver_success_count": diagnostics.get("solver_success_count", 0),
-        "controller_solver_failure_count": diagnostics.get("solver_failure_count", 0),
-        "controller_fallback_count": diagnostics.get("fallback_count", 0),
-        "controller_last_solver_error": diagnostics.get("last_solver_error"),
-        "metric": metric,
-        metric: result[metric],
-        f"{metric}_std": result[f"{metric}_std"],
-        "kpi": result["kpi"],
-        "normalized_score": result["normalized_score"],
-        "profit": result["profit"],
-        "return": result["return"],
-        "track": result["track"],
-        "constraint": result["constraint"],
-        "tracking_iae": result.get("tracking_iae"),
-        "energy_kwh": result.get("energy_kwh"),
-        "runtime_seconds": result.get("runtime_seconds"),
-        "runtime_seconds_per_step": result.get("runtime_seconds_per_step"),
-        "runtime_total_seconds": result.get("runtime_total_seconds"),
-        "constraint_violation_count": result.get("constraint_violation_count"),
-        "constraint_violation_severity": result.get("constraint_violation_severity"),
-        "safety_margin_min": result.get("safety_margin_min"),
-        "episodes": result["episodes"],
-        "seed": result["seed"],
-        "seed_list": result["seed_list"],
-    }
-
-
 def controller_specs(args, baseline_protocol: BenchmarkProtocol):
     specs = []
     for name in parse_controllers(args.controllers):
-        if name == "sb3":
-            if not args.sb3_path:
-                raise ValueError("controller 'sb3' requires --sb3-path")
-            sb3_protocol = protocol_factory(args.objective)(
+        if name in {"sb3", "onnx"}:
+            path = args.sb3_path if name == "sb3" else args.onnx_path
+            action_mode = args.sb3_action_mode if name == "sb3" else args.onnx_action_mode
+            if not path:
+                raise ValueError(f"controller '{name}' requires --{name}-path")
+            policy_protocol = resolve_protocol(
                 args.scenario,
-                action_mode=args.sb3_action_mode,
-                episode_steps=args.episode_steps,
-                control_dt=args.control_dt,
-            )
-            specs.append({
-                "name": "sb3",
-                "protocol": sb3_protocol,
-                "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
-                "config": {
-                    "path": args.sb3_path,
-                    "algo": args.sb3_algo,
-                    "action_mode": args.sb3_action_mode,
+                args.objective,
+                {
+                    "action_mode": action_mode,
+                    "episode_steps": args.episode_steps,
+                    "control_dt": args.control_dt,
                 },
+            )
+            config = {"path": path, "action_mode": action_mode}
+            if name == "sb3":
+                config["algo"] = args.sb3_algo
+            specs.append({
+                "name": name,
+                "protocol": policy_protocol,
+                "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
+                "config": config,
             })
             continue
         if name in ("oracle", "nmpc"):
-            mode = "track" if args.objective == "tracking" else baseline_protocol.env_reward_mode
+            mode = "tracking" if args.objective == "tracking" else baseline_protocol.env_reward_mode
             specs.append({
                 "name": name,
                 "protocol": baseline_protocol,
@@ -126,29 +74,27 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
 
 
 def run_spec(spec: dict, scenario: str):
-    controller = make_controller(spec["name"], scenario=scenario, config=spec.get("config") or {})
-    seeds = spec["seed_list"]
-    return evaluate_controller(
-        controller,
-        spec["protocol"].make_env(),
-        episodes=len(seeds),
-        seed=seeds[0],
-        seed_list=seeds,
+    return run_evaluation_case(
+        scenario=scenario,
+        controller=spec["name"],
         protocol=spec["protocol"],
+        seeds=spec["seed_list"],
+        controller_config=spec.get("config") or {},
         include_episodes=True,
-    )
+    )["result"]
 
 
 def rollout_spec(spec: dict, scenario: str, max_steps: int | None = None):
-    controller = make_controller(spec["name"], scenario=scenario, config=spec.get("config") or {})
-    protocol = spec["protocol"]
-    return rollout_controller(
-        controller,
-        protocol.make_env(),
-        seed=spec["seed_list"][0],
-        max_steps=max_steps,
-        protocol=protocol,
-    )
+    return run_evaluation_case(
+        scenario=scenario,
+        controller=spec["name"],
+        protocol=spec["protocol"],
+        seeds=spec["seed_list"],
+        controller_config=spec.get("config") or {},
+        include_episodes=False,
+        save_rollout=True,
+        rollout_steps=max_steps,
+    )["rollout"]
 
 
 def figure_paths(out_path: str, scenario: str):
@@ -175,32 +121,41 @@ def main():
     ap.add_argument("--sb3-path", default=None)
     ap.add_argument("--sb3-algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--sb3-action-mode", default="setpoint", choices=["actuator", "setpoint"])
+    ap.add_argument("--onnx-path", default=None)
+    ap.add_argument("--onnx-action-mode", default="setpoint", choices=["actuator", "setpoint"])
     ap.add_argument("--out", default=None)
     ap.add_argument("--save-rollouts", action="store_true")
     ap.add_argument("--plot", action="store_true")
     ap.add_argument("--rollout-steps", type=int, default=None)
     args = ap.parse_args()
 
-    make_protocol = protocol_factory(args.objective)
-    baseline_protocol = make_protocol(
+    baseline_protocol = resolve_protocol(
         args.scenario,
-        action_mode="actuator",
-        episode_steps=args.episode_steps,
-        control_dt=args.control_dt,
+        args.objective,
+        {
+            "action_mode": "actuator",
+            "episode_steps": args.episode_steps,
+            "control_dt": args.control_dt,
+        },
     )
     out_path = args.out or f"aiogym/runs/bench_{args.scenario}_controllers.json"
     specs = controller_specs(args, baseline_protocol)
-    results = [run_spec(spec, args.scenario) for spec in specs]
-    rows = [compact_row(r) for r in results]
-    configs = [
-        BenchmarkConfig.from_protocol(
-            spec["protocol"],
+    case_artifacts = [
+        run_evaluation_case(
+            scenario=args.scenario,
             controller=spec["name"],
+            protocol=spec["protocol"],
             seeds=spec["seed_list"],
             controller_config=spec.get("config") or {},
-        ).metadata()
+            include_episodes=True,
+            save_rollout=args.save_rollouts or args.plot,
+            rollout_steps=args.rollout_steps,
+        )
         for spec in specs
     ]
+    results = [case["result"] for case in case_artifacts]
+    rows = [case["row"] for case in case_artifacts]
+    configs = [case["config"] for case in case_artifacts]
 
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -219,7 +174,7 @@ def main():
 
     rollouts = []
     if args.save_rollouts or args.plot:
-        rollouts = [rollout_spec(spec, args.scenario, max_steps=args.rollout_steps) for spec in specs]
+        rollouts = [case["rollout"] for case in case_artifacts]
         payload["rollouts"] = rollouts
 
     if args.plot:
@@ -228,9 +183,7 @@ def main():
         plot_rollouts(rollouts, figures["rollout"], args.scenario)
         payload["figures"] = figures
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
+    write_json(out_path, payload)
 
     print(f"saved {out_path}")
     if args.plot:

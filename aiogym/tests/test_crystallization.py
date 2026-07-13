@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
-from aiogym.evaluation import BenchmarkProtocol, evaluate_controller
+from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, rollout_controller
 from aiogym.models import SCENARIOS, make_model
 
 
@@ -54,7 +54,7 @@ def test_action_to_temperature_mapping():
 def test_unified_reward_modes_are_finite():
     model = make_model("crystallization")
     assert not callable(getattr(model, "reward_terms", None))
-    for reward_mode in ("track", "kpi", "economic"):
+    for reward_mode in ("tracking", "track", "kpi", "economic"):
         env = _make_env(reward_mode=reward_mode, crystal_ln_sp=10.5, crystal_cv_sp=0.85, episode_steps=3)
         obs, _ = env.reset(seed=0)
         obs, reward, terminated, truncated, info = env.step(np.array([0.5], dtype=np.float32))
@@ -71,12 +71,31 @@ def test_tracking_controllers_build():
     mpc = make_controller("mpc", scenario="crystallization")
     oracle = make_controller("oracle", scenario="crystallization")
     assert pid.metadata()["scenario"] == "crystallization"
-    assert pid.metadata()["pairing"]["temp"] == [[0, 0, True]]
+    assert pid.metadata()["loops"][0]["y_index"] == 1
+    assert pid.metadata()["loops"][0]["reverse"] is True
     assert mpc.metadata()["scenario"] == "crystallization"
     assert mpc.metadata()["horizon"] == 2
     assert oracle.metadata()["scenario"] == "crystallization"
-    assert oracle.metadata()["horizon"] == 2
-    assert oracle.metadata()["mode"] == "track"
+    assert oracle.metadata()["horizon"] == 4
+    assert oracle.metadata()["mode"] == "economic"
+
+
+def test_crystallization_mpc_uses_affine_output_linearization():
+    protocol = BenchmarkProtocol.tracking(
+        "crystallization",
+        action_mode="actuator",
+        episode_steps=3,
+        control_dt=0.5,
+    )
+    rollout = rollout_controller(
+        make_controller("mpc", scenario="crystallization"),
+        protocol.make_env(),
+        seed=0,
+        protocol=protocol,
+    )
+    actions = [row["action"][0] for row in rollout["rollout"]]
+    assert actions[0] != 0.0
+    assert actions != [0.0] * len(actions)
 
 
 def test_pid_tracking_rollout():
@@ -99,6 +118,9 @@ def test_pid_tracking_rollout():
         protocol=protocol,
     )
     assert result["name"] == "PID"
+    assert result["metric"] == "tracking_cost"
+    assert np.isfinite(result["tracking_cost"])
+    assert np.isfinite(result["tracking_mse"])
     assert np.isfinite(result["tracking_iae"])
     assert result["controller"]["scenario"] == "crystallization"
 
@@ -145,6 +167,7 @@ if __name__ == "__main__":
     test_action_to_temperature_mapping()
     test_unified_reward_modes_are_finite()
     test_tracking_controllers_build()
+    test_crystallization_mpc_uses_affine_output_linearization()
     test_pid_tracking_rollout()
     test_nominal_rollout_no_nan()
     test_custom_setpoint_observation()

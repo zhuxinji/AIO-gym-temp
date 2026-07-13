@@ -1,6 +1,4 @@
-import math
-
-from ..core import G, RHO_CP, ProcessModelContract, _casadi_ops, _maxv
+from ..core import ProcessModelContract
 
 
 class HVACModel(ProcessModelContract):
@@ -14,6 +12,10 @@ class HVACModel(ProcessModelContract):
     state_units = {"T0": "degC", "T1": "degC"}
     state_bounds = {"T0": (-20.0, 60.0), "T1": (-20.0, 60.0)}
     action_names = ("hvac_zone_0", "hvac_zone_1")
+    output_names = ("zone_0_temperature", "zone_1_temperature")
+    output_units = {"zone_0_temperature": "degC", "zone_1_temperature": "degC"}
+    output_bounds = {"zone_0_temperature": (18, 26), "zone_1_temperature": (18, 26)}
+    default_y_sp = (22.0, 22.0)
     plant_regime = {"Kc": (0.5, 1.7), "Ko": (0.5, 1.9), "C": (0.7, 1.4), "Pmax": (0.7, 1.2)}
     economic_config = {
         "temp_band": [(20.0, 24.0), (20.0, 24.0)],
@@ -23,7 +25,7 @@ class HVACModel(ProcessModelContract):
         "w_energy": 0.7,
         "w_viol": 8.2,
     }
-    supervisory_layout = (("t_sp", 0, 18, 26), ("t_sp", 1, 18, 26))
+    supervisory_layout = (("y_sp", 0, 18, 26), ("y_sp", 1, 18, 26))
     param_units = {"C": "J/K", "Pmax": "W", "Kc": "W/K", "Ko": "W/K", "t_cold": "degC", "t_amb": "degC", "h_floor": "m"}
     param_bounds = {"C": (100.0, 100000.0), "Pmax": (0.0, 20000.0), "Kc": (0.0, 1000.0), "Ko": (0.0, 1000.0), "t_cold": (-30.0, 50.0), "t_amb": (-30.0, 50.0), "h_floor": (1e-6, 0.1)}
     input_disturbances = (
@@ -95,8 +97,8 @@ class HVACModel(ProcessModelContract):
             (P2 + heat_load[1] + p["Kc"] * (x[0] - x[1]) + p["Ko"] * (Tout - x[1])) / p["C"],
         ])
 
-    def levels_temps(self, x, backend="numeric", ca=None):
-        return [], [x[0], x[1]]
+    def display_outputs(self, x, backend="numeric", ca=None):
+        return {"levels": [], "temps": [x[0], x[1]]}
 
     def initial_state(self):
         return [10.0, 10.0]
@@ -104,25 +106,10 @@ class HVACModel(ProcessModelContract):
     def clamp_state(self, x):
         return x
 
-    def controlled_levels(self):
-        return []
-
-    def default_setpoints(self):
-        return {}, [22.0, 22.0]
-
     # ---- KPI support (HVAC scores tracking + safety; no excess-energy term) ----
     energy_scored = False
-
-    def heater_power(self, act):
-        return sum(abs(self._power(u)) for u in act["heaters"])
-
-    def pump_power(self, act):
-        return 0.0
 
     def energy_kw(self, u, backend="numeric", ca=None):
         if backend == "casadi":
             return sum(ca.sqrt(((u[i] - 0.5) * 2 * self.p["Pmax"]) ** 2 + 1e-8) for i in range(2)) / 1000.0
         return sum(abs((u[i] - 0.5) * 2 * self.p["Pmax"]) for i in range(2)) / 1000.0
-
-    def ideal_power(self, levels, temps, t_sp, env, act):
-        return 0.0

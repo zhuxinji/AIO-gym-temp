@@ -10,7 +10,7 @@ multi-loop level and temperature tracking, actuator allocation, and disturbance-
 
 Cascaded material balances move liquid through three heated tanks; energy balances mix inlet, interstage, ambient-loss, and heater terms.
 
-- Well-mixed tanks with lumped heat loss and actuator gains.
+- Well-mixed tanks with lumped heat loss and actuator effectiveness.
 - Levels are clamped to the declared tank range after integration.
 - Heat-transfer and flow coefficients are benchmark parameters, not plant-identification claims.
 
@@ -32,12 +32,34 @@ The executable source of truth is the model implementation under `aiogym.models.
 | Name | Kind | Index | Bounds |
 | --- | --- | --- | --- |
 | feed_pump | pump | 0 | [0, 1] |
-| outlet_valve_0 | valve | 0 | [0, 1] |
-| outlet_valve_1 | valve | 1 | [0, 1] |
-| outlet_valve_2 | valve | 2 | [0, 1] |
-| heater_0 | heater | 0 | [0, 1] |
-| heater_1 | heater | 1 | [0, 1] |
-| heater_2 | heater | 2 | [0, 1] |
+| outlet_valve_0 | valve | 1 | [0, 1] |
+| outlet_valve_1 | valve | 2 | [0, 1] |
+| outlet_valve_2 | valve | 3 | [0, 1] |
+| heater_0 | heater | 4 | [0, 1] |
+| heater_1 | heater | 5 | [0, 1] |
+| heater_2 | heater | 6 | [0, 1] |
+
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| tank_0_level | m | [0, 0.8] |
+| tank_1_level | m | [0, 0.8] |
+| tank_2_level | m | [0, 0.8] |
+| tank_0_temperature | degC | [25, 80] |
+| tank_1_temperature | degC | [30, 82] |
+| tank_2_temperature | degC | [35, 85] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| tank_0_level | tank_0_level | m | [0, 0.8] |
+| tank_1_level | tank_1_level | m | [0, 0.8] |
+| tank_2_level | tank_2_level | m | [0, 0.8] |
+| tank_0_temperature | tank_0_temperature | degC | [25, 80] |
+| tank_1_temperature | tank_1_temperature | degC | [30, 82] |
+| tank_2_temperature | tank_2_temperature | degC | [35, 85] |
 
 ## Disturbances
 
@@ -76,6 +98,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 6
 - Action vector length: 7
+- Controlled output vector length: 6
+- Setpoint vector length: 6
 - Dynamics disturbances: [t_cold, t_amb, extra_outflow, pump_flow_factor, heater_efficiency, heat_loss_factor]
 - Micro integration step: 0.02 s
 - Energy is scored: True
@@ -104,6 +128,6 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 | Entry | Meaning |
 | --- | --- |
-| 0 | [t_sp, 0, 25, 80] |
-| 1 | [t_sp, 1, 30, 82] |
-| 2 | [t_sp, 2, 35, 85] |
+| 0 | [y_sp, 3, 25, 80] |
+| 1 | [y_sp, 4, 30, 82] |
+| 2 | [y_sp, 5, 35, 85] |

@@ -1,24 +1,29 @@
 """Evaluation protocols, metrics, and artifact reports."""
 
-from .core import (
+from .protocols import (
     EVALUATION_SCHEMA_VERSION,
     METRIC_DEFINITIONS,
     METRIC_DIRECTIONS,
     PRIMARY_METRICS,
     PROTOCOL_METRICS,
+    PUBLIC_BENCHMARK_SCHEMA_VERSION,
     ROLLOUT_SCHEMA,
     BenchmarkConfig,
     BenchmarkProtocol,
-    _tracking_step_metrics,
-    build_evaluation_report,
-    evaluate_controller,
     metric_definitions,
     metric_direction,
     metric_for_reward_mode,
     primary_metric_for_objective,
+    resolve_protocol,
+)
+from .core import (
+    _tracking_step_metrics,
+    build_evaluation_report,
+    evaluate_controller,
     result_schema,
     rollout_controller,
 )
+from .benchmark import run_benchmark
 from .reports import (
     ARTIFACT_CHECK_SCHEMA_VERSION,
     REPORT_SCHEMA_VERSION,
@@ -35,14 +40,17 @@ __all__ = [
     "PROTOCOL_METRICS",
     "PRIMARY_METRICS",
     "METRIC_DIRECTIONS",
+    "PUBLIC_BENCHMARK_SCHEMA_VERSION",
     "BenchmarkConfig",
     "BenchmarkProtocol",
     "metric_for_reward_mode",
     "primary_metric_for_objective",
     "metric_direction",
     "metric_definitions",
+    "resolve_protocol",
     "evaluate_controller",
     "rollout_controller",
+    "run_benchmark",
     "result_schema",
     "build_evaluation_report",
     "_tracking_step_metrics",

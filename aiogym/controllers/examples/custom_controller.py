@@ -25,7 +25,7 @@ class ConstantTrimController:
     def __init__(self, model, trim=0.5):
         self.model = model
         self.trim = float(trim)
-        self.nu = sum(model.actuator_counts())
+        self.nu = model.action_dim()
 
     def reset(self, seed=None):
         return None

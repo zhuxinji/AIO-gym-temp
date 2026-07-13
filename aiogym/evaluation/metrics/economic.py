@@ -8,6 +8,4 @@ def economic_step_metrics(info, dt: float):
         "prod": float(info.get("prod", 0.0)),
         "production": float(info.get("prod", 0.0)),
         "energy_kwh": float(info.get("energy_kw", 0.0)) * dt / 3600.0,
-        "heat_kwh": float(info.get("heat_kw", 0.0)) * dt / 3600.0,
-        "pump_kwh": float(info.get("pump_kw", 0.0)) * dt / 3600.0,
     }

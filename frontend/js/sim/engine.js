@@ -4,10 +4,10 @@
 // the schematic/charts/controls UI is reused unchanged. Runs fully in-browser.
 import { makeModel } from './models.js?v=15';
 import { Integrator } from './kernel.js?v=15';
-import { ManualController, PIDController, RLController, obsVector, BUILTIN_POLICIES } from './controllers.js?v=15';
+import { ManualController, PIDController, RLController, obsVector, defaultYSp, splitYSp, BUILTIN_POLICIES } from './controllers.js?v=15';
 import { DisturbanceManager, CATALOG } from './disturbances.js?v=15';
 import { AlarmMonitor, LIMITS } from './alarms.js?v=15';
-import { ScoreKeeper } from './scoring.js?v=15';
+import { ScoreKeeper } from './scoring.js?v=16';
 import { Realism } from './realism.js?v=15';
 import { MPCController } from './mpc.js?v=15';
 
@@ -46,8 +46,7 @@ export class Engine {
   }
 
   _initSetpoints() {
-    const [hsp, tsp] = this.model.defaultSetpoints();
-    this.setpoints = { h_sp: Array.from({ length: this.n }, (_, i) => hsp[i] ?? 0), t_sp: tsp.slice() };
+    this.setpoints = { y_sp: defaultYSp(this.model) };
   }
 
   start(onFrame) {
@@ -146,6 +145,7 @@ export class Engine {
 
   telemetry() {
     const s = this.state;
+    const setpointTargets = splitYSp(this.model, this.setpoints.y_sp);
     const state = {
       levels: s.levels.map((x) => r(x, 4)), temps: s.temps.map((x) => r(x, 3)), volumes: s.volumes.map((x) => r(x, 4)),
       pump_flow: s.pump_flow.map((x) => r(x, 6)), pump_power: s.pump_power.map((x) => r(x, 1)),
@@ -158,7 +158,11 @@ export class Engine {
     return {
       type: 'telemetry', t: r(s.t, 2), running: this.running, speed: this.speed, fidelity: this.realism.level,
       scenario: this.scenario, mode: this.mode, n_tanks: this.n, meta: this.model.metadata(),
-      setpoints: { h_sp: this.setpoints.h_sp.map((x) => r(x, 4)), t_sp: this.setpoints.t_sp.map((x) => r(x, 2)) },
+      setpoints: {
+        y_sp: this.setpoints.y_sp.map((x) => r(x, 4)),
+        level_targets: setpointTargets.level_targets.map((x) => r(x, 4)),
+        output_targets: setpointTargets.output_targets.map((x) => r(x, 2)),
+      },
       state,
       actuators: { pumps: this.lastAct.pumps.map((x) => r(x, 4)), valves: this.lastAct.valves.map((x) => r(x, 4)), heaters: this.lastAct.heaters.map((x) => r(x, 4)) },
       command: this.manual.snapshot(),
@@ -179,11 +183,10 @@ export class Engine {
   actionDim() { const [p, v, h] = this.model.actuatorCounts(); return p + v + h; }
   reward() {
     const r = this.score.report();
-    const te = r.inst_temp_err.reduce((a, b) => a + b, 0) / Math.max(1, r.inst_temp_err.length);
-    const le = r.inst_level_err.reduce((a, b) => a + b, 0) / Math.max(1, r.inst_level_err.length);
+    const track = r.inst_output_err.reduce((a, b) => a + b, 0) / Math.max(1, r.inst_output_err.length);
     const interlocked = this.mask.pump_trip || this.mask.heater_trip.some(Boolean);
-    const comp = { tracking_temp: -(te / 20), tracking_level: -(le * 5), safety: interlocked ? -1 : 0 };
-    return { reward: +(comp.tracking_temp + comp.tracking_level + comp.safety).toFixed(4), components: comp };
+    const comp = { tracking: -track, safety: interlocked ? -1 : 0 };
+    return { reward: +(comp.tracking + comp.safety).toFixed(4), components: comp };
   }
 
   handleCommand(msg) {
@@ -198,8 +201,7 @@ export class Engine {
         else this.manual.setCommand(msg.pumps, msg.valves, msg.heaters);
         break;
       case 'set_setpoints':
-        if (msg.h_sp) this.setpoints.h_sp = msg.h_sp.map(Number);
-        if (msg.t_sp) this.setpoints.t_sp = msg.t_sp.map(Number);
+        if (msg.y_sp) this.setpoints.y_sp = msg.y_sp.map(Number);
         break;
       case 'set_pid': this.pid.setConfig(msg); break;
       case 'set_model_config': this.model.setConfig(msg.config || {}); break;

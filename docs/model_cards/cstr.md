@@ -12,7 +12,7 @@ A two-state exothermic reactor tracks concentration and temperature with feed di
 
 - Physical constants are simplified and partly lumped for a stable benchmark operating range.
 - Cooling is represented as a normalized actuator rather than detailed jacket hydraulics.
-- Economic value is production-oriented and should be compared only within the declared protocol.
+- Economic value is production-oriented and should be compared only within the declared objective.
 
 The executable source of truth is the model implementation under `aiogym.models.scenarios`.
 
@@ -28,7 +28,19 @@ The executable source of truth is the model implementation under `aiogym.models.
 | Name | Kind | Index | Bounds |
 | --- | --- | --- | --- |
 | feed_pump | pump | 0 | [0, 1] |
-| cooling | heater | 0 | [0, 1] |
+| cooling | heater | 1 | [0, 1] |
+
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| reactor_temperature | degC | [45, 90] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| reactor_temperature | reactor_temperature | degC | [45, 90] |
 
 ## Disturbances
 
@@ -68,6 +80,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 2
 - Action vector length: 2
+- Controlled output vector length: 1
+- Setpoint vector length: 1
 - Dynamics disturbances: [t_cold, Caf, Tcool, t_amb]
 - Micro integration step: 0.01 s
 - Energy is scored: False
@@ -95,5 +109,5 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 | Entry | Meaning |
 | --- | --- |
-| 0 | [t_sp, 0, 45, 90] |
+| 0 | [y_sp, 0, 45, 90] |
 | 1 | [mv, pumps, 0, 0.3, 1] |

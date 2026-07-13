@@ -2,7 +2,7 @@
 // Controller). Configuration & function follow the APC vocabulary:
 //   MV  — manipulated variables (the actuators it moves): hi/lo limits, max
 //         move (rate), move-suppression weight, economic cost / ideal resting.
-//   CV  — controlled variables (controlled levels + temperatures): setpoint,
+//   CV  — controlled variables (generic y vector): setpoint,
 //         hi/lo range, weight; predicted over the horizon and driven offset-free.
 //   DV  — measured disturbances (feed/ambient temperature): fed forward.
 // Model: the true non-linear plant is linearized to a state-space model — the
@@ -43,15 +43,15 @@ export class MPCController {
     const [nP, nV, nH] = model.actuatorCounts();
     this.nP = nP; this.nV = nV; this.nH = nH; this.nu = nP + nV + nH;
     this.nx = model.initialState().length;
-    this.ctrl = model.controlledLevels();
-    this.nCV = this.ctrl.length + model.n;                 // controlled levels + every temperature
+    this.levelSlots = model.legacyLevelTargetSlots();
+    this.nCV = this.levelSlots.length + model.n;
     // APC-style configuration (operator-tunable)
     this.cfg = {
       Ts: 0.5, P: 40,                                      // control cycle (s) and prediction horizon (steps)
       moveSupp: 0.8,                                       // MV move-suppression weight (the main robustness knob)
       duMax: 0.15,                                         // MV max move per cycle (rate limit)
       uMin: 0, uMax: 1,
-      cvScaleLevel: 0.1, cvScaleTemp: 12,                  // normalise level(m) vs temp(°C) errors
+      cvScale: null,
     };
     this.reset();
   }
@@ -81,14 +81,13 @@ export class MPCController {
   _unpack(u) {
     return { pumps: u.slice(0, this.nP), valves: u.slice(this.nP, this.nP + this.nV), heaters: u.slice(this.nP + this.nV) };
   }
-  _cv(x, env) {                                            // CV readout from a state: [controlled levels…, temps…]
+  _cv(x, env) {
     const s = this.model.buildState(x, this._unpack(this.u), env, 0);
-    return [...this.ctrl.map((i) => s.levels[i]), ...s.temps];
+    return [...this.levelSlots.map((i) => s.levels[i]), ...s.temps];
   }
   _wcv() {
-    const w = []; for (let k = 0; k < this.ctrl.length; k++) w.push(1 / this.cfg.cvScaleLevel ** 2);
-    for (let i = 0; i < this.model.n; i++) w.push(1 / this.cfg.cvScaleTemp ** 2);
-    return w;
+    const scale = this.cfg.cvScale || [...this.levelSlots.map(() => 0.1), ...Array.from({ length: this.model.n }, () => 12)];
+    return scale.map((v) => 1 / Math.max(v, 1e-12) ** 2);
   }
 
   compute(meas, sp, dt) {
@@ -121,7 +120,7 @@ export class MPCController {
       for (let i = 0; i < nCV; i++) C[i][j] = (cp[i] - cv0[i]) / eps;
     }
     // target (setpoint) vector
-    const target = [...this.ctrl.map((i) => sp.h_sp[i]), ...sp.t_sp.slice(0, m.n)];
+    const target = (sp.y_sp || []).slice(0, nCV);
     const Wcv = this._wcv();
     // --- predict over horizon: free response (MV held at u0) + step-sensitivity S to a sustained unit ΔMV ---
     // x_{k+1} = Ad x_k + Bd u_k + c0,  where c0 = f0*Ts - (Ad-I)x0 - Bd u0 keeps the affine op consistent at x0.

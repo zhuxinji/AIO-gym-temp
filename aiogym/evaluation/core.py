@@ -5,341 +5,37 @@ and learned policies (SB3/RLPD style).
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import os
 import subprocess
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 import numpy as np
 
+from .._deprecations import warn_deprecated
+
+from .._serialization import jsonable as _jsonable
 from ..controllers import as_controller, build_context, validate_action
 from .metrics.economic import economic_step_metrics
 from .metrics.robustness import robustness_extrema
 from .metrics.safety import action_bound_metrics as _action_bound_metrics
 from .metrics.safety import safety_step_metrics as _safety_step_metrics
 from .metrics.tracking import tracking_step_metrics as _tracking_step_metrics
-
-
-EVALUATION_SCHEMA_VERSION = "aiogym.evaluation.v2"
-
-
-ROLLOUT_SCHEMA = {
-    "step": "integer control-step index",
-    "time": "seconds since episode start",
-    "obs": "observation before control action",
-    "state": "physical state before integration",
-    "action": "controller output passed to env.step",
-    "setpoint": "active setpoint context exposed to the controller",
-    "disturbance": "disturbance values applied by the process model",
-    "reward": "training reward returned by the environment",
-    "profit": "raw economic profit for the step",
-    "constraint": "normalized process constraint penalty for the step",
-    "info": "environment-specific diagnostic fields",
-}
-
-
-METRIC_DEFINITIONS = {
-    "return": "sum of environment reward over the rollout; reward is the training signal",
-    "profit": "sum of raw economic profit reported by the environment",
-    "normalized_score": "0-100 KPI score from KPIScorer; score is for reporting, not raw economics",
-    "production": "sum of process production reported by the environment",
-    "energy_kwh": "total heat plus pump energy over the rollout",
-    "runtime_seconds": "wall-clock seconds spent evaluating one episode",
-    "runtime_total_seconds": "total wall-clock seconds spent evaluating all episodes",
-    "runtime_seconds_per_step": "wall-clock seconds per environment control step",
-    "tracking_iae": "integral absolute error for temperatures and controlled levels",
-    "tracking_ise": "integral squared error for temperatures and controlled levels",
-    "tracking_itae": "time-weighted integral absolute error",
-    "tracking_overshoot": "largest positive excursion above the active setpoint",
-    "tracking_settling_time": "last time at which any tracked variable exceeded tolerance",
-    "constraint": "sum of normalized soft constraint penalty reported by the environment",
-    "constraint_violation_count": "number of steps with any process constraint violation",
-    "constraint_violation_duration": "seconds spent with any process constraint violation",
-    "constraint_violation_severity": "sum of positive per-constraint violation magnitudes",
-    "action_violation_count": "number of controller outputs outside action bounds before env clipping",
-    "action_violation_duration": "seconds with any action-bound violation",
-    "action_violation_severity": "sum of action-bound excess before env clipping",
-    "runaway_count": "number of runaway steps reported by the environment",
-    "runaway_duration": "seconds spent in runaway state",
-    "safety_margin_min": "minimum negative violation margin; 0 means no violation was observed",
-    "controller_solve_count": "number of optimization or policy solve calls reported by the controller",
-    "controller_solver_success_count": "number of successful controller solve calls",
-    "controller_solver_failure_count": "number of failed controller solve calls",
-    "controller_fallback_count": "number of times the controller fell back to a previous or safe action",
-    "controller_degraded_count": "number of episodes with any controller-side degradation",
-}
-
-
-PROTOCOL_METRICS = {
-    "tracking": (
-        "tracking_iae", "tracking_ise", "tracking_itae", "tracking_overshoot",
-        "tracking_settling_time",
-    ),
-    "economic": (
-        "profit", "normalized_score", "production", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity", "safety_margin_min",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "robustness": (
-        "return", "profit", "normalized_score", "tracking_iae", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "safety": (
-        "constraint_violation_count", "constraint_violation_duration",
-        "constraint_violation_severity", "action_violation_count",
-        "action_violation_duration", "action_violation_severity",
-        "runaway_count", "runaway_duration", "safety_margin_min",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "kpi": (
-        "normalized_score", "tracking_iae", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-}
-
-
-PRIMARY_METRICS = {
-    "tracking": "tracking_iae",
-    "economic": "profit",
-    "kpi": "normalized_score",
-    "robustness": "normalized_score",
-    "safety": "constraint_violation_count",
-}
-
-
-METRIC_DIRECTIONS = {
-    "tracking_iae": "minimize",
-    "tracking_ise": "minimize",
-    "tracking_itae": "minimize",
-    "tracking_overshoot": "minimize",
-    "tracking_settling_time": "minimize",
-    "constraint_violation_count": "minimize",
-    "constraint_violation_duration": "minimize",
-    "constraint_violation_severity": "minimize",
-    "action_violation_count": "minimize",
-    "action_violation_duration": "minimize",
-    "action_violation_severity": "minimize",
-    "runaway_count": "minimize",
-    "runaway_duration": "minimize",
-    "safety_margin_min": "maximize",
-    "profit": "maximize",
-    "normalized_score": "maximize",
-    "kpi": "maximize",
-    "return": "maximize",
-    "production": "maximize",
-}
-
-
-def metric_for_reward_mode(reward_mode: str) -> str:
-    """Training/checkpoint metric implied by an environment reward mode.
-
-    Benchmark reports should use ``primary_metric_for_objective`` instead.
-    """
-
-    if reward_mode == "economic":
-        return "profit"
-    if reward_mode == "track":
-        return "return"
-    return "kpi"
-
-
-def primary_metric_for_objective(objective: str) -> str:
-    return PRIMARY_METRICS.get(objective, "return")
-
-
-def metric_direction(metric: str) -> str:
-    return METRIC_DIRECTIONS.get(metric, "maximize")
-
-
-def metric_definitions(objective: str | None = None):
-    if objective is None:
-        return dict(METRIC_DEFINITIONS)
-    return {key: METRIC_DEFINITIONS[key] for key in PROTOCOL_METRICS.get(objective, ()) if key in METRIC_DEFINITIONS}
-
-
-def _empty_episode_totals(ep: int, seed: int):
-    return {
-        "episode": int(ep),
-        "seed": int(seed),
-        "return": 0.0,
-        "track": 0.0,
-        "constraint": 0.0,
-        "profit": 0.0,
-        "prod": 0.0,
-        "production": 0.0,
-        "energy_kwh": 0.0,
-        "heat_kwh": 0.0,
-        "pump_kwh": 0.0,
-        "runtime_seconds": 0.0,
-        "runtime_seconds_per_step": 0.0,
-        "tracking_iae": 0.0,
-        "tracking_ise": 0.0,
-        "tracking_itae": 0.0,
-        "tracking_overshoot": 0.0,
-        "tracking_settling_time": 0.0,
-        "constraint_violation_count": 0.0,
-        "constraint_violation_duration": 0.0,
-        "constraint_violation_severity": 0.0,
-        "action_violation_count": 0.0,
-        "action_violation_duration": 0.0,
-        "action_violation_severity": 0.0,
-        "runaway_count": 0.0,
-        "runaway_duration": 0.0,
-        "safety_margin_min": 0.0,
-        "controller_solve_count": 0.0,
-        "controller_solver_success_count": 0.0,
-        "controller_solver_failure_count": 0.0,
-        "controller_fallback_count": 0.0,
-        "controller_degraded_count": 0.0,
-    }
-
-
-def _protocol_kwargs(defaults: Mapping[str, Any], overrides: Mapping[str, Any]):
-    data = dict(defaults)
-    data.update(overrides)
-    legacy_reward_mode = data.pop("reward_mode", None)
-    if legacy_reward_mode is not None and "env_reward_mode" not in overrides:
-        data["env_reward_mode"] = legacy_reward_mode
-    return data
-
-
-@dataclass(frozen=True)
-class BenchmarkProtocol:
-    """Reproducible benchmark environment configuration.
-
-    Use ``economic`` for supervisory/RTO benchmarks and ``tracking`` for
-    setpoint-following benchmarks.  Baseline PID/MPC/oracle controllers usually
-    run with ``action_mode="actuator"``; learned supervisory policies usually run
-    with ``action_mode="setpoint"`` on the same protocol. ``env_reward_mode`` is
-    passed to the Gym environment; benchmark metrics are chosen from ``objective``.
-    """
-
-    scenario: str = "cstr"
-    objective: str = "economic"
-    env_reward_mode: str = "economic"
-    action_mode: str = "actuator"
-    control_dt: float = 0.5
-    episode_steps: int = 400
-    dynamic: bool = True
-    randomize: bool = True
-    randomize_setpoints: bool = False
-    randomize_plant: bool = True
-    plant_drift: bool = True
-    integral_obs: bool = False
-    terminate_on_runaway: bool = False
-    noise: bool = False
-    noise_pct: float = 0.01
-
-    @classmethod
-    def economic(cls, scenario: str, **kw):
-        defaults = dict(objective="economic", env_reward_mode="economic",
-                        randomize_setpoints=False, randomize_plant=True, plant_drift=True)
-        return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @classmethod
-    def tracking(cls, scenario: str, **kw):
-        defaults = dict(objective="tracking", env_reward_mode="track",
-                        dynamic=False, randomize=False, randomize_setpoints=False,
-                        randomize_plant=False, plant_drift=False)
-        return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @classmethod
-    def kpi(cls, scenario: str, **kw):
-        defaults = dict(objective="kpi", env_reward_mode="kpi",
-                        randomize_setpoints=True, randomize_plant=True, plant_drift=True)
-        return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @classmethod
-    def robustness(cls, scenario: str, **kw):
-        defaults = dict(objective="robustness", env_reward_mode="kpi",
-                        dynamic=True, randomize=True, randomize_setpoints=True,
-                        randomize_plant=True, plant_drift=True, noise=True)
-        return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @classmethod
-    def safety(cls, scenario: str, **kw):
-        defaults = dict(objective="safety", env_reward_mode="kpi",
-                        dynamic=True, randomize=True, randomize_setpoints=True,
-                        randomize_plant=True, plant_drift=True,
-                        terminate_on_runaway=False)
-        return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
-
-    @property
-    def reward_mode(self):
-        """Backward-compatible alias for the environment reward mode."""
-
-        return self.env_reward_mode
-
-    def env_kwargs(self, action_mode: str | None = None):
-        data = asdict(self)
-        data.pop("scenario")
-        data.pop("objective")
-        data["reward_mode"] = data.pop("env_reward_mode")
-        if action_mode is not None:
-            data["action_mode"] = action_mode
-        return data
-
-    def make_env(self, action_mode: str | None = None):
-        from ..env import AIOGymNativeEnv
-
-        return AIOGymNativeEnv(self.scenario, **self.env_kwargs(action_mode=action_mode))
-
-    def metadata(self):
-        primary_metric = primary_metric_for_objective(self.objective)
-        data = asdict(self)
-        data["metrics"] = list(PROTOCOL_METRICS.get(self.objective, ()))
-        data["primary_metric"] = primary_metric
-        data["primary_metric_direction"] = metric_direction(primary_metric)
-        data["metric_definitions"] = metric_definitions(self.objective)
-        return data
-
-
-@dataclass(frozen=True)
-class BenchmarkConfig:
-    """Fully reproducible benchmark declaration.
-
-    ``BenchmarkProtocol`` describes the environment. ``BenchmarkConfig`` binds
-    that protocol to a controller, seed list, disturbance policy, and metrics.
-    """
-
-    protocol: BenchmarkProtocol = field(default_factory=BenchmarkProtocol)
-    controller: str = "pid"
-    seeds: tuple[int, ...] = (0,)
-    controller_config: Mapping[str, Any] = field(default_factory=dict)
-    disturbance: str = "model_schema_dynamic"
-    metrics: tuple[str, ...] = ()
-
-    @classmethod
-    def from_protocol(cls, protocol: BenchmarkProtocol, controller: str = "pid",
-                      seeds: Sequence[int] | None = None, **kw):
-        return cls(protocol=protocol, controller=controller,
-                   seeds=tuple(seeds or (0,)), **kw)
-
-    def metadata(self):
-        metrics = self.metrics or PROTOCOL_METRICS.get(self.protocol.objective, ())
-        primary_metric = primary_metric_for_objective(self.protocol.objective)
-        return {
-            "schema_version": EVALUATION_SCHEMA_VERSION,
-            "objective": self.protocol.objective,
-            "scenario": self.protocol.scenario,
-            "controller": self.controller,
-            "controller_config": _jsonable(dict(self.controller_config)),
-            "seed_list": list(self.seeds),
-            "disturbance": self.disturbance,
-            "metrics": list(metrics),
-            "primary_metric": primary_metric,
-            "primary_metric_direction": metric_direction(primary_metric),
-            "episode_steps": self.protocol.episode_steps,
-            "protocol": self.protocol.metadata(),
-            "metric_definitions": {key: METRIC_DEFINITIONS[key] for key in metrics if key in METRIC_DEFINITIONS},
-        }
-
+from .protocols import (
+    EVALUATION_SCHEMA_VERSION,
+    METRIC_DEFINITIONS,
+    METRIC_DIRECTIONS,
+    PRIMARY_METRICS,
+    PROTOCOL_METRICS,
+    PUBLIC_BENCHMARK_SCHEMA_VERSION,
+    ROLLOUT_SCHEMA,
+    BenchmarkConfig,
+    BenchmarkProtocol,
+    _empty_episode_totals,
+    metric_definitions,
+    metric_direction,
+    metric_for_reward_mode,
+    primary_metric_for_objective,
+)
 
 def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
                         include_episodes: bool = False, protocol: BenchmarkProtocol | None = None,
@@ -350,8 +46,15 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
     reproduce the benchmark.
     """
 
+    if seed_list is None:
+        if episodes <= 0:
+            raise ValueError("episodes must be positive when seed_list is not provided")
+        seeds = [int(seed) + ep for ep in range(episodes)]
+    else:
+        seeds = [int(value) for value in seed_list]
+        if not seeds:
+            raise ValueError("seed_list must contain at least one seed")
     controller = as_controller(agent, action_mode=getattr(env, "action_mode", "actuator"))
-    seeds = list(seed_list) if seed_list is not None else [seed + ep for ep in range(episodes)]
     per_episode = []
     episode_schedules = []
     eval_start = perf_counter()
@@ -371,7 +74,7 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
             bound_metrics = _action_bound_metrics(action, env)
             obs, reward, term, trunc, info = env.step(action)
             time_sec = steps * float(env.control_dt)
-            active_setpoint = {"h_sp": list(getattr(env, "h_sp", [])), "t_sp": list(getattr(env, "t_sp", []))}
+            active_setpoint = {"y_sp": list(getattr(env, "y_sp", []))}
             tracking = _tracking_step_metrics(info, active_setpoint, time_sec, float(env.control_dt), env)
             safety = _safety_step_metrics(info, bound_metrics, float(env.control_dt))
             totals["return"] += float(reward)
@@ -380,7 +83,10 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
             economic = economic_step_metrics(info, float(env.control_dt))
             for key, value in economic.items():
                 totals[key] += value
-            for key in ("tracking_iae", "tracking_ise", "tracking_itae"):
+            for key in (
+                "tracking_cost", "tracking_return", "tracking_error_cost", "tracking_move_cost",
+                "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae",
+            ):
                 totals[key] += tracking[key]
             totals["tracking_overshoot"] = max(totals["tracking_overshoot"], tracking["tracking_overshoot"])
             if not tracking["tracking_settled"]:
@@ -399,6 +105,8 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         totals["steps"] = steps
         totals["runtime_seconds"] = float(runtime_seconds)
         totals["runtime_seconds_per_step"] = float(runtime_seconds / steps) if steps else 0.0
+        horizon_seconds = steps * float(env.control_dt)
+        totals["tracking_mse"] = float(totals["tracking_mse"] / horizon_seconds) if horizon_seconds > 0 else 0.0
         totals["tracking_settling_time"] = float(last_unsettled_time)
         controller_diag = _controller_diagnostics(controller)
         totals["controller_diagnostics"] = controller_diag
@@ -545,6 +253,16 @@ def build_evaluation_report(results: Sequence[Mapping[str, Any]]):
     }
 
 
+def run_benchmark(config):
+    """Compatibility entrypoint for the public benchmark orchestrator."""
+
+    warn_deprecated("aiogym.evaluation.core.run_benchmark", "aiogym.run_benchmark")
+
+    from .benchmark import run_benchmark as _run_benchmark
+
+    return _run_benchmark(config)
+
+
 def _env_metadata(env):
     keys = (
         "scenario", "reward_mode", "action_mode", "control_dt", "episode_steps",
@@ -559,7 +277,7 @@ def _env_objective(env):
     reward_mode = getattr(env, "reward_mode", "")
     if reward_mode == "economic":
         return "economic"
-    if reward_mode == "track":
+    if reward_mode in {"tracking", "track"}:
         return "tracking"
     return "kpi"
 
@@ -580,10 +298,7 @@ def _controller_diagnostics(controller):
     for target in targets:
         if target is None or not hasattr(target, "diagnostics"):
             continue
-        try:
-            return _jsonable(target.diagnostics())
-        except TypeError:
-            continue
+        return _jsonable(target.diagnostics())
     return {}
 
 
@@ -699,17 +414,9 @@ def _table_row(result: Mapping[str, Any], keys: Sequence[str]):
 
 def _robustness_row(result: Mapping[str, Any]):
     row = _table_row(result, PROTOCOL_METRICS["robustness"])
-    row.update(robustness_extrema(result.get("episode_metrics", []), PROTOCOL_METRICS["robustness"]))
+    row.update(robustness_extrema(
+        result.get("episode_metrics", []),
+        PROTOCOL_METRICS["robustness"],
+        METRIC_DIRECTIONS,
+    ))
     return row
-
-
-def _jsonable(value):
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(v) for v in value]
-    return value

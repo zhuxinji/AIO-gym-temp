@@ -7,8 +7,13 @@ Run them from the repository root after installing the backend:
 
 ```bash
 pip install -e ./aiogym
+python aiogym/models/examples/declarative_model.py
 python aiogym/models/examples/custom_model.py
 ```
 
-`custom_model.py` shows how to define a process model with metadata,
-disturbances, constraints, and a reusable `register_model(...)` call.
+`declarative_model.py` is the recommended custom-scenario path: define states,
+actions, parameters, dynamics formulas, and outputs in one dictionary. AIO-Gym
+generates the model contract and oracle-compatible dynamics automatically.
+
+`custom_model.py` shows the lower-level class API for cases that need custom
+Python methods, disturbances, constraints, or process-specific helpers.

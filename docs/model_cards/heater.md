@@ -29,7 +29,21 @@ The executable source of truth is the model implementation under `aiogym.models.
 | Name | Kind | Index | Bounds |
 | --- | --- | --- | --- |
 | air_damper | valve | 0 | [0, 1] |
-| fuel_valve | heater | 0 | [0, 1] |
+| fuel_valve | heater | 1 | [0, 1] |
+
+## Controlled Output Vector
+
+| Name | Unit | Bounds |
+| --- | --- | --- |
+| flue_o2 | % | [1.8, 5] |
+| outlet_temperature | degC | [364, 372] |
+
+## Setpoint Vector
+
+| Name | Output | Unit | Bounds |
+| --- | --- | --- | --- |
+| flue_o2 | flue_o2 | % | [1.8, 5] |
+| outlet_temperature | outlet_temperature | degC | [364, 372] |
 
 ## Disturbances
 
@@ -72,6 +86,8 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 - State vector length: 3
 - Action vector length: 2
+- Controlled output vector length: 2
+- Setpoint vector length: 2
 - Dynamics disturbances: [t_cold, t_amb, extra_outflow, lhv_factor]
 - Micro integration step: 0.05 s
 - Energy is scored: False
@@ -100,5 +116,5 @@ The executable source of truth is the model implementation under `aiogym.models.
 
 | Entry | Meaning |
 | --- | --- |
-| 0 | [t_sp, 0, 364, 372] |
-| 1 | [h_sp, 0, 1.8, 5] |
+| 0 | [y_sp, 1, 364, 372] |
+| 1 | [y_sp, 0, 1.8, 5] |

@@ -15,34 +15,17 @@ import os
 import time
 from datetime import datetime, timezone
 
+from aiogym._config import parse_seed_list
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
-from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, rollout_controller
+from aiogym.evaluation import evaluate_controller, resolve_protocol, rollout_controller
 from aiogym.rl.artifacts import (
     learning_curve_point,
     result_row,
     rl_payload,
+    utc_run_id,
     write_rl_artifacts,
 )
-
-
-def protocol_factory(objective: str):
-    return {
-        "economic": BenchmarkProtocol.economic,
-        "tracking": BenchmarkProtocol.tracking,
-        "robustness": BenchmarkProtocol.robustness,
-        "safety": BenchmarkProtocol.safety,
-        "kpi": BenchmarkProtocol.kpi,
-    }[objective]
-
-
-def parse_seed_list(raw: str | None, seed: int, episodes: int):
-    if not raw:
-        return [seed + i for i in range(episodes)]
-    seeds = [int(part.strip()) for part in raw.split(",") if part.strip()]
-    if not seeds:
-        raise ValueError("--eval-seed-list must contain at least one integer seed")
-    return seeds
 
 
 def make_training_env(args, rank: int = 0):
@@ -85,8 +68,8 @@ def build_algo(args, env):
         from stable_baselines3 import PPO, SAC, TD3
     except ModuleNotFoundError as ex:
         raise SystemExit(
-            "stable-baselines3 is not installed. Install the optional RL dependencies "
-            "from aiogym/requirements.txt before running this script."
+            "stable-baselines3 is not installed. Install the package dependencies "
+            "with `pip install -e ./aiogym` from the repository root."
         ) from ex
 
     algo = args.algo.lower()
@@ -127,11 +110,14 @@ def build_algo(args, env):
 
 
 def evaluate_checkpoint(args, checkpoint_path: str):
-    protocol = protocol_factory(args.eval_objective)(
+    protocol = resolve_protocol(
         args.scenario,
-        action_mode=args.action_mode,
-        episode_steps=args.eval_episode_steps,
-        control_dt=args.control_dt,
+        args.eval_objective,
+        {
+            "action_mode": args.action_mode,
+            "episode_steps": args.eval_episode_steps,
+            "control_dt": args.control_dt,
+        },
     )
     controller = make_controller(
         "sb3",
@@ -142,7 +128,12 @@ def evaluate_checkpoint(args, checkpoint_path: str):
             "action_mode": args.action_mode,
         },
     )
-    seeds = parse_seed_list(args.eval_seed_list, args.eval_seed, args.eval_episodes)
+    seeds = parse_seed_list(
+        args.eval_seed_list,
+        args.eval_seed,
+        args.eval_episodes,
+        option="--eval-seed-list",
+    )
     result = evaluate_controller(
         controller,
         protocol.make_env(),
@@ -165,11 +156,14 @@ def evaluate_checkpoint(args, checkpoint_path: str):
 
 
 def evaluate_training_policy(args, model, step: int, phase: str = "eval"):
-    protocol = protocol_factory(args.eval_objective)(
+    protocol = resolve_protocol(
         args.scenario,
-        action_mode=args.action_mode,
-        episode_steps=args.eval_episode_steps,
-        control_dt=args.control_dt,
+        args.eval_objective,
+        {
+            "action_mode": args.action_mode,
+            "episode_steps": args.eval_episode_steps,
+            "control_dt": args.control_dt,
+        },
     )
     controller = make_controller(
         "sb3",
@@ -181,7 +175,12 @@ def evaluate_training_policy(args, model, step: int, phase: str = "eval"):
             "name": f"SB3-{args.algo.upper()}",
         },
     )
-    seeds = parse_seed_list(args.eval_seed_list, args.eval_seed, args.learning_curve_episodes)
+    seeds = parse_seed_list(
+        args.eval_seed_list,
+        args.eval_seed,
+        args.learning_curve_episodes,
+        option="--eval-seed-list",
+    )
     env = protocol.make_env()
     try:
         result = evaluate_controller(
@@ -231,6 +230,13 @@ def training_metadata(args, checkpoint_path: str):
 
 def artifact_dir_for(args, run_name: str) -> str:
     return args.artifact_dir or os.path.join(args.out_dir, f"{run_name}_artifacts")
+
+
+def run_name_for(args, run_id: str | None = None) -> str:
+    if args.name:
+        return args.name
+    stem = f"{args.algo}_{args.scenario}_{args.action_mode}_{args.reward_mode}_seed{args.seed}"
+    return f"{stem}_{run_id or utc_run_id()}"
 
 
 def make_learning_curve_callback(args):
@@ -285,13 +291,13 @@ def require_onnx_export_dependencies():
         import torch  # noqa: F401
     except ModuleNotFoundError as ex:
         raise SystemExit(
-            "torch is required for ONNX export. Install the optional export dependencies "
-            "with `pip install -e .[export]` or install torch/onnx manually."
+            "torch is required for ONNX export. Install the package dependencies "
+            "with `pip install -e ./aiogym` from the repository root."
         ) from ex
     if importlib.util.find_spec("onnx") is None:
         raise SystemExit(
-            "onnx is required for ONNX export. Install it with `pip install -e .[export]` "
-            "or install `onnx` in the active environment."
+            "onnx is required for ONNX export. Install the package dependencies "
+            "with `pip install -e ./aiogym` from the repository root."
         )
 
 
@@ -300,7 +306,7 @@ def main():
     ap.add_argument("--scenario", default="cstr")
     ap.add_argument("--algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--action-mode", default="actuator", choices=["actuator", "setpoint"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "track"])
+    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking", "track"])
     ap.add_argument("--steps", type=int, default=10000)
     ap.add_argument("--n-envs", type=int, default=default_n_envs())
     ap.add_argument("--vec-env", default="subproc", choices=["subproc", "dummy"],
@@ -333,7 +339,7 @@ def main():
     ap.add_argument("--verbose", type=int, default=1)
     ap.add_argument("--tensorboard-log", default=None)
     ap.add_argument("--out-dir", default="aiogym/runs/rl/sb3")
-    ap.add_argument("--name", default=None)
+    ap.add_argument("--name", default=None, help="stable run name; defaults to a timestamped name")
     ap.add_argument("--artifact-dir", default=None,
                     help="standard benchmark artifact directory; defaults to <out-dir>/<name>_artifacts")
     ap.add_argument("--eval-objective", default="kpi", choices=["economic", "tracking", "robustness", "safety", "kpi"])
@@ -358,14 +364,14 @@ def main():
         import torch
     except ModuleNotFoundError as ex:
         raise SystemExit(
-            "stable-baselines3 is not installed. Install the optional RL dependencies "
-            "from aiogym/requirements.txt before running this script."
+            "stable-baselines3 is not installed. Install the package dependencies "
+            "with `pip install -e ./aiogym` from the repository root."
         ) from ex
     args.device = args.device or best_device()
     torch.set_num_threads(max(1, int(args.torch_threads)))
 
     os.makedirs(args.out_dir, exist_ok=True)
-    run_name = args.name or f"{args.algo}_{args.scenario}_{args.action_mode}_{args.reward_mode}_seed{args.seed}"
+    run_name = run_name_for(args)
     checkpoint_path = os.path.join(args.out_dir, run_name)
     report_path = os.path.join(args.out_dir, f"{run_name}_report.json")
 

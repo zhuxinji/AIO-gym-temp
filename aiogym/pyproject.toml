@@ -15,9 +15,16 @@ authors = [
 dependencies = [
   "gymnasium>=0.29",
   "numpy>=1.24",
+  "casadi>=3.6",
+  "stable-baselines3>=2.3",
+  "torch>=2.2",
+  "onnx>=1.16",
+  "onnxruntime>=1.17",
 ]
 
 [project.optional-dependencies]
+# Deprecated compatibility aliases, scheduled for removal in aiogym 0.3. The
+# default install includes the full benchmark/training/export toolchain.
 oracle = [
   "casadi>=3.6",
 ]
@@ -35,6 +42,9 @@ all = [
   "torch>=2.2",
   "onnx>=1.16",
   "onnxruntime>=1.17",
+]
+dev = [
+  "pytest>=8.0",
 ]
 
 [project.scripts]
@@ -65,7 +75,6 @@ aiogym = [
   "controllers/configs/*.json",
   "controllers/examples/*.py",
   "controllers/examples/*.md",
-  "models/model_cards/*.md",
   "models/examples/*.py",
   "models/examples/*.md",
   "evaluation/suites/*.json",

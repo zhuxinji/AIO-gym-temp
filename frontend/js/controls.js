@@ -74,31 +74,30 @@ export function buildControls(bus, meta, catalog) {
   }
 
   function pidPanel(frame) {
-    const sp = frame?.setpoints || { h_sp: [], t_sp: [] };
+    const sp = frame?.setpoints || { y_sp: [], level_targets: [], output_targets: [] };
     const cfg = frame?.pid;
-    const ctrl = meta.controlled_levels || [];
+    const slots = meta.level_target_slots || [];
     const w = h('div');
 
     // level setpoints (only controlled)
     w.append(h('div', { class: 'group-title' }, t('液位设定 (m)', 'Level SP (m)', '液位設定値 (m)')));
-    ctrl.forEach((idx) => {
-      const inp = h('input', { type: 'number', step: 0.01, min: 0, max: 0.8, value: (sp.h_sp[idx] ?? 0.4).toFixed(2), onchange: sendSP });
-      inp.dataset.hsp = idx;
+    slots.forEach((idx, j) => {
+      const inp = h('input', { type: 'number', step: 0.01, min: 0, max: 0.8, value: (sp.level_targets[idx] ?? 0.4).toFixed(2), onchange: sendSP });
+      inp.dataset.ysp = j;
       w.append(h('div', { class: 'sp-row' }, h('label', {}, meta.tank_labels[idx]), inp, h('span')));
     });
     // temperature setpoints (every tank)
     w.append(h('div', { class: 'group-title', style: 'margin-top:10px' }, t('温度设定 (°C)', 'Temp SP (°C)', '温度設定値 (°C)')));
     for (let i = 0; i < n; i++) {
-      const inp = h('input', { type: 'number', step: 1, min: 10, max: 90, value: (sp.t_sp[i] ?? 50).toFixed(0), onchange: sendSP });
-      inp.dataset.tsp = i;
+      const inp = h('input', { type: 'number', step: 1, min: 10, max: 90, value: (sp.output_targets[i] ?? 50).toFixed(0), onchange: sendSP });
+      inp.dataset.ysp = slots.length + i;
       w.append(h('div', { class: 'sp-row' }, h('label', {}, meta.tank_labels[i]), inp, h('span')));
     }
     function sendSP() {
-      const h_sp = Array(n).fill(0);
-      w.querySelectorAll('[data-hsp]').forEach((e) => { h_sp[+e.dataset.hsp] = +e.value; });
-      const t_sp = Array(n).fill(50);
-      w.querySelectorAll('[data-tsp]').forEach((e) => { t_sp[+e.dataset.tsp] = +e.value; });
-      bus.send({ type: 'set_setpoints', h_sp, t_sp });
+      const y_sp = (sp.y_sp || []).slice();
+      while (y_sp.length < slots.length + n) y_sp.push(0);
+      w.querySelectorAll('[data-ysp]').forEach((e) => { y_sp[+e.dataset.ysp] = +e.value; });
+      bus.send({ type: 'set_setpoints', y_sp });
     }
 
     // demand valve (cascade only)
@@ -110,24 +109,28 @@ export function buildControls(bus, meta, catalog) {
           h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: dv, class: 'valve', oninput: (e) => { dval.textContent = `${(e.target.value * 100) | 0}%`; bus.send({ type: 'set_pid', demand_valve: +e.target.value }); } })));
     }
 
-    // PID gains
+    // PID loop parameters
     const tune = h('details', { class: 'tune' }, h('summary', {}, t('PID 整定', 'PID tuning', 'PID 整定')));
-    const g = cfg?.gains || {};
+    const loopConfig = (cfg?.loops || []).map((row) => ({ ...row, pid: { ...row.pid } }));
     const grid = h('div', { class: 'gain-grid' }, h('span'), h('span', { class: 'gh' }, 'Kp'), h('span', { class: 'gh' }, 'Ki'), h('span', { class: 'gh' }, 'Kd'));
-    const loops = A.valves.length
-      ? [['level_pump', t('液位·泵', 'Level·pump', '液位·ポンプ')], ['level_valve', t('液位·阀', 'Level·valve', '液位·バルブ')], ['temp', t('温度', 'Temp', '温度')]]
-      : [['level_pump', t('液位·泵', 'Level·pump', '液位·ポンプ')], ['temp', t('温度', 'Temp', '温度')]];
-    for (const [key, label] of loops) {
+    loopConfig.forEach((row, i) => {
+      const label = `y${row.y_index} -> ${actionLabel(row.u_index)}`;
       grid.append(h('label', {}, label));
       for (const p of ['kp', 'ki', 'kd']) {
-        const gi = h('input', { type: 'number', step: 0.001, value: (g[key]?.[p] ?? 0), onchange: sendGains });
-        gi.dataset.gk = key; gi.dataset.gp = p; grid.append(gi);
+        const gi = h('input', { type: 'number', step: 0.001, value: (row.pid?.[p] ?? 0), onchange: sendLoops });
+        gi.dataset.loop = i; gi.dataset.param = p; grid.append(gi);
       }
+    });
+    function sendLoops() {
+      const loops = loopConfig.map((row) => ({ ...row, pid: { ...row.pid } }));
+      grid.querySelectorAll('[data-loop]').forEach((e) => { loops[+e.dataset.loop].pid[e.dataset.param] = +e.value; });
+      bus.send({ type: 'set_pid', loops });
     }
-    function sendGains() {
-      const gains = {};
-      grid.querySelectorAll('[data-gk]').forEach((e) => { (gains[e.dataset.gk] = gains[e.dataset.gk] || {})[e.dataset.gp] = +e.value; });
-      bus.send({ type: 'set_pid', gains });
+    function actionLabel(uIndex) {
+      const p = A.pumps.length, v = A.valves.length;
+      if (uIndex < p) return A.pumps[uIndex] || `u${uIndex}`;
+      if (uIndex < p + v) return A.valves[uIndex - p] || `u${uIndex}`;
+      return A.heaters[uIndex - p - v] || `u${uIndex}`;
     }
     tune.append(grid); w.append(tune);
     return w;
@@ -135,34 +138,33 @@ export function buildControls(bus, meta, catalog) {
 
   // APC-style MPC: CV setpoints (shared regulatory targets) + the APC tuning knobs.
   function mpcPanel(frame) {
-    const sp = frame?.setpoints || { h_sp: [], t_sp: [] };
+    const sp = frame?.setpoints || { y_sp: [], level_targets: [], output_targets: [] };
     const cfg = frame?.mpc || {};
-    const ctrl = meta.controlled_levels || [];
+    const slots = meta.level_target_slots || [];
     const w = h('div');
     w.append(h('div', { class: 'group-title' }, t('APC 配置', 'APC setup', 'APC 設定')));
     w.append(h('div', { class: 'rl-status' }, t(`CV ${cfg.nCV ?? '?'} · MV ${cfg.nMV ?? '?'} · 预测 ${cfg.P ?? '?'} 步 · 周期 ${cfg.Ts ?? '?'}s`, `CV ${cfg.nCV ?? '?'} · MV ${cfg.nMV ?? '?'} · horizon ${cfg.P ?? '?'} · Ts ${cfg.Ts ?? '?'}s`, `CV ${cfg.nCV ?? '?'} · MV ${cfg.nMV ?? '?'} · 予測 ${cfg.P ?? '?'} ステップ · 周期 ${cfg.Ts ?? '?'}s`)));
 
     // CV setpoints (the controlled levels + every temperature)
-    if (ctrl.length) {
+    if (slots.length) {
       w.append(h('div', { class: 'group-title' }, t('CV 设定 · 液位 (m)', 'CV setpoints · level (m)', 'CV 設定値 · 液位 (m)')));
-      ctrl.forEach((idx) => {
-        const inp = h('input', { type: 'number', step: 0.01, min: 0, max: 0.8, value: (sp.h_sp[idx] ?? 0.4).toFixed(2), onchange: sendSP });
-        inp.dataset.hsp = idx;
+      slots.forEach((idx, j) => {
+        const inp = h('input', { type: 'number', step: 0.01, min: 0, max: 0.8, value: (sp.level_targets[idx] ?? 0.4).toFixed(2), onchange: sendSP });
+        inp.dataset.ysp = j;
         w.append(h('div', { class: 'sp-row' }, h('label', {}, meta.tank_labels[idx]), inp, h('span')));
       });
     }
     w.append(h('div', { class: 'group-title', style: 'margin-top:10px' }, t('CV 设定 · 温度 (°C)', 'CV setpoints · temp (°C)', 'CV 設定値 · 温度 (°C)')));
     for (let i = 0; i < n; i++) {
-      const inp = h('input', { type: 'number', step: 1, min: 10, max: 90, value: (sp.t_sp[i] ?? 50).toFixed(0), onchange: sendSP });
-      inp.dataset.tsp = i;
+      const inp = h('input', { type: 'number', step: 1, min: 10, max: 90, value: (sp.output_targets[i] ?? 50).toFixed(0), onchange: sendSP });
+      inp.dataset.ysp = slots.length + i;
       w.append(h('div', { class: 'sp-row' }, h('label', {}, meta.tank_labels[i]), inp, h('span')));
     }
     function sendSP() {
-      const h_sp = Array(n).fill(0);
-      w.querySelectorAll('[data-hsp]').forEach((e) => { h_sp[+e.dataset.hsp] = +e.value; });
-      const t_sp = Array(n).fill(50);
-      w.querySelectorAll('[data-tsp]').forEach((e) => { t_sp[+e.dataset.tsp] = +e.value; });
-      bus.send({ type: 'set_setpoints', h_sp, t_sp });
+      const y_sp = (sp.y_sp || []).slice();
+      while (y_sp.length < slots.length + n) y_sp.push(0);
+      w.querySelectorAll('[data-ysp]').forEach((e) => { y_sp[+e.dataset.ysp] = +e.value; });
+      bus.send({ type: 'set_setpoints', y_sp });
     }
 
     // APC tuning knobs
