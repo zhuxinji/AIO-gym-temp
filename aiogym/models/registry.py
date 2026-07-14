@@ -3,7 +3,7 @@ import math
 from numbers import Real
 from typing import Mapping
 
-from .core import _is_model_instance
+from .core import ProcessModelContract, _is_model_instance
 from .scenarios import (
     CascadeModel,
     QuadrupleModel,
@@ -46,7 +46,7 @@ def _refresh_scenarios():
 
 def validate_model_contract(model):
     required_methods = (
-        "action_dim", "initial_state", "action_vector", "action_vector_to_dict",
+        "action_dim", "initial_state", "action_vector",
         "dynamics", "outputs", "measurement", "controlled_output", "setpoint_vector",
     )
     missing = [name for name in required_methods if not callable(getattr(model, name, None))]
@@ -65,6 +65,14 @@ def validate_model_contract(model):
         raise TypeError("custom process model must expose a non-empty .scenario")
     if not hasattr(model, "n") or int(model.n) <= 0:
         raise TypeError("custom process model must expose a positive .n")
+    has_dynamics_implementation = (
+        callable(getattr(model, "_dynamics", None))
+        or type(model).dynamics is not ProcessModelContract.dynamics
+    )
+    if not has_dynamics_implementation:
+        raise TypeError(
+            "custom process model must implement _dynamics(x, u, d, ops) or override dynamics()"
+        )
     if len(model.initial_state()) != len(model.state_schema()):
         raise TypeError("custom process model state_schema() length must match initial_state()")
     if len(model.action_schema()) != model.action_dim():

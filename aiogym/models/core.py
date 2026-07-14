@@ -10,7 +10,6 @@ Actions are the actuator vector in [0, 1]: [pumps..., valves..., heaters...].
 from __future__ import annotations
 import copy
 import math
-from collections.abc import Mapping
 
 RHO = 1000.0
 CP = 4186.0
@@ -27,7 +26,7 @@ def _copy_value(v):
 
 
 def _is_model_instance(obj):
-    return hasattr(obj, "derivatives") and hasattr(obj, "initial_state") and not isinstance(obj, (str, type))
+    return hasattr(obj, "dynamics") and hasattr(obj, "initial_state") and not isinstance(obj, (str, type))
 
 
 class _NumericOps:
@@ -204,11 +203,10 @@ class ProcessModelContract:
 
     def action_schema(self):
         names = self._action_names()
-        legacy_kinds = self._legacy_action_kinds()
         counters = {}
         rows = []
         for i, name in enumerate(names):
-            kind = self.action_kinds.get(name, legacy_kinds[i] if i < len(legacy_kinds) else "input")
+            kind = self.action_kinds.get(name, "input")
             counters.setdefault(kind, 0)
             rows.append({
                 "name": name,
@@ -229,44 +227,21 @@ class ProcessModelContract:
             return list(self.action_names)
         if self.action_bounds:
             return list(self.action_bounds.keys())
-        return [f"u{i}" for i in range(sum(self.actuator_counts()))]
-
-    def _legacy_action_kinds(self):
-        if not self.uses_legacy_actions():
-            return []
-        n_pumps, n_valves, n_heaters = self.actuator_counts()
-        kinds = (["pump"] * n_pumps) + (["valve"] * n_valves) + (["heater"] * n_heaters)
-        return kinds if len(kinds) == len(self._action_names()) else []
+        return []
 
     def action_vector(self, act):
-        """Return the flat actuator vector u = [pumps..., valves..., heaters...]."""
-        if isinstance(act, Mapping):
-            return (
-                [float(v) for v in act.get("pumps", [])]
-                + [float(v) for v in act.get("valves", [])]
-                + [float(v) for v in act.get("heaters", [])]
-            )
-        return [float(v) for v in act]
-
-    def action_vector_to_dict(self, u):
-        """Map a flat actuator vector u back to the legacy physical action dict."""
-        n_pumps, n_valves, n_heaters = self.actuator_counts()
-        values = self.action_vector(u)
-        expected = n_pumps + n_valves + n_heaters
+        """Validate and return the canonical flat actuator vector ``u``."""
+        try:
+            values = [float(v) for v in act]
+        except (TypeError, ValueError) as ex:
+            raise ValueError(f"{self.scenario} action must be a numeric vector") from ex
+        expected = self.action_dim()
         if len(values) != expected:
             raise ValueError(f"{self.scenario} expected {expected} action values, got {len(values)}")
-        return {
-            "pumps": list(values[:n_pumps]),
-            "valves": list(values[n_pumps:n_pumps + n_valves]),
-            "heaters": list(values[n_pumps + n_valves:]),
-        }
+        return values
 
     def default_action(self):
-        u = [0.5] * self.action_dim()
-        return self.action_vector_to_dict(u) if self.uses_legacy_actions() else u
-
-    def uses_legacy_actions(self):
-        return type(self).actuator_counts is not ProcessModelContract.actuator_counts
+        return [0.5] * self.action_dim()
 
     def state_vector(self, x):
         """Return the generic state vector x used by controllers and simulators."""
@@ -294,10 +269,9 @@ class ProcessModelContract:
             return self._dynamics(self.state_vector(x), self.action_vector(u), env or {}, _NUMERIC_OPS)
         if backend != "numeric":
             raise NotImplementedError(f"{self.scenario} does not support backend={backend!r} dynamics")
-        return self.derivatives(self.state_vector(x), self.action_vector_to_dict(u), env or {})
-
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
+        raise NotImplementedError(
+            f"{self.scenario} must implement _dynamics(x, u, d, ops) or override dynamics()"
+        )
 
     def outputs(self, x):
         """Semantic outputs derived from x.
@@ -471,10 +445,37 @@ class ProcessModelContract:
     def parameter_schema(self):
         params = {k: _copy_value(v) for k, v in self.p.items()}
         params.update(self._extra_parameters())
-        return {
+        schema = {
             name: {"value": value, "unit": self.param_units.get(name, ""), "bounds": self.param_bounds.get(name)}
             for name, value in params.items()
         }
+        from .parameter_profiles import enrich_parameter_schema
+
+        return enrich_parameter_schema(self.scenario, schema)
+
+    def physical_metadata(self):
+        """Return fidelity, provenance, validity-domain, and solver metadata."""
+
+        from .parameter_profiles import model_physical_metadata
+
+        return model_physical_metadata(
+            self.scenario,
+            dt_micro=float(getattr(self, "dt_micro", 0.02) or 0.02),
+        )
+
+    def solver_settings(self):
+        """Return validated numerical integration settings for this model."""
+
+        settings = copy.deepcopy(self.physical_metadata()["solver"])
+        method = settings.get("method", "rk4")
+        if method != "rk4":
+            raise ValueError(f"unsupported integration method for {self.scenario!r}: {method!r}")
+        max_step = float(settings.get("max_step", getattr(self, "dt_micro", 0.02) or 0.02))
+        if not math.isfinite(max_step) or max_step <= 0:
+            raise ValueError(f"solver max_step must be finite and positive, got {max_step!r}")
+        settings["method"] = method
+        settings["max_step"] = max_step
+        return settings
 
     def disturbance_schema(self):
         rows = []
@@ -573,6 +574,7 @@ class ProcessModelContract:
         return [dict(row) for row in self.safety_constraints]
 
     def model_card(self):
+        physical_metadata = self.physical_metadata()
         return {
             "scenario": self.scenario,
             "name": self.display_name,
@@ -587,6 +589,8 @@ class ProcessModelContract:
             "setpoint_vector": {"name": "y_sp", "length": len(self.default_setpoint_vector())},
             "dynamics_disturbances": list(self.dynamics_disturbance_names()),
             "parameters": self.parameter_schema(),
+            "physical_metadata": physical_metadata,
+            "solver": copy.deepcopy(physical_metadata["solver"]),
             "disturbances": self.disturbance_schema(),
             "disturbance_defaults": self.disturbance_defaults(),
             "constraints": self.constraint_schema(),
@@ -604,18 +608,19 @@ class ProcessModelContract:
     def height_max(self):
         return [1.0] * int(self.n)
 
-    def actuator_counts(self):
-        return (0, 0, self.action_dim())
-
     def ideal_energy_kw(self, x, y_sp, env, act):
         return 0.0
 
 class Integrator:
     """Fixed-step RK4 integrator for process models."""
 
-    def __init__(self, model):
+    def __init__(self, model, *, max_step=None):
         self.model = model
-        self.dt_micro = getattr(model, "dt_micro", 0.02) or 0.02
+        settings = model.solver_settings()
+        self.method = settings["method"]
+        self.dt_micro = float(settings["max_step"] if max_step is None else max_step)
+        if not math.isfinite(self.dt_micro) or self.dt_micro <= 0:
+            raise ValueError("integrator max_step must be finite and positive")
         self.reset()
 
     def reset(self, state=None):

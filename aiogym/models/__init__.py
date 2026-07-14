@@ -42,6 +42,13 @@ from .cards import (
     render_model_card_markdown,
     validate_model_card,
 )
+from .parameter_profiles import (
+    PARAMETER_PROFILE_SCHEMA_VERSION,
+    list_parameter_profiles,
+    load_parameter_profile,
+    validate_parameter_profile,
+)
+from .validation import validate_model_readiness
 
 __all__ = [
     "CP",
@@ -62,6 +69,7 @@ __all__ = [
     "MODELS",
     "BUILTIN_MODELS",
     "MODEL_CARD_SCHEMA_VERSION",
+    "PARAMETER_PROFILE_SCHEMA_VERSION",
     "SCENARIOS",
     "apply_model_params",
     "builtin_gym_ids",
@@ -71,9 +79,13 @@ __all__ = [
     "gym_id_name",
     "iter_model_cards",
     "make_model",
+    "list_parameter_profiles",
+    "load_parameter_profile",
     "render_model_card_markdown",
     "register_model",
     "unregister_model",
     "validate_model_card",
     "validate_model_contract",
+    "validate_model_readiness",
+    "validate_parameter_profile",
 ]

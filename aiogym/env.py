@@ -37,6 +37,19 @@ T_HIGH, T_TRIP = 80.0, 92.0
 H_HIGH_FRAC, H_LOW_FRAC, H_OVERFLOW_FRAC = 0.90, 0.15, 0.97
 I_TEMP_MAX, I_LEVEL_MAX = 300.0, 8.0          # anti-windup clamp + obs normalizer for integral error
 
+_DIRECT_ENV_DEFAULTS = {
+    "dynamic": True,
+    "randomize": True,
+    "randomize_setpoints": True,
+    "randomize_plant": False,
+    "plant_drift": False,
+    "integral_obs": False,
+    "action_mode": "actuator",
+    "noise": False,
+    "noise_pct": 0.01,
+    "terminate_on_runaway": False,
+}
+
 
 def _validated_range(name, value):
     try:
@@ -56,23 +69,81 @@ def _validated_range(name, value):
 class AIOGymNativeEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, scenario="cascade", control_dt=0.5, episode_steps=600,
-                 reward_mode="kpi", dynamic=True, randomize=True, randomize_setpoints=True,
-                 randomize_plant=False, plant_drift=False, integral_obs=False, action_mode="actuator",
-                 noise=False, noise_pct=0.01, custom_stage_reward=None,
+    def __init__(self, scenario="cascade", control_dt=None, episode_steps=None, task=None,
+                 reward_mode="kpi", dynamic=None, randomize=None, randomize_setpoints=None,
+                 randomize_plant=None, plant_drift=None, integral_obs=None, action_mode=None,
+                 noise=None, noise_pct=None, custom_stage_reward=None,
                  custom_model=None, model_params=None,
-                 terminate_on_runaway=False, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
+                 terminate_on_runaway=None, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
                  tracking_q_y=1.0, tracking_r_move=0.05,
                  crystal_ln_sp=None, crystal_cv_sp=None, crystal_random_targets=False,
                  crystal_ln_range=(10.0, 11.5), crystal_cv_range=(0.75, 0.95)):
         super().__init__()
-        self.model = apply_model_params(
-            make_model(custom_model if custom_model is not None else scenario),
-            model_params,
+        base_model = make_model(custom_model if custom_model is not None else scenario)
+        self.scenario = base_model.scenario
+        self.task_profile = None
+        task_defaults = {}
+        if task is not None:
+            from .evaluation.task_profiles import load_task_profile, task_environment
+
+            self.task_profile = load_task_profile(task, scenario=self.scenario)
+            task_defaults = task_environment(self.task_profile)
+        resolved_model_params = dict(
+            (self.task_profile or {}).get("model_params", {})
         )
-        self.scenario = self.model.scenario
-        self.control_dt = float(control_dt)
-        self.episode_steps = int(episode_steps)
+        resolved_model_params.update(dict(model_params or {}))
+        self.model = apply_model_params(base_model, resolved_model_params)
+        self._task_initial_state = copy.deepcopy(
+            (self.task_profile or {}).get("initialization", {}).get("state")
+        )
+        task_setpoints = (self.task_profile or {}).get("setpoints", {})
+        self._task_initial_setpoint = copy.deepcopy(task_setpoints.get("initial"))
+        self._task_setpoint_events = {
+            int(event["at_step"]): list(event["values"])
+            for event in task_setpoints.get("schedule", [])
+        }
+        self._task_disturbance_events = {}
+        for event in (self.task_profile or {}).get("disturbances", []):
+            self._task_disturbance_events.setdefault(int(event["at_step"]), []).append({
+                "name": str(event["name"]),
+                "value": copy.deepcopy(event["value"]),
+            })
+        resolved_control_dt = (
+            control_dt if control_dt is not None else task_defaults.get("control_dt", 0.5)
+        )
+        resolved_episode_steps = (
+            episode_steps if episode_steps is not None else task_defaults.get("episode_steps", 600)
+        )
+        resolved_conditions = {}
+        for name, explicit in {
+            "dynamic": dynamic,
+            "randomize": randomize,
+            "randomize_setpoints": randomize_setpoints,
+            "randomize_plant": randomize_plant,
+            "plant_drift": plant_drift,
+            "integral_obs": integral_obs,
+            "action_mode": action_mode,
+            "noise": noise,
+            "noise_pct": noise_pct,
+            "terminate_on_runaway": terminate_on_runaway,
+        }.items():
+            resolved_conditions[name] = (
+                explicit
+                if explicit is not None
+                else task_defaults.get(name, _DIRECT_ENV_DEFAULTS[name])
+            )
+        dynamic = bool(resolved_conditions["dynamic"])
+        randomize = bool(resolved_conditions["randomize"])
+        randomize_setpoints = bool(resolved_conditions["randomize_setpoints"])
+        randomize_plant = bool(resolved_conditions["randomize_plant"])
+        plant_drift = bool(resolved_conditions["plant_drift"])
+        integral_obs = bool(resolved_conditions["integral_obs"])
+        action_mode = resolved_conditions["action_mode"]
+        noise = bool(resolved_conditions["noise"])
+        noise_pct = resolved_conditions["noise_pct"]
+        terminate_on_runaway = bool(resolved_conditions["terminate_on_runaway"])
+        self.control_dt = float(resolved_control_dt)
+        self.episode_steps = int(resolved_episode_steps)
         if not np.isfinite(self.control_dt) or self.control_dt <= 0:
             raise ValueError("control_dt must be finite and positive")
         if self.episode_steps <= 0:
@@ -124,13 +195,36 @@ class AIOGymNativeEnv(gym.Env):
             for row in self.model.disturbance_schema()
             if row.get("event")
         }
+        self._disturbance_schema_by_name = {
+            row["name"]: row for row in self.model.disturbance_schema() if row.get("name")
+        }
+        for events in self._task_disturbance_events.values():
+            for event in events:
+                self._validate_task_disturbance(event["name"], event["value"])
         self._reset_disturbance_values()
         self.integ = Integrator(self.model)
         self.scorer = KPIScorer(self.model)
-        nP, nV, nH = self.model.actuator_counts()
-        self.nP, self.nV, self.nH = nP, nV, nH
         self.nu = self.model.action_dim()
-        y_sp = list(self.model.env_setpoint_vector(self._model_env_options))
+        y_sp = list(
+            self._task_initial_setpoint
+            if self._task_initial_setpoint is not None
+            else self.model.env_setpoint_vector(self._model_env_options)
+        )
+        if len(y_sp) != len(self.model.controlled_output(self.model.initial_state())):
+            raise ValueError(
+                f"task setpoint length {len(y_sp)} does not match controlled-output length "
+                f"{len(self.model.controlled_output(self.model.initial_state()))}"
+            )
+        if self._task_initial_state is not None and len(self._task_initial_state) != len(self.model.initial_state()):
+            raise ValueError(
+                f"task initial-state length {len(self._task_initial_state)} does not match state length "
+                f"{len(self.model.initial_state())}"
+            )
+        for at_step, values in self._task_setpoint_events.items():
+            if len(values) != len(y_sp):
+                raise ValueError(
+                    f"task setpoint event at step {at_step} has {len(values)} values; expected {len(y_sp)}"
+                )
         self._ysp0 = list(y_sp)
 
         # integral-of-error obs (the I-term a memoryless policy otherwise lacks): lets
@@ -194,6 +288,22 @@ class AIOGymNativeEnv(gym.Env):
         if attr:
             setattr(self, attr, self._copy_disturbance_value(value))
 
+    def _validate_task_disturbance(self, name, value):
+        if name not in self._disturbance_defaults:
+            available = ", ".join(sorted(self._disturbance_defaults)) or "none"
+            raise ValueError(f"unknown task disturbance {name!r}; available: {available}")
+        row = self._disturbance_schema_by_name.get(name, {})
+        bounds = row.get("bounds")
+        values = value if isinstance(value, list) else [value]
+        if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
+            lo, hi = bounds
+            for item in values:
+                number = float(item)
+                if lo is not None and number < float(lo):
+                    raise ValueError(f"task disturbance {name!r} is below its lower bound {lo}")
+                if hi is not None and number > float(hi):
+                    raise ValueError(f"task disturbance {name!r} is above its upper bound {hi}")
+
     def _sync_known_disturbances(self):
         for name in self._disturbance_defaults:
             attr = self._disturbance_attrs.get(name)
@@ -230,7 +340,7 @@ class AIOGymNativeEnv(gym.Env):
         if not self.model.supports_integral_observation:
             return
         out = self.model.outputs(self.integ.x)
-        y = list(out.get("y", self.model.controlled_output(self.integ.x)))
+        y = list(out["y"])
         errors = [self.y_sp[i] - y[i] if i < len(y) else 0.0 for i in range(len(self.y_sp))]
         dt = self.control_dt
         self._iy = [float(np.clip(self._iy[i] + errors[i] * dt, -I_TEMP_MAX, I_TEMP_MAX)) for i in range(len(errors))]
@@ -397,7 +507,11 @@ class AIOGymNativeEnv(gym.Env):
             self._regime_target = self._sample_regime_mult()
         elif self.plant_drift:
             self._regime_target = self._sample_regime_mult()
-        x0 = list(self.model.initial_state())
+        x0 = list(
+            self._task_initial_state
+            if self._task_initial_state is not None
+            else self.model.initial_state()
+        )
         self.y_sp = list(self._ysp0)
         self._reset_disturbance_values()
         if self.randomize:
@@ -423,6 +537,13 @@ class AIOGymNativeEnv(gym.Env):
         self.last_act = self.model.action_vector(self.model.default_action())
         self.previous_act = copy.deepcopy(self.last_act)
         self._schedule_disturbances()
+        # A task event at t=0 is part of the initial controller context. Applying
+        # it before the first observation avoids an artificial one-sample delay
+        # in paper-style reference-step experiments.
+        if 0 in self._task_setpoint_events:
+            self.y_sp = list(self._task_setpoint_events[0])
+        for event in self._task_disturbance_events.get(0, []):
+            self._set_disturbance_value(event["name"], event["value"])
         return self._obs(), {}
 
     def default_sp_action(self):
@@ -454,12 +575,12 @@ class AIOGymNativeEnv(gym.Env):
             val = lo + float(a[i]) * (hi - lo)
             if spec[0] == "y_sp":
                 self.y_sp[spec[1]] = val
-            else:                                   # ("mv", kind, idx, lo, hi)
-                mv[(spec[1], spec[2])] = val
+            else:                                   # ("mv", u_index, lo, hi)
+                mv[spec[1]] = val
         act = self.pid.compute(self._meas(), {"y_sp": self.y_sp}, self.control_dt)
-        for (kind, idx), v in mv.items():
-            act[kind][idx] = v
-        return self.model.action_vector(act)
+        for u_index, value in mv.items():
+            act[u_index] = value
+        return act
 
     def _validated_action(self, action):
         try:
@@ -478,9 +599,13 @@ class AIOGymNativeEnv(gym.Env):
         act = self._supervise(action) if self.pid is not None else self._split(action)
         state = list(self.integ.x)
         self.last_act = act
+        if self._k in self._task_setpoint_events:
+            self.y_sp = list(self._task_setpoint_events[self._k])
         for (t, event) in self._dist_events:
             if t == self._k:
                 self._apply_disturbance(event)
+        for event in self._task_disturbance_events.get(self._k, []):
+            self._set_disturbance_value(event["name"], event["value"])
         self._apply_plant_drift()
         self.integ.step(self.control_dt, act, self._env())
         self._accumulate_integral()

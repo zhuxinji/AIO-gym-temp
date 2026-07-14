@@ -14,6 +14,7 @@ class CSTRModel(ProcessModelContract):
     state_units = {"Ca": "mol/L", "T": "degC"}
     state_bounds = {"Ca": (0.0, 1.5), "T": (0.0, 200.0)}
     action_names = ("feed_pump", "cooling")
+    action_kinds = {"feed_pump": "pump", "cooling": "heater"}
     output_names = ("reactor_temperature",)
     output_units = {"reactor_temperature": "degC"}
     output_bounds = {"reactor_temperature": (45, 90)}
@@ -27,7 +28,7 @@ class CSTRModel(ProcessModelContract):
         "w_energy": 0.7,
         "w_viol": 14.0,
     }
-    supervisory_layout = (("y_sp", 0, 45, 90), ("mv", "pumps", 0, 0.3, 1.0))
+    supervisory_layout = (("y_sp", 0, 45, 90), ("mv", 0, 0.3, 1.0))
     param_units = {"Dmax": "1/s", "Caf": "mol/L", "k0": "1/s", "EaR": "K", "Hr": "degC/(mol/L)", "Uc": "1/s", "Tcool": "degC", "cool_max": "W", "feed_power_max": "W", "t_cold": "degC", "t_amb": "degC", "h_floor": "m"}
     param_bounds = {"Dmax": (0.0, 1.0), "Caf": (0.0, 5.0), "k0": (0.0, 1e12), "EaR": (0.0, 50000.0), "Hr": (0.0, 1000.0), "Uc": (0.0, 10.0), "Tcool": (-20.0, 50.0), "cool_max": (0.0, 500000.0), "feed_power_max": (0.0, 10000.0), "t_cold": (0.0, 60.0), "t_amb": (0.0, 45.0), "h_floor": (1e-6, 0.1)}
     input_disturbances = (
@@ -41,9 +42,6 @@ class CSTRModel(ProcessModelContract):
     def __init__(self):
         self.p = dict(Dmax=0.02, Caf=1.0, k0=1e8, EaR=7000.0, Hr=120.0, Uc=0.05, Tcool=10.0,
                       cool_max=80000.0, feed_power_max=1200.0, t_cold=20.0, t_amb=20.0, h_floor=1e-3)
-
-    def actuator_counts(self):
-        return (1, 0, 1)
 
     @property
     def height_max(self):
@@ -85,9 +83,6 @@ class CSTRModel(ProcessModelContract):
 
     def constraint_penalty_scales(self):
         return {"cstr_temp_low": 10.0, "cstr_ca_high": 1.0, "cstr_ca_low": 1.0}
-
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
 
     def _dynamics(self, x, u, env, ops):
         p = self.p
@@ -143,7 +138,7 @@ class CSTRModel(ProcessModelContract):
     def production(self, x, act, env=None):
         """Reactant consumption-rate proxy used as the CSTR economic value."""
         Ca = _maxv(x[0], 0.0)
-        D = act["pumps"][0] * self.p["Dmax"]
+        D = self.action_vector(act)[0] * self.p["Dmax"]
         return D * max(0.0, self.feed_concentration(env) - Ca)
 
     def conversion(self, x, env=None):

@@ -57,5 +57,7 @@ aiogym = [
   "controllers/examples/*.md",
   "models/examples/*.py",
   "models/examples/*.md",
+  "models/parameters/*.json",
   "evaluation/suites/*.json",
+  "evaluation/tasks/*/*.json",
 ]

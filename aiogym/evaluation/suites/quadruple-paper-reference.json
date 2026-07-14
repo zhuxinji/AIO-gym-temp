@@ -1,0 +1,25 @@
+{
+  "description": "Paper-faithful Johansson Fig. 10/11 P- and P+ decentralized PI reference-step experiments.",
+  "scenarios": ["quadruple"],
+  "objectives": ["tracking"],
+  "controllers": ["pid"],
+  "action_mode": "actuator",
+  "cases": [
+    {
+      "scenario": "quadruple",
+      "task": "pminus-reference-step",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "pplus-reference-step",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase"}
+      }
+    }
+  ]
+}

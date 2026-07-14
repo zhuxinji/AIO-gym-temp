@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from aiogym._internal.config import parse_seed_list
@@ -36,15 +37,7 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
             action_mode = args.sb3_action_mode if name == "sb3" else args.onnx_action_mode
             if not path:
                 raise ValueError(f"controller '{name}' requires --{name}-path")
-            policy_protocol = resolve_protocol(
-                args.scenario,
-                args.objective,
-                {
-                    "action_mode": action_mode,
-                    "episode_steps": args.episode_steps,
-                    "control_dt": args.control_dt,
-                },
-            )
+            policy_protocol = replace(baseline_protocol, action_mode=action_mode)
             config = {"path": path, "action_mode": action_mode}
             if name == "sb3":
                 config["algo"] = args.sb3_algo
@@ -68,7 +61,7 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
             "name": name,
             "protocol": baseline_protocol,
             "seed_list": parse_seed_list(args.seed_list, args.seed, args.episodes),
-            "config": {},
+            "config": {"profile": args.controller_profile} if args.controller_profile else {},
         })
     return specs
 
@@ -111,13 +104,15 @@ def main():
     )
     ap.add_argument("--scenario", default="cstr", choices=SCENARIOS)
     ap.add_argument("--objective", default="economic", choices=["economic", "tracking", "robustness", "safety", "kpi"])
+    ap.add_argument("--task", default=None, help="named scenario task profile")
     ap.add_argument("--controllers", default="pid,mpc")
+    ap.add_argument("--controller-profile", default=None, help="controller tuning profile for PID/MPC baselines")
     ap.add_argument("--episodes", type=int, default=3)
     ap.add_argument("--oracle-episodes", type=int, default=1)
-    ap.add_argument("--episode-steps", type=int, default=80)
+    ap.add_argument("--episode-steps", type=int, default=None)
     ap.add_argument("--seed", type=int, default=9000)
     ap.add_argument("--seed-list", default=None, help="comma-separated fixed seeds; overrides --seed/--episodes")
-    ap.add_argument("--control-dt", type=float, default=0.5)
+    ap.add_argument("--control-dt", type=float, default=None)
     ap.add_argument("--sb3-path", default=None)
     ap.add_argument("--sb3-algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--sb3-action-mode", default="setpoint", choices=["actuator", "setpoint"])
@@ -129,13 +124,22 @@ def main():
     ap.add_argument("--rollout-steps", type=int, default=None)
     args = ap.parse_args()
 
+    timing = {}
+    if args.episode_steps is not None:
+        timing["episode_steps"] = args.episode_steps
+    elif args.task is None:
+        timing["episode_steps"] = 80
+    if args.control_dt is not None:
+        timing["control_dt"] = args.control_dt
+    elif args.task is None:
+        timing["control_dt"] = 0.5
     baseline_protocol = resolve_protocol(
         args.scenario,
         args.objective,
         {
             "action_mode": "actuator",
-            "episode_steps": args.episode_steps,
-            "control_dt": args.control_dt,
+            **timing,
+            **({"task": args.task} if args.task else {}),
         },
     )
     out_path = args.out or f"aiogym/runs/bench_{args.scenario}_controllers.json"
@@ -161,6 +165,7 @@ def main():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "benchmark": "controller_benchmark",
         "scenario": args.scenario,
+        "task": baseline_protocol.metadata()["task_identity"]["name"],
         "objective": args.objective,
         "controllers": [spec["name"] for spec in specs],
         "metric": primary_metric_for_objective(baseline_protocol.objective),

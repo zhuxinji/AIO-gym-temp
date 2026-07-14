@@ -24,5 +24,17 @@
       "du_max": 0.4,
       "cv_scale": [1.0, 1.0]
     }
+  },
+  "profiles": {
+    "quadruple-minimum-phase": {
+      "scenarios": {
+        "quadruple": {"Ts": 1.0, "P": 40}
+      }
+    },
+    "quadruple-nonminimum-phase": {
+      "scenarios": {
+        "quadruple": {"Ts": 1.0, "P": 160, "move_supp": 2.0, "du_max": 0.05}
+      }
+    }
   }
 }

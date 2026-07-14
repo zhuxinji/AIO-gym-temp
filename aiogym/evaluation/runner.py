@@ -44,11 +44,15 @@ def run_evaluation_case(
         protocol=protocol,
         include_episodes=include_episodes,
     )
+    task_meta = protocol.metadata()["task_identity"]
     row = compact_result_row(
         result,
         scenario=scenario,
         objective=protocol.objective,
         action_mode=protocol.action_mode,
+        task=task_meta["name"],
+        task_status=task_meta["status"],
+        task_profile_hash=task_meta["profile_hash"],
         suite_case=suite_case,
         controller=controller,
     )

@@ -11,6 +11,7 @@ class FiredHeaterModel(ProcessModelContract):
     state_units = {"T_firebox": "degC", "T_out": "degC", "O2": "%"}
     state_bounds = {"T_firebox": (20.0, 1400.0), "T_out": (20.0, 650.0), "O2": (0.0, 20.9)}
     action_names = ("air_damper", "fuel_valve")
+    action_kinds = {"air_damper": "valve", "fuel_valve": "heater"}
     output_names = ("flue_o2", "outlet_temperature")
     output_units = {"flue_o2": "%", "outlet_temperature": "degC"}
     output_bounds = {"flue_o2": (1.8, 5.0), "outlet_temperature": (364.0, 372.0)}
@@ -58,9 +59,6 @@ class FiredHeaterModel(ProcessModelContract):
             t_cold=280.0, t_amb=20.0, h_floor=1e-3,
         )
 
-    def actuator_counts(self):
-        return (0, 1, 1)
-
     @property
     def height_max(self):
         return [12.0]
@@ -96,9 +94,6 @@ class FiredHeaterModel(ProcessModelContract):
         flue_mass = air + fuel * completeness
         return fuel, air, duty, o2_eq, flue_mass
 
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
-
     def _dynamics(self, x, u, env, ops):
         p = self.p
         t_firebox, t_out, o2 = x[0], x[1], x[2]
@@ -133,9 +128,6 @@ class FiredHeaterModel(ProcessModelContract):
         return [levels[0], temps[0]]
 
     energy_scored = False
-
-    def cv_scales(self):
-        return {"level": 1.2, "temp": 12.0}
 
     def mpc_init(self):
         return [0.30, 0.55]

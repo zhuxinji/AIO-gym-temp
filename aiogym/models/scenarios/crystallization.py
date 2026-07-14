@@ -19,6 +19,7 @@ class CrystallizationModel(ProcessModelContract):
     state_units = {"mu0": "moment", "mu1": "moment", "mu2": "moment", "mu3": "moment", "c": "kg/L"}
     state_bounds = {"mu0": (0.0, 1e4), "mu1": (0.0, 1e6), "mu2": (0.0, 1e8), "mu3": (0.0, 1e10), "c": (0.0, 2.0)}
     action_names = ("cooling_temperature_fraction",)
+    action_kinds = {"cooling_temperature_fraction": "heater"}
     output_names = ("coefficient_variation", "mean_crystal_size")
     output_units = {"coefficient_variation": "dimensionless", "mean_crystal_size": "um"}
     output_bounds = {"coefficient_variation": (0.0, 5.0), "mean_crystal_size": (0.0, 50.0)}
@@ -86,9 +87,6 @@ class CrystallizationModel(ProcessModelContract):
             Ginf_scale=2e-6,
             Ginf_max=2e-4,
         )
-
-    def actuator_counts(self):
-        return (0, 0, 1)
 
     @property
     def height_max(self):
@@ -266,12 +264,8 @@ class CrystallizationModel(ProcessModelContract):
         return sampled
 
     def default_action(self):
-        return {"pumps": [], "valves": [], "heaters": [0.5]}
-
-    def action_dim(self):
-        return 1
+        return [0.5]
 
     def _action_fraction(self, act=None):
-        act = act or {}
-        heaters = act.get("heaters") or []
-        return self._clip_numeric(heaters[0] if heaters else 0.5, 0.0, 1.0, 0.5)
+        values = self.default_action() if act is None else self.action_vector(act)
+        return self._clip_numeric(values[0], 0.0, 1.0, 0.5)

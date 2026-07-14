@@ -217,6 +217,37 @@ def _protocol_kwargs(defaults: Mapping[str, Any], overrides: Mapping[str, Any]):
     return data
 
 
+# Compatibility conditions for protocols without an explicit task. New task
+# profiles own these environment settings; objectives own scoring and reports.
+_IMPLICIT_TASK_DEFAULTS = {
+    "economic": {
+        "action_mode": "actuator", "dynamic": True, "randomize": True,
+        "randomize_setpoints": False, "randomize_plant": True, "plant_drift": True,
+        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
+    },
+    "tracking": {
+        "action_mode": "actuator", "dynamic": False, "randomize": False,
+        "randomize_setpoints": False, "randomize_plant": False, "plant_drift": False,
+        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
+    },
+    "kpi": {
+        "action_mode": "actuator", "dynamic": True, "randomize": True,
+        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
+        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
+    },
+    "robustness": {
+        "action_mode": "actuator", "dynamic": True, "randomize": True,
+        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
+        "integral_obs": False, "terminate_on_runaway": False, "noise": True,
+    },
+    "safety": {
+        "action_mode": "actuator", "dynamic": True, "randomize": True,
+        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
+        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
+    },
+}
+
+
 @dataclass(frozen=True)
 class BenchmarkProtocol:
     """Reproducible benchmark environment configuration.
@@ -231,20 +262,21 @@ class BenchmarkProtocol:
     scenario: str = "cstr"
     objective: str = "economic"
     env_reward_mode: str = "economic"
-    action_mode: str = "actuator"
-    control_dt: float = 0.5
-    episode_steps: int = 400
-    dynamic: bool = True
-    randomize: bool = True
-    randomize_setpoints: bool = False
-    randomize_plant: bool = True
-    plant_drift: bool = True
-    integral_obs: bool = False
-    terminate_on_runaway: bool = False
+    action_mode: str | None = None
+    control_dt: float | None = None
+    episode_steps: int | None = None
+    task: Any = None
+    dynamic: bool | None = None
+    randomize: bool | None = None
+    randomize_setpoints: bool | None = None
+    randomize_plant: bool | None = None
+    plant_drift: bool | None = None
+    integral_obs: bool | None = None
+    terminate_on_runaway: bool | None = None
     tracking_q_y: Any = 1.0
     tracking_r_move: float = 0.05
-    noise: bool = False
-    noise_pct: float = 0.01
+    noise: bool | None = None
+    noise_pct: float | None = None
     model_params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -256,18 +288,51 @@ class BenchmarkProtocol:
             )
         if self.env_reward_mode not in {"economic", "kpi", "tracking"}:
             raise ValueError("env_reward_mode must be one of: economic, kpi, tracking")
-        if self.action_mode not in {"actuator", "setpoint"}:
+        task = None
+        task_defaults = {}
+        if self.task is not None:
+            from .task_profiles import load_task_profile, task_environment
+
+            task = load_task_profile(self.task, scenario=self.scenario)
+            task_defaults = task_environment(task)
+            supported = task.get("supported_objectives")
+            if supported is not None and self.objective not in supported:
+                raise ValueError(
+                    f"task {task['name']!r} does not support objective {self.objective!r}; "
+                    f"supported: {', '.join(supported)}"
+                )
+        implicit = _IMPLICIT_TASK_DEFAULTS[self.objective]
+        resolved_conditions = {}
+        for name in (
+            "action_mode", "dynamic", "randomize", "randomize_setpoints",
+            "randomize_plant", "plant_drift", "integral_obs",
+            "terminate_on_runaway", "noise",
+        ):
+            explicit = getattr(self, name)
+            resolved_conditions[name] = (
+                explicit if explicit is not None else task_defaults.get(name, implicit[name])
+            )
+        if resolved_conditions["action_mode"] not in {"actuator", "setpoint"}:
             raise ValueError("action_mode must be one of: actuator, setpoint")
-        control_dt = float(self.control_dt)
+        control_dt = float(
+            self.control_dt if self.control_dt is not None else task_defaults.get("control_dt", 0.5)
+        )
         if not math.isfinite(control_dt) or control_dt <= 0:
             raise ValueError("control_dt must be finite and positive")
+        episode_steps = (
+            self.episode_steps
+            if self.episode_steps is not None
+            else task_defaults.get("episode_steps", 400)
+        )
         if (
-            isinstance(self.episode_steps, bool)
-            or not isinstance(self.episode_steps, Integral)
-            or int(self.episode_steps) <= 0
+            isinstance(episode_steps, bool)
+            or not isinstance(episode_steps, Integral)
+            or int(episode_steps) <= 0
         ):
             raise ValueError("episode_steps must be a positive integer")
-        noise_pct = float(self.noise_pct)
+        noise_pct = float(
+            self.noise_pct if self.noise_pct is not None else task_defaults.get("noise_pct", 0.01)
+        )
         if not math.isfinite(noise_pct) or noise_pct < 0:
             raise ValueError("noise_pct must be finite and non-negative")
         tracking_r_move = float(self.tracking_r_move)
@@ -275,44 +340,40 @@ class BenchmarkProtocol:
             raise ValueError("tracking_r_move must be finite and non-negative")
         if not isinstance(self.model_params, Mapping):
             raise TypeError("model_params must be a mapping")
+        model_params = dict((task or {}).get("model_params", {}))
+        model_params.update(dict(self.model_params))
         object.__setattr__(self, "control_dt", control_dt)
-        object.__setattr__(self, "episode_steps", int(self.episode_steps))
+        object.__setattr__(self, "episode_steps", int(episode_steps))
+        object.__setattr__(self, "task", task)
+        for name, value in resolved_conditions.items():
+            object.__setattr__(self, name, value)
         object.__setattr__(self, "noise_pct", noise_pct)
         object.__setattr__(self, "tracking_r_move", tracking_r_move)
-        object.__setattr__(self, "model_params", dict(self.model_params))
+        object.__setattr__(self, "model_params", model_params)
 
     @classmethod
     def economic(cls, scenario: str, **kw):
-        defaults = dict(objective="economic", env_reward_mode="economic",
-                        randomize_setpoints=False, randomize_plant=True, plant_drift=True)
+        defaults = dict(objective="economic", env_reward_mode="economic")
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
 
     @classmethod
     def tracking(cls, scenario: str, **kw):
-        defaults = dict(objective="tracking", env_reward_mode="tracking",
-                        dynamic=False, randomize=False, randomize_setpoints=False,
-                        randomize_plant=False, plant_drift=False)
+        defaults = dict(objective="tracking", env_reward_mode="tracking")
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
 
     @classmethod
     def kpi(cls, scenario: str, **kw):
-        defaults = dict(objective="kpi", env_reward_mode="kpi",
-                        randomize_setpoints=True, randomize_plant=True, plant_drift=True)
+        defaults = dict(objective="kpi", env_reward_mode="kpi")
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
 
     @classmethod
     def robustness(cls, scenario: str, **kw):
-        defaults = dict(objective="robustness", env_reward_mode="kpi",
-                        dynamic=True, randomize=True, randomize_setpoints=True,
-                        randomize_plant=True, plant_drift=True, noise=True)
+        defaults = dict(objective="robustness", env_reward_mode="kpi")
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
 
     @classmethod
     def safety(cls, scenario: str, **kw):
-        defaults = dict(objective="safety", env_reward_mode="kpi",
-                        dynamic=True, randomize=True, randomize_setpoints=True,
-                        randomize_plant=True, plant_drift=True,
-                        terminate_on_runaway=False)
+        defaults = dict(objective="safety", env_reward_mode="kpi")
         return cls(scenario=scenario, **_protocol_kwargs(defaults, kw))
 
     def env_kwargs(self, action_mode: str | None = None):
@@ -330,8 +391,11 @@ class BenchmarkProtocol:
         return AIOGymNativeEnv(self.scenario, **self.env_kwargs(action_mode=action_mode))
 
     def metadata(self):
+        from .task_profiles import task_identity
+
         primary_metric = primary_metric_for_objective(self.objective)
         data = asdict(self)
+        data["task_identity"] = task_identity(self.task)
         data["metrics"] = list(PROTOCOL_METRICS.get(self.objective, ()))
         data["primary_metric"] = primary_metric
         data["primary_metric_direction"] = metric_direction(primary_metric)
@@ -351,7 +415,7 @@ class BenchmarkConfig:
     controller: str = "pid"
     seeds: tuple[int, ...] = (0,)
     controller_config: Mapping[str, Any] = field(default_factory=dict)
-    disturbance: str = "model_schema_dynamic"
+    disturbance: str = "task_and_model_schema"
     metrics: tuple[str, ...] = ()
 
     def __post_init__(self):
@@ -371,10 +435,14 @@ class BenchmarkConfig:
     def metadata(self):
         metrics = self.metrics or PROTOCOL_METRICS.get(self.protocol.objective, ())
         primary_metric = primary_metric_for_objective(self.protocol.objective)
+        task_meta = self.protocol.metadata()["task_identity"]
         return {
             "schema_version": EVALUATION_SCHEMA_VERSION,
             "objective": self.protocol.objective,
             "scenario": self.protocol.scenario,
+            "task": task_meta["name"],
+            "task_status": task_meta["status"],
+            "task_profile_hash": task_meta["profile_hash"],
             "controller": self.controller,
             "controller_config": _jsonable(dict(self.controller_config)),
             "seed_list": list(self.seeds),

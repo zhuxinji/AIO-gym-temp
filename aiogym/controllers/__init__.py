@@ -247,7 +247,10 @@ def load_controller_config(name: str, scenario: str | None = None,
 def _merged_controller_config(name: str, scenario: str | None,
                               config: Mapping[str, Any] | None = None) -> dict[str, Any]:
     override = dict(config or {})
-    profile = override.get("mode")
+    explicit_profile = override.pop("profile", None)
+    # ``mode`` selected profiles before named task/controller profiles existed.
+    # Keep that public behavior while allowing an explicit profile to win.
+    profile = explicit_profile if explicit_profile is not None else override.get("mode")
     base = load_controller_config(name, scenario, profile=profile)
     params = dict(base.get("parameters", {}))
     params.update(override.pop("parameters", {}))
@@ -257,11 +260,16 @@ def _merged_controller_config(name: str, scenario: str | None,
     for k, v in override.items():
         if k in _CONFIG_META_KEYS:
             merged[k] = v
+    if explicit_profile is not None:
+        merged["profile"] = explicit_profile
     merged["parameters"] = params
     return merged
 
 
-_CONFIG_META_KEYS = {"action_mode", "control_structure", "name", "class", "adapter", "scenario", "scenarios"}
+_CONFIG_META_KEYS = {
+    "action_mode", "control_structure", "name", "class", "adapter",
+    "scenario", "scenarios", "profile",
+}
 
 
 def _controller_params(config: Mapping[str, Any] | None) -> dict[str, Any]:

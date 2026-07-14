@@ -1,0 +1,27 @@
+{
+  "description": "Task-aware comparison of the minimum- and nonminimum-phase quadruple-tank operating points.",
+  "scenarios": ["quadruple"],
+  "objectives": ["tracking"],
+  "controllers": ["pid", "mpc", "oracle"],
+  "action_mode": "actuator",
+  "cases": [
+    {
+      "scenario": "quadruple",
+      "task": "minimum-phase-classic",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase"},
+        "mpc": {"profile": "quadruple-minimum-phase"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "nonminimum-phase-classic",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase"},
+        "mpc": {"profile": "quadruple-nonminimum-phase"}
+      }
+    }
+  ]
+}

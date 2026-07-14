@@ -10,7 +10,7 @@ def test_model_contract():
     for scn in SCENARIOS:
         model = make_model(scn)
         card = model.model_card()
-        n_act = sum(model.actuator_counts())
+        n_act = model.action_dim()
         params = card["parameters"]
         state_ok = len(card["states"]) == len(model.initial_state())
         action_ok = len(card["actions"]) == n_act
@@ -25,10 +25,8 @@ def test_model_contract():
         meta_ok = meta_ok and bool(card["plant_regime"]) and bool(card["economic_config"])
         meta_ok = meta_ok and isinstance(card["supervisory_layout"], list)
         u = [0.5] * n_act
-        act = model.action_vector_to_dict(u)
         env = model.disturbance_defaults()
         dx_generic = model.dynamics(model.initial_state(), u, env)
-        dx_dynamics_alias = model.dynamics(model.initial_state(), act, env)
         dx_casadi = dx_generic
         casadi_ok = len(model.disturbance_vector(env)) == len(model.dynamics_disturbance_names())
         if ca is not None:
@@ -41,8 +39,7 @@ def test_model_contract():
             ), dtype=float).reshape(-1)
             casadi_ok = casadi_ok and np.allclose(dx_casadi, dx_generic)
         meas = model.measurement(model.initial_state(), env)
-        generic_ok = np.allclose(model.action_vector(act), u)
-        generic_ok = generic_ok and np.allclose(dx_generic, dx_dynamics_alias)
+        generic_ok = np.allclose(model.action_vector(u), u)
         generic_ok = generic_ok and casadi_ok
         generic_ok = generic_ok and meas["x"] == model.initial_state() and "y" in meas
         generic_ok = generic_ok and "levels" in meas and "temps" in meas
@@ -150,7 +147,7 @@ def test_custom_model_entrypoints():
 
         generic = make_model("generic_vector")
         generic_schema = generic.action_schema()
-        generic_ok = generic.action_dim() == 2 and not generic.uses_legacy_actions()
+        generic_ok = generic.action_dim() == 2
         generic_ok = generic_ok and [row["name"] for row in generic_schema] == ["coolant_flow", "agitator_speed"]
         generic_ok = generic_ok and [row["kind"] for row in generic_schema] == ["flow", "rotation"]
         generic_env = AIOGymNativeEnv("generic_vector", dynamic=False, randomize=False, randomize_setpoints=False, episode_steps=2)

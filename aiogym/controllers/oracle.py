@@ -13,9 +13,7 @@ Plant dynamics are supplied by the model contract through
 
 Usage:
     orc = NMPCOracle("cstr", horizon=20, mode="economic")
-    act = orc.solve(x, t_cold, t_amb, disturbances=meas, y_sp=y_sp)
-    # legacy models -> {"pumps":[...],"valves":[...],"heaters":[...]}
-    # generic models -> flat u vector
+    u = orc.solve(x, t_cold, t_amb, disturbances=meas, y_sp=y_sp)
 """
 from __future__ import annotations
 import copy
@@ -63,8 +61,6 @@ class NMPCOracle:
         self.transcription = transcription
         self.enforce_state_bounds = bool(enforce_state_bounds)
         self.enforce_temperature_cap = bool(enforce_temperature_cap)
-        nP, nV, nH = self.model.actuator_counts()
-        self.nP, self.nV, self.nH = nP, nV, nH
         self.nu = self.model.action_dim()
         self.nx = len(self.model.initial_state())
         self.ny = len(self.model.controlled_output(self.model.initial_state()))
@@ -361,11 +357,7 @@ class NMPCOracle:
             self.last_error = e
             u = self.u_prev                                # keep last on solver failure
         self.u_prev = np.asarray(u, float).reshape(-1)
-        if not self.model.uses_legacy_actions():
-            return list(self.u_prev)
-        return {"pumps": list(self.u_prev[:self.nP]),
-                "valves": list(self.u_prev[self.nP:self.nP + self.nV]),
-                "heaters": list(self.u_prev[self.nP + self.nV:])}
+        return list(self.u_prev)
 
 
 class OracleAgent:

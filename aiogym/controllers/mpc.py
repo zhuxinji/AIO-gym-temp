@@ -17,7 +17,6 @@ class MPCAgent:
 
     def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15, cv_scale=None):
         self.m = model
-        self.nP, self.nV, self.nH = model.actuator_counts()
         self.nu = model.action_dim()
         self.nx = len(model.initial_state())
         self.ncv = len(model.controlled_output(model.initial_state()))
@@ -62,7 +61,7 @@ class MPCAgent:
         return np.asarray(self.m.action_vector(action), dtype=np.float32)
 
     def _unpack(self, u):
-        return self.m.action_vector_to_dict(u)
+        return self.m.action_vector(u)
 
     def _toX(self, meas):
         return np.asarray(meas["x"], dtype=np.float64)

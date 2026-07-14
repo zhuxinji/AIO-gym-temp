@@ -1,0 +1,13 @@
+{
+  "description": "Task-defined pump-loss and outlet-restriction rejection benchmark.",
+  "scenarios": ["quadruple"],
+  "objectives": ["robustness"],
+  "controllers": ["pid", "mpc", "oracle"],
+  "action_mode": "actuator",
+  "task": "disturbance-rejection",
+  "controller_configs": {
+    "pid": {"profile": "quadruple-minimum-phase"},
+    "mpc": {"profile": "quadruple-minimum-phase"},
+    "oracle": {"mode": "tracking"}
+  }
+}

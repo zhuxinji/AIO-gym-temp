@@ -23,7 +23,7 @@ def test_cstr_disturbance_semantics():
     """CSTR-specific disturbances should affect the backend model in the expected direction."""
     model = make_model("cstr")
     x = [0.5, 60.0]
-    act = {"pumps": [0.5], "valves": [], "heaters": [0.5]}
+    act = [0.5, 0.5]
     base = {"t_cold": 20.0, "t_amb": 20.0, "extra_outflow": 0.0}
     lean = {**base, "Caf": 0.6}
     rich = {**base, "Caf": 1.4}
@@ -58,7 +58,7 @@ def test_process_disturbance_semantics():
 
     cascade = make_model("cascade")
     cx = [0.30, 50.0, 0.30, 50.0, 0.30, 50.0]
-    cact = {"pumps": [0.5], "valves": [0.5, 0.5, 0.5], "heaters": [0.5, 0.5, 0.5]}
+    cact = [0.5] * 7
     c_low_pump = cascade.dynamics(cx, cact, {**tank_env, "pump_flow_factor": 0.7})
     c_high_pump = cascade.dynamics(cx, cact, {**tank_env, "pump_flow_factor": 1.3})
     c_low_heat = cascade.dynamics(cx, cact, {**tank_env, "heater_efficiency": 0.6})
@@ -70,21 +70,18 @@ def test_process_disturbance_semantics():
     check("Cascade heat-loss factor lowers temp derivative", c_high_loss[1] < c_low_loss[1])
 
     quad = make_model("quadruple")
-    qx = [0.25, 50.0, 0.25, 50.0, 0.12, 45.0, 0.12, 45.0]
-    qact = {"pumps": [0.5, 0.5], "valves": [], "heaters": [0.5, 0.5, 0.5, 0.5]}
+    qx = [12.0, 13.0, 2.0, 1.5]
+    qact = [0.5, 0.5]
     q_low_pump = quad.dynamics(qx, qact, {**tank_env, "pump_flow_factor": 0.7})
     q_high_pump = quad.dynamics(qx, qact, {**tank_env, "pump_flow_factor": 1.3})
-    q_low_heat = quad.dynamics(qx, qact, {**tank_env, "heater_efficiency": 0.6})
-    q_high_heat = quad.dynamics(qx, qact, {**tank_env, "heater_efficiency": 1.2})
-    q_low_loss = quad.dynamics(qx, qact, {**tank_env, "heat_loss_factor": 0.5})
-    q_high_loss = quad.dynamics(qx, qact, {**tank_env, "heat_loss_factor": 2.0})
+    q_low_outlet = quad.dynamics(qx, qact, {**tank_env, "outlet_area_factor": 0.7})
+    q_high_outlet = quad.dynamics(qx, qact, {**tank_env, "outlet_area_factor": 1.3})
     check("Quadruple pump factor raises lower-tank derivative", q_high_pump[0] > q_low_pump[0])
-    check("Quadruple heater efficiency raises temp derivative", q_high_heat[1] > q_low_heat[1])
-    check("Quadruple heat-loss factor lowers temp derivative", q_high_loss[1] < q_low_loss[1])
+    check("Quadruple outlet-area factor lowers lower-tank derivative", q_high_outlet[0] < q_low_outlet[0])
 
     hvac = make_model("hvac")
     hx = [20.0, 20.0]
-    hact = {"pumps": [], "valves": [], "heaters": [0.75, 0.75]}
+    hact = [0.75, 0.75]
     h_base = {"t_cold": 5.0, "t_amb": 5.0, "extra_outflow": 0.0}
     h_low_eff = hvac.dynamics(hx, hact, {**h_base, "hvac_efficiency": 0.6})
     h_high_eff = hvac.dynamics(hx, hact, {**h_base, "hvac_efficiency": 1.2})

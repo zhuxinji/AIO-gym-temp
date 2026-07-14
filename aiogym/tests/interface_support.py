@@ -50,6 +50,7 @@ class MiniTankModel(ProcessModelContract):
     state_units = {"h0": "m", "T0": "degC"}
     state_bounds = {"h0": (0.0, 1.0), "T0": (0.0, 120.0)}
     action_names = ("feed_pump", "heater_0")
+    action_kinds = {"feed_pump": "pump", "heater_0": "heater"}
     output_names = ("tank_temperature",)
     output_units = {"tank_temperature": "degC"}
     output_bounds = {"tank_temperature": (20.0, 80.0)}
@@ -63,13 +64,12 @@ class MiniTankModel(ProcessModelContract):
     def __init__(self):
         self.p = {"area": 0.2, "pump_flow_max": 0.001, "heater_gain": 4.0, "t_cold": 15.0, "t_amb": 20.0}
 
-    def actuator_counts(self):
-        return (1, 0, 1)
-
-    def derivatives(self, x, act, env):
-        flow = act["pumps"][0] * self.p["pump_flow_max"] + env.get("feed_bias", 0.0)
+    def dynamics(self, x, u, env=None, backend="numeric", ca=None):
+        values = self.action_vector(u)
+        env = env or {}
+        flow = values[0] * self.p["pump_flow_max"] + env.get("feed_bias", 0.0)
         dh = flow / self.p["area"]
-        dT = 0.02 * (env["t_cold"] - x[1]) + act["heaters"][0] * self.p["heater_gain"]
+        dT = 0.02 * (env["t_cold"] - x[1]) + values[1] * self.p["heater_gain"]
         return [dh, dT]
 
     def display_outputs(self, x, backend="numeric", ca=None):

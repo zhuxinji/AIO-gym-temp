@@ -1,0 +1,12 @@
+{
+  "description": "Controller stress benchmark at the quadruple-tank zero-at-origin boundary.",
+  "scenarios": ["quadruple"],
+  "objectives": ["tracking"],
+  "controllers": ["pid", "mpc", "oracle"],
+  "action_mode": "actuator",
+  "task": "zero-boundary-stress",
+  "controller_configs": {
+    "pid": {"profile": "quadruple-minimum-phase"},
+    "mpc": {"profile": "quadruple-nonminimum-phase"}
+  }
+}

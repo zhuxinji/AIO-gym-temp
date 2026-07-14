@@ -16,6 +16,13 @@ Cascaded material balances move liquid through three heated tanks; energy balanc
 
 The executable source of truth is the model implementation under `aiogym.models.scenarios`.
 
+## Physical Metadata Status
+
+- Parameter status: `legacy-unverified`
+- Fidelity: `legacy-benchmark`
+- Time unit: `s`
+- Solver: `rk4` with maximum step `0.02`
+
 ## State Vector
 
 | Name | Unit | Bounds |

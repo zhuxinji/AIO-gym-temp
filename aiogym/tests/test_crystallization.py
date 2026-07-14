@@ -30,7 +30,7 @@ def test_registered_model_contract():
     assert "crystallization" in SCENARIOS
     model = make_model("crystallization")
     assert model.scenario == "crystallization"
-    assert model.actuator_counts() == (0, 0, 1)
+    assert model.action_dim() == 1
     assert len(model.initial_state()) == 5
 
 
@@ -47,8 +47,7 @@ def test_reset_contract():
 def test_action_to_temperature_mapping():
     model = make_model("crystallization")
     for aT, Tc in ((0.0, 30.0), (0.5, 35.0), (1.0, 40.0)):
-        act = {"pumps": [], "valves": [], "heaters": [aT]}
-        assert np.isclose(model.action_to_tc(act), Tc)
+        assert np.isclose(model.action_to_tc([aT]), Tc)
 
 
 def test_unified_reward_modes_are_finite():

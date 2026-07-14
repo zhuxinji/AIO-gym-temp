@@ -123,8 +123,8 @@ def test_model_parameter_overrides_follow_schema_bounds():
         ("cstr", {"Dmax": float("nan")}, "finite"),
         ("cstr", {"Dmax": -1.0}, ">= 0.0"),
         ("cstr", {"Dmax": "fast"}, "numeric"),
-        ("quadruple", {"a_out": [1e-4]}, "must contain 4 values"),
-        ("quadruple", {"a_out": [1e-4, 1e-4, 1e-4, 1.0]}, "<= 0.01"),
+        ("quadruple", {"outlet_area": [0.071]}, "must contain 4 values"),
+        ("quadruple", {"outlet_area": [0.071, 0.057, 0.071, 100.0]}, "<= 10.0"),
     )
     for scenario, params, expected in invalid:
         try:

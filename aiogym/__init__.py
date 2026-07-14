@@ -9,6 +9,7 @@ offline-data generation, and RL training (SAC / RLPD / Cal-QL).
 """
 from .models import (
     MODEL_CARD_SCHEMA_VERSION,
+    PARAMETER_PROFILE_SCHEMA_VERSION,
     SCENARIOS,
     Integrator,
     ProcessModelContract,
@@ -18,10 +19,14 @@ from .models import (
     export_model_card_markdown,
     export_model_cards,
     make_model,
+    list_parameter_profiles,
+    load_parameter_profile,
     render_model_card_markdown,
     register_model,
     unregister_model,
     validate_model_card,
+    validate_model_readiness,
+    validate_parameter_profile,
 )
 from .env import AIOGymNativeEnv
 from .env_factory import make_env
@@ -31,12 +36,16 @@ from .evaluation import (
     REPORT_SCHEMA_VERSION,
     BenchmarkConfig,
     BenchmarkProtocol,
+    TASK_PROFILE_SCHEMA_VERSION,
     build_evaluation_report,
     check_benchmark_artifacts,
     evaluate_controller,
+    list_task_profiles,
+    load_task_profile,
     plot_results,
     render_benchmark_report,
     run_benchmark,
+    validate_task_profile,
 )
 from .controllers import (
     load_controller_config,
@@ -49,7 +58,10 @@ from .controllers import (
 __all__ = ["AIOGymNativeEnv", "StageRewardContext", "StageRewardResult", "stage_reward",
            "make_model", "register_model", "unregister_model", "Integrator", "SCENARIOS",
            "ProcessModelContract", "define_model",
+           "PARAMETER_PROFILE_SCHEMA_VERSION", "list_parameter_profiles", "load_parameter_profile",
+           "validate_parameter_profile", "validate_model_readiness",
            "BenchmarkProtocol", "BenchmarkConfig", "build_evaluation_report", "evaluate_controller",
+           "TASK_PROFILE_SCHEMA_VERSION", "list_task_profiles", "load_task_profile", "validate_task_profile",
            "make_controller", "register_controller", "registered_controllers", "unregister_controller",
            "load_controller_config",
            "MODEL_CARD_SCHEMA_VERSION", "collect_model_cards", "export_model_card_markdown", "export_model_cards",

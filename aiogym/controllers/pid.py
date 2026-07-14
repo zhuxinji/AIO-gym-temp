@@ -12,13 +12,19 @@ def _clip01(v):
 
 def _loop_spec(row):
     if isinstance(row, dict):
-        return int(row["u_index"]), int(row["y_index"]), row["pid"], bool(row.get("reverse", False))
+        return (
+            int(row["u_index"]),
+            int(row["y_index"]),
+            row["pid"],
+            bool(row.get("reverse", False)),
+            float(row.get("bias", 0.0)),
+        )
     if len(row) == 3:
         u_index, y_index, pid = row
-        return int(u_index), int(y_index), pid, False
+        return int(u_index), int(y_index), pid, False, 0.0
     if len(row) == 4:
         u_index, y_index, pid, reverse = row
-        return int(u_index), int(y_index), pid, bool(reverse)
+        return int(u_index), int(y_index), pid, bool(reverse), 0.0
     raise ValueError(f"PID loop must be a mapping or 3/4-field row, got {row!r}")
 
 
@@ -30,13 +36,14 @@ def _hold_spec(row):
 
 
 class PIDLoop:
-    def __init__(self, g, reverse=False):
+    def __init__(self, g, reverse=False, bias=0.0):
         self.kp, self.ki, self.kd = (float(value) for value in g)
         self.reverse = reverse
+        self.bias = _clip01(float(bias))
         self.reset()
 
     def reset(self):
-        self.i = 0.0
+        self.i = self.bias
         self.prev = None
 
     def update(self, sp, meas, dt):
@@ -61,7 +68,6 @@ class PIDAgent:
 
     def __init__(self, model, loops=None, holds=None, demand_u_index=None):
         self.model = model
-        self.nP, self.nV, self.nH = model.actuator_counts()
         self.nu = model.action_dim()
         cfg = _default_pid_config(model) if loops is None else {}
         self.loops_config = list(loops if loops is not None else cfg["loops"])
@@ -72,8 +78,8 @@ class PIDAgent:
         loop_specs = [_loop_spec(row) for row in self.loops_config]
         _validate_pid_config(model, loop_specs, self.hold_specs, self.demand_u_index)
         self.loops = [
-            (u_index, y_index, PIDLoop(pid, reverse))
-            for u_index, y_index, pid, reverse in loop_specs
+            (u_index, y_index, PIDLoop(pid, reverse, bias))
+            for u_index, y_index, pid, reverse, bias in loop_specs
         ]
 
     def metadata(self):
@@ -104,7 +110,7 @@ class PIDAgent:
             u[u_index] = loop.update(y_sp[y_index], y[y_index], dt)
         if self.demand_u_index is not None and 0 <= self.demand_u_index < len(u):
             u[self.demand_u_index] = self.demand_valve
-        return self.model.action_vector_to_dict(u) if self.model.uses_legacy_actions() else u
+        return u
 
 
 def _default_pid_config(model):
@@ -120,7 +126,7 @@ def _default_pid_config(model):
 
 def _validate_pid_config(model, loop_specs, hold_specs, demand_u_index):
     ny = len(model.controlled_output(model.initial_state()))
-    for u_index, y_index, pid, _ in loop_specs:
+    for u_index, y_index, pid, _, bias in loop_specs:
         if not 0 <= u_index < model.action_dim():
             raise ValueError(f"PID u_index {u_index} is outside action vector length {model.action_dim()}")
         if not 0 <= y_index < ny:
@@ -128,6 +134,8 @@ def _validate_pid_config(model, loop_specs, hold_specs, demand_u_index):
         if not isinstance(pid, (list, tuple)) or len(pid) != 3:
             raise ValueError(f"PID gains must be a three-item sequence, got {pid!r}")
         tuple(float(value) for value in pid)
+        if not 0.0 <= float(bias) <= 1.0:
+            raise ValueError(f"PID bias must be in [0, 1], got {bias!r}")
     for u_index, _ in hold_specs:
         if not 0 <= u_index < model.action_dim():
             raise ValueError(f"PID hold u_index {u_index} is outside action vector length {model.action_dim()}")

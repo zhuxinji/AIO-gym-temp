@@ -18,12 +18,20 @@
     },
     "quadruple": {
       "loops": [
-        {"u_index": 0, "y_index": 0, "pid": [6.0, 0.25, 0.0]},
-        {"u_index": 1, "y_index": 1, "pid": [6.0, 0.25, 0.0]},
-        {"u_index": 2, "y_index": 2, "pid": [0.05, 0.012, 0.0]},
-        {"u_index": 3, "y_index": 3, "pid": [0.05, 0.012, 0.0]},
-        {"u_index": 4, "y_index": 4, "pid": [0.05, 0.012, 0.0]},
-        {"u_index": 5, "y_index": 5, "pid": [0.05, 0.012, 0.0]}
+        {
+          "u_index": 0,
+          "y_index": 0,
+          "pid": [0.15, 0.005, 0.0],
+          "bias": 0.3,
+          "source": "Johansson 2000 minimum-phase PI: K1=3.0, Ti1=30 s; converted using kc=0.5 V/cm and 10 V action scale"
+        },
+        {
+          "u_index": 1,
+          "y_index": 1,
+          "pid": [0.135, 0.003375, 0.0],
+          "bias": 0.3,
+          "source": "Johansson 2000 minimum-phase PI: K2=2.7, Ti2=40 s; converted using kc=0.5 V/cm and 10 V action scale"
+        }
       ],
       "demand_u_index": null,
       "holds": []
@@ -64,6 +72,53 @@
       ],
       "demand_u_index": null,
       "holds": []
+    }
+  },
+  "profiles": {
+    "quadruple-minimum-phase": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 0,
+              "pid": [0.15, 0.005, 0.0],
+              "bias": 0.3,
+              "source": "Johansson 2000 P- PI: K1=3.0, Ti1=30 s; converted using kc=0.5 V/cm and 10 V action scale"
+            },
+            {
+              "u_index": 1,
+              "y_index": 1,
+              "pid": [0.135, 0.003375, 0.0],
+              "bias": 0.3,
+              "source": "Johansson 2000 P- PI: K2=2.7, Ti2=40 s; converted using kc=0.5 V/cm and 10 V action scale"
+            }
+          ]
+        }
+      }
+    },
+    "quadruple-nonminimum-phase": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 0,
+              "pid": [0.075, 0.0006818181818181818, 0.0],
+              "bias": 0.315,
+              "source": "Johansson 2000 P+ PI: K1=1.5, Ti1=110 s; converted using kc=0.5 V/cm and 10 V action scale"
+            },
+            {
+              "u_index": 1,
+              "y_index": 1,
+              "pid": [0.006, 0.00002727272727272727, 0.0],
+              "bias": 0.315,
+              "reverse": true,
+              "source": "Johansson 2000 P+ PI: K2=-0.12, Ti2=220 s; magnitude converted using kc=0.5 V/cm and 10 V action scale"
+            }
+          ]
+        }
+      }
     }
   }
 }

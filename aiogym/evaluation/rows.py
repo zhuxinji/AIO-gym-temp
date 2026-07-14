@@ -10,6 +10,9 @@ def compact_result_row(
     scenario: str | None = None,
     objective: str | None = None,
     action_mode: str | None = None,
+    task: str | None = None,
+    task_status: str | None = None,
+    task_profile_hash: str | None = None,
     suite_case: str | None = None,
     controller: str | None = None,
 ) -> dict[str, Any]:
@@ -23,6 +26,9 @@ def compact_result_row(
     row = {
         "suite_case": suite_case,
         "scenario": scenario or result.get("scenario") or dict(result.get("model") or {}).get("scenario"),
+        "task": task or result.get("task") or "default",
+        "task_status": task_status or result.get("task_status") or "implicit-default",
+        "task_profile_hash": task_profile_hash or result.get("task_profile_hash"),
         "name": name,
         "objective": objective or result.get("objective"),
         "action_mode": action_mode or controller_meta.get("action_mode"),

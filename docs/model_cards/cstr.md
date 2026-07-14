@@ -16,6 +16,13 @@ A two-state exothermic reactor tracks concentration and temperature with feed di
 
 The executable source of truth is the model implementation under `aiogym.models.scenarios`.
 
+## Physical Metadata Status
+
+- Parameter status: `legacy-unverified`
+- Fidelity: `legacy-benchmark`
+- Time unit: `s`
+- Solver: `rk4` with maximum step `0.01`
+
 ## State Vector
 
 | Name | Unit | Bounds |
@@ -110,4 +117,4 @@ The executable source of truth is the model implementation under `aiogym.models.
 | Entry | Meaning |
 | --- | --- |
 | 0 | [y_sp, 0, 45, 90] |
-| 1 | [mv, pumps, 0, 0.3, 1] |
+| 1 | [mv, 0, 0.3, 1] |

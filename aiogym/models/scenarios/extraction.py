@@ -11,6 +11,7 @@ class ExtractionModel(ProcessModelContract):
     state_units = {name: "concentration" for name in state_names}
     state_bounds = {name: (0.0, 1.0) for name in state_names}
     action_names = ("liquid_flow_L", "gas_flow_G")
+    action_kinds = {name: "pump" for name in action_names}
     output_names = ("stage_1_liquid_concentration", "stage_2_liquid_concentration", "stage_3_liquid_concentration", "stage_4_liquid_concentration", "stage_5_liquid_concentration")
     output_units = {name: "concentration" for name in output_names}
     output_bounds = {name: (0.0, 1.0) for name in output_names}
@@ -53,9 +54,6 @@ class ExtractionModel(ProcessModelContract):
             pump_power_max=[1000.0, 1000.0], c_max=1.0, t_cold=0.0, t_amb=0.0,
         )
 
-    def actuator_counts(self):
-        return (2, 0, 0)
-
     def _flows_from_vector(self, u):
         p = self.p
         return (
@@ -69,9 +67,6 @@ class ExtractionModel(ProcessModelContract):
             max(0.0, min(1.0, (L - p["Lmin"]) / max(1e-9, p["Lmax"] - p["Lmin"]))),
             max(0.0, min(1.0, (G - p["Gmin"]) / max(1e-9, p["Gmax"] - p["Gmin"]))),
         ]
-
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
 
     def _dynamics(self, x, u, env, ops):
         p = self.p

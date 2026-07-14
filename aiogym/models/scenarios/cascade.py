@@ -1,5 +1,3 @@
-import math
-
 from ..core import RHO_CP, ProcessModelContract, _maxv
 
 
@@ -13,6 +11,11 @@ class CascadeModel(ProcessModelContract):
     state_units = {"h0": "m", "h1": "m", "h2": "m", "T0": "degC", "T1": "degC", "T2": "degC"}
     state_bounds = {"h0": (0.0, 0.8), "h1": (0.0, 0.8), "h2": (0.0, 0.8), "T0": (0.0, 120.0), "T1": (0.0, 120.0), "T2": (0.0, 120.0)}
     action_names = ("feed_pump", "outlet_valve_0", "outlet_valve_1", "outlet_valve_2", "heater_0", "heater_1", "heater_2")
+    action_kinds = {
+        "feed_pump": "pump",
+        "outlet_valve_0": "valve", "outlet_valve_1": "valve", "outlet_valve_2": "valve",
+        "heater_0": "heater", "heater_1": "heater", "heater_2": "heater",
+    }
     output_names = ("tank_0_level", "tank_1_level", "tank_2_level", "tank_0_temperature", "tank_1_temperature", "tank_2_temperature")
     output_units = {"tank_0_level": "m", "tank_1_level": "m", "tank_2_level": "m", "tank_0_temperature": "degC", "tank_1_temperature": "degC", "tank_2_temperature": "degC"}
     output_bounds = {"tank_0_level": (0.0, 0.8), "tank_1_level": (0.0, 0.8), "tank_2_level": (0.0, 0.8), "tank_0_temperature": (25, 80), "tank_1_temperature": (30, 82), "tank_2_temperature": (35, 85)}
@@ -40,9 +43,6 @@ class CascadeModel(ProcessModelContract):
         self.p = dict(area=0.15, height_max=0.80, cv_out=0.0026, ua_loss=40.0,
                       heater_max=90000.0, pump_flow_max=0.0016, pump_power_max=1500.0,
                       t_cold=15.0, t_amb=20.0, h_floor=1e-3)
-
-    def actuator_counts(self):
-        return (1, 3, 3)
 
     @property
     def height_max(self):
@@ -76,20 +76,6 @@ class CascadeModel(ProcessModelContract):
             "heat_loss_factor": env.get("heat_loss_factor", 1.0),
         }
 
-    def _flows(self, h, act, env):
-        p = self.p
-        qp = act["pumps"][0] * p["pump_flow_max"] * self.pump_flow_factor(env)
-        qo = []
-        for i in range(3):
-            f = p["cv_out"] * act["valves"][i] * math.sqrt(_maxv(h[i], 0.0))
-            if i == 2:
-                f += env.get("extra_outflow", 0.0) or 0.0
-            qo.append(f)
-        return qp, qo
-
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
-
     def _dynamics(self, x, u, env, ops):
         p = self.p
         t_cold, t_amb = env["t_cold"], env["t_amb"]
@@ -119,9 +105,6 @@ class CascadeModel(ProcessModelContract):
 
     def initial_state(self):
         return [0.30, 20.0, 0.30, 20.0, 0.30, 20.0]
-
-    def clamp_state(self, x):
-        return x
 
     def controlled_output(self, x, backend="numeric", ca=None):
         display = self.display_outputs(x, backend=backend, ca=ca)

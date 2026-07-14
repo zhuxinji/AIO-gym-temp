@@ -70,7 +70,7 @@ def stage_reward(
     out = model.outputs(x_next)
     levels = list(out["levels"])
     temps = list(out["temps"])
-    y = list(model.controlled_output(x_next))
+    y = list(out["y"])
 
     track = normalized_tracking_error_sum(model, y, y_sp)
     tracking_error_cost, tracking_move_cost = _tracking_cost_terms(
@@ -169,10 +169,7 @@ def stage_reward(
 
 
 def _model_action(model, action):
-    if isinstance(action, Mapping):
-        return action
-    values = model.action_vector(action)
-    return model.action_vector_to_dict(values) if model.uses_legacy_actions() else values
+    return model.action_vector(action)
 
 
 def _tracking_cost_terms(model, y, y_sp, action, previous_action, q_y, r_move):

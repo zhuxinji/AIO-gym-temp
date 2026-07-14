@@ -1,0 +1,1 @@
+{"schema_version":"aiogym.task_profile.v1","name":"legacy-default","scenario":"heater","status":"legacy-compatible","description":"Opt-in task reproducing the direct environment timing defaults.","environment":{"control_dt":0.5,"episode_steps":600},"initialization":{},"setpoints":{},"disturbances":[],"constraints":[],"acceptance":{}}

@@ -16,6 +16,13 @@ A five-stage counter-current extraction column updates liquid and gas concentrat
 
 The executable source of truth is the model implementation under `aiogym.models.scenarios`.
 
+## Physical Metadata Status
+
+- Parameter status: `legacy-unverified`
+- Fidelity: `legacy-benchmark`
+- Time unit: `s`
+- Solver: `rk4` with maximum step `0.01`
+
 ## State Vector
 
 | Name | Unit | Bounds |

@@ -76,13 +76,18 @@ The direct factory accepts model and benchmark-objective options:
 import aiogym
 
 env = aiogym.make_env(
-    model="cstr",
+    model="quadruple",
+    task="minimum-phase-classic",
     objective="tracking",
     seed=7,
     episode_steps=200,
     dynamic=True,
 )
 ```
+
+`scenario`/`model` selects the process, `task` selects the operating point and
+experiment, and `objective` selects scoring. Reproducible benchmark artifacts
+record all three identities separately.
 
 Every scenario uses the same backend contracts:
 
@@ -111,6 +116,21 @@ aiogym-single-benchmark \
   --scenario cstr \
   --objective tracking \
   --controllers pid,mpc
+```
+
+Compare the minimum- and nonminimum-phase quadruple-tank tasks without mixing
+their rankings:
+
+```bash
+aiogym-suite-benchmark --suite quadruple-phase-comparison --episodes 1
+```
+
+Run the paper-reference, zero-boundary, and deterministic-disturbance tasks:
+
+```bash
+aiogym-suite-benchmark --suite quadruple-paper-reference --episodes 1
+aiogym-suite-benchmark --suite quadruple-zero-boundary --episodes 1
+aiogym-suite-benchmark --suite quadruple-disturbance-rejection --episodes 1
 ```
 
 Use an ONNX policy:
@@ -215,6 +235,13 @@ Human-readable model documentation is generated under `docs/model_cards/`:
 aiogym-model-cards --format markdown --out-dir docs/model_cards
 aiogym-model-cards --check --format markdown --out-dir docs/model_cards
 ```
+
+The shared physical-model foundation is described in
+[`docs/model_infrastructure.md`](docs/model_infrastructure.md). It covers
+versioned parameter provenance, scenario task profiles, solver metadata, and
+generic numerical readiness checks. Unmigrated profiles retain
+`legacy-unverified`; `quadruple` is the first `reference-parameterized` physical
+model.
 
 ## Package Layout
 

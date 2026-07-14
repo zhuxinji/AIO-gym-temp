@@ -13,6 +13,7 @@ PROTOCOL_KEYS = frozenset({
     "action_mode",
     "control_dt",
     "episode_steps",
+    "task",
     "dynamic",
     "randomize",
     "randomize_setpoints",

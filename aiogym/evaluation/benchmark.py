@@ -38,6 +38,7 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
     protocol_options.update(dict(cfg.get("protocol_kwargs", {})))
     protocol_options["objective"] = objective_name
     protocol = resolve_protocol(scenario, objective=objective_spec, data=protocol_options)
+    task_meta = protocol.metadata()["task_identity"]
     controller_names = as_list(cfg.get("controllers", cfg.get("controller", "pid")))
     if not controller_names:
         raise ValueError("benchmark must include at least one controller")
@@ -51,7 +52,10 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
     rollout_steps = cfg.get("rollout_steps")
     out_dir = Path(cfg.get(
         "output_dir",
-        cfg.get("run_dir", f"aiogym/runs/benchmark_{scenario}_{objective_name}"),
+        cfg.get(
+            "run_dir",
+            f"aiogym/runs/benchmark_{scenario}_{task_meta['name']}_{objective_name}",
+        ),
     ))
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,6 +85,9 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
                 raise RuntimeError(f"controller '{name}' benchmark failed: {ex}") from ex
             rows.append({
                 "scenario": scenario,
+                "task": task_meta["name"],
+                "task_status": task_meta["status"],
+                "task_profile_hash": task_meta["profile_hash"],
                 "objective": protocol.objective,
                 "controller": str(name),
                 "status": "failed",
@@ -105,6 +112,9 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
         "config": jsonable(cfg),
         "benchmark_config": benchmark_config,
         "scenario": scenario,
+        "task": task_meta["name"],
+        "task_status": task_meta["status"],
+        "task_profile_hash": task_meta["profile_hash"],
         "objective": protocol.objective,
         "controllers": [str(name) for name in controller_names],
         "rows": rows,

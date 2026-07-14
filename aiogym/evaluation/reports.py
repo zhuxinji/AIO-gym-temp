@@ -107,7 +107,7 @@ def _leaderboard_sections(leaderboard) -> list[str]:
 
 
 def _tracking_comparison_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    preferred = ["scenario", "best_controller", "best_tracking_cost", "best_step_ms", "oracle_gap_vs_best"]
+    preferred = ["scenario", "task", "best_controller", "best_tracking_cost", "best_step_ms", "oracle_gap_vs_best"]
     controller_columns = [
         key for key in rows[0].keys()
         if key.endswith("_tracking_cost") or key.endswith("_step_ms")
@@ -123,6 +123,18 @@ def _tracking_comparison_section(rows: Sequence[Mapping[str, Any]]) -> list[str]
     return _markdown_table(columns, table_rows)
 
 
+def _tracking_benchmark_case_count(rows: Sequence[Mapping[str, Any]]) -> int:
+    """Count distinct scenario/task cases represented by successful tracking rows."""
+    return len({
+        (
+            str(row.get("scenario") or "benchmark"),
+            str(row.get("task") or "default"),
+        )
+        for row in rows
+        if row.get("objective") == "tracking" and row.get("status") != "failed"
+    })
+
+
 def _leaderboard_section(leaderboard: Sequence[Mapping[str, Any]]) -> list[str]:
     if not leaderboard:
         return ["No leaderboard rows were found."]
@@ -131,6 +143,7 @@ def _leaderboard_section(leaderboard: Sequence[Mapping[str, Any]]) -> list[str]:
         rows.append([
             _fmt(row.get("rank")),
             _fmt(row.get("scenario")),
+            _fmt(row.get("task", "default")),
             _fmt(row.get("objective")),
             _fmt(row.get("controller")),
             _fmt(row.get("status")),
@@ -141,7 +154,7 @@ def _leaderboard_section(leaderboard: Sequence[Mapping[str, Any]]) -> list[str]:
             _fmt_number(row.get("constraint_violation_count")),
         ])
     return _markdown_table(
-        ["Rank", "Scenario", "Objective", "Controller", "Status", "Metric", "Value", "KPI", "Profit", "Violations"],
+        ["Rank", "Scenario", "Task", "Objective", "Controller", "Status", "Metric", "Value", "KPI", "Profit", "Violations"],
         rows,
     )
 
@@ -410,12 +423,8 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
         expected_summary_rows = len(_rows_by_objective(rows)) if has_objective_outputs else expected_rows
         _add_count_check(checks, "summary_csv_count", len(summary_rows), expected_summary_rows, paths["summary_csv"])
     if tracking_comparison_rows is not None:
-        expected_tracking_scenarios = len({
-            str(row.get("scenario") or "benchmark")
-            for row in rows
-            if row.get("objective") == "tracking" and row.get("status") != "failed"
-        })
-        _add_count_check(checks, "tracking_comparison_count", len(tracking_comparison_rows), expected_tracking_scenarios, paths["tracking_comparison"])
+        expected_tracking_cases = _tracking_benchmark_case_count(rows)
+        _add_count_check(checks, "tracking_comparison_count", len(tracking_comparison_rows), expected_tracking_cases, paths["tracking_comparison"])
     if all_summary_rows is not None:
         _add_count_check(checks, "all_summary_csv_count", len(all_summary_rows), expected_rows, paths["all_summary_csv"])
     if leaderboard is not None:

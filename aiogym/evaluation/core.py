@@ -54,6 +54,7 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         if not seeds:
             raise ValueError("seed_list must contain at least one seed")
     controller = as_controller(agent, action_mode=getattr(env, "action_mode", "actuator"))
+    objective = protocol.objective if protocol is not None else _env_objective(env)
     per_episode = []
     episode_schedules = []
     eval_start = perf_counter()
@@ -62,7 +63,10 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         obs, reset_info = env.reset(seed=ep_seed)
         controller.reset(seed=ep_seed)
         totals = _empty_episode_totals(ep, ep_seed)
-        episode_schedules.append(_jsonable(getattr(env, "_dist_events", [])))
+        episode_schedules.append(_jsonable({
+            "task": getattr(env, "_task_disturbance_events", {}),
+            "dynamic": getattr(env, "_dist_events", []),
+        }))
         done = False
         steps = 0
         info = reset_info or {}
@@ -119,7 +123,11 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
     def std(key):
         return float(np.std([row[key] for row in per_episode]))
 
-    objective = protocol.objective if protocol is not None else _env_objective(env)
+    task_meta = (
+        protocol.metadata()["task_identity"]
+        if protocol is not None
+        else {"name": "default", "status": "implicit-default", "profile_hash": None}
+    )
     primary_metric = primary_metric_for_objective(objective)
     aggregate_keys = _aggregate_metric_keys(per_episode)
     result = {
@@ -128,6 +136,9 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         "metric": primary_metric,
         "metric_direction": metric_direction(primary_metric),
         "objective": objective,
+        "task": task_meta["name"],
+        "task_status": task_meta["status"],
+        "task_profile_hash": task_meta["profile_hash"],
         "episodes": len(seeds),
         "seed": int(seeds[0]) if seeds else int(seed),
         "seed_list": [int(s) for s in seeds],
@@ -152,7 +163,7 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         "controller": controller.metadata(),
         "model": _model_metadata(env),
         "disturbance": {
-            "schedule_source": "model_schema_dynamic",
+            "schedule_source": "task_and_model_schema",
             "episode_schedules": episode_schedules,
         },
         "controller_diagnostics": _aggregate_controller_diagnostics(per_episode),
@@ -360,7 +371,7 @@ def _reproducibility_metadata(env, seeds, protocol):
         "seed_list": [int(seed) for seed in seeds],
         "model_version": getattr(getattr(env, "model", None), "scenario", None),
         "episode_length": int(getattr(env, "episode_steps", 0)),
-        "disturbance_schedule": "model_schema_dynamic",
+        "disturbance_schedule": "task_and_model_schema",
         "metric_definition_version": EVALUATION_SCHEMA_VERSION,
         "protocol": protocol.metadata() if protocol is not None else _env_metadata(env),
     }
@@ -386,6 +397,9 @@ def _table_row(result: Mapping[str, Any], keys: Sequence[str]):
     row = {
         "name": result.get("name"),
         "objective": result.get("objective"),
+        "task": result.get("task", "default"),
+        "task_status": result.get("task_status", "implicit-default"),
+        "task_profile_hash": result.get("task_profile_hash"),
         "control_structure": dict(result.get("controller", {})).get("control_structure"),
         "controller_status": result.get("controller_status", "ok"),
         "controller_diagnostics": result.get("controller_diagnostics", {}),

@@ -16,6 +16,13 @@ A fired-heater surrogate couples firebox temperature, outlet temperature, and fl
 
 The executable source of truth is the model implementation under `aiogym.models.scenarios`.
 
+## Physical Metadata Status
+
+- Parameter status: `legacy-unverified`
+- Fidelity: `legacy-benchmark`
+- Time unit: `s`
+- Solver: `rk4` with maximum step `0.05`
+
 ## State Vector
 
 | Name | Unit | Bounds |

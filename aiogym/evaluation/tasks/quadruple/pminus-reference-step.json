@@ -1,0 +1,70 @@
+{
+  "schema_version": "aiogym.task_profile.v1",
+  "name": "pminus-reference-step",
+  "scenario": "quadruple",
+  "status": "reference-reproduced",
+  "description": "Johansson Fig. 10 minimum-phase P- single-reference step experiment.",
+  "default_objective": "tracking",
+  "supported_objectives": ["tracking", "kpi", "safety"],
+  "environment": {
+    "control_dt": 1.0,
+    "episode_steps": 360,
+    "action_mode": "actuator",
+    "dynamic": false,
+    "randomize": false,
+    "randomize_setpoints": false,
+    "randomize_plant": false,
+    "plant_drift": false,
+    "integral_obs": false,
+    "terminate_on_runaway": false,
+    "noise": false,
+    "noise_pct": 0.01
+  },
+  "model_params": {
+    "tank_area": [28.0, 32.0, 28.0, 32.0],
+    "outlet_area": [0.071, 0.057, 0.071, 0.057],
+    "pump_gain": [3.33, 3.35],
+    "gamma": [0.70, 0.60],
+    "gravity": 981.0,
+    "max_voltage": 10.0,
+    "max_level": 20.0,
+    "nominal_voltage": [3.0, 3.0]
+  },
+  "initialization": {
+    "state": [12.2629675195507, 12.783158403008972, 1.6339411322567796, 1.409044702533737],
+    "reported_operating_point": [12.4, 12.7, 1.8, 1.4],
+    "basis": "exact nonlinear equilibrium corresponding to the paper's P- 3 V operating point"
+  },
+  "setpoints": {
+    "initial": [12.2629675195507, 12.783158403008972],
+    "schedule": [
+      {
+        "at_step": 0,
+        "values": [14.2629675195507, 12.783158403008972],
+        "description": "1 V step in paper output r1, converted with kc=0.5 V/cm to a 2 cm h1 step"
+      }
+    ]
+  },
+  "disturbances": [],
+  "constraints": [
+    {"name": "all_tank_levels", "bounds": [0.0, 20.0], "unit": "cm"},
+    {"name": "pump_voltage", "bounds": [0.0, 10.0], "unit": "V"}
+  ],
+  "acceptance": {
+    "required_checks": [
+      "reference_parameters",
+      "nonlinear_equilibrium",
+      "minimum_phase",
+      "paper_r1_step",
+      "paper_pi_tuning"
+    ]
+  },
+  "references": [
+    {
+      "id": "johansson-2000",
+      "doi": "10.1109/87.845876",
+      "url": "https://doi.org/10.1109/87.845876",
+      "locator": "Table of P- operating data, Section VI, and Fig. 10"
+    }
+  ]
+}

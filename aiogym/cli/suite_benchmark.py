@@ -31,6 +31,9 @@ SCENARIO_ALIASES = {
 SUMMARY_COLUMNS = (
     "suite_case",
     "scenario",
+    "task",
+    "task_status",
+    "task_profile_hash",
     "objective",
     "action_mode",
     "controller",
@@ -79,10 +82,16 @@ def load_suite(name_or_path: str):
     suite["scenarios"] = expand_scenarios(suite.get("scenarios", ()))
     suite["objectives"] = list(suite.get("objectives", ()))
     suite["controllers"] = list(suite.get("controllers", ()))
+    if "cases" in suite:
+        if not isinstance(suite["cases"], list) or not suite["cases"]:
+            raise ValueError("suite cases must be a non-empty list")
+        if any(not isinstance(case, dict) for case in suite["cases"]):
+            raise TypeError("each suite case must be a mapping")
     suite.setdefault("action_mode", "actuator")
     suite.setdefault("description", "")
-    suite.setdefault("episode_steps", 80)
-    suite.setdefault("control_dt", 0.5)
+    if "cases" not in suite and suite.get("task") is None:
+        suite.setdefault("episode_steps", 80)
+        suite.setdefault("control_dt", 0.5)
     return suite
 
 
@@ -113,6 +122,9 @@ def skipped_row(suite_case: dict, status: str, message: str):
     return {
         "suite_case": suite_case["name"],
         "scenario": suite_case["scenario"],
+        "task": suite_case.get("task", "default"),
+        "task_status": suite_case.get("task_status"),
+        "task_profile_hash": suite_case.get("task_profile_hash"),
         "objective": suite_case["objective"],
         "controller": suite_case["controller"],
         "control_structure": None,
@@ -149,49 +161,131 @@ def artifact_dir_for(suite_name: str, artifact_dir: str | None = None, run_id: s
     return f"aiogym/runs/bench_suite_{safe_suite}_{run_id or artifact_run_id()}_artifacts"
 
 
-def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int, control_dt: float):
+def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int | None,
+                           control_dt: float | None):
     config = dict(suite)
     config["scenarios"] = list(dict.fromkeys(case["scenario"] for case in cases))
     config["objectives"] = list(dict.fromkeys(case["objective"] for case in cases))
     config["controllers"] = list(dict.fromkeys(case["controller"] for case in cases))
-    config["episode_steps"] = episode_steps
-    config["control_dt"] = control_dt
+    config["tasks"] = list(dict.fromkeys(case.get("task", "default") for case in cases))
+    config["cases"] = [
+        {
+            "name": case.get(
+                "name",
+                f"{case['objective']}:{case['scenario']}:{case.get('task', 'default')}:{case['controller']}",
+            ),
+            "scenario": case["scenario"],
+            "task": case.get("task", "default"),
+            "objective": case["objective"],
+            "controller": case["controller"],
+            "episode_steps": case["protocol"].episode_steps if case.get("protocol") else episode_steps,
+            "control_dt": case["protocol"].control_dt if case.get("protocol") else control_dt,
+        }
+        for case in cases
+    ]
+    resolved_steps = list(dict.fromkeys(case["protocol"].episode_steps for case in cases if case.get("protocol")))
+    resolved_dt = list(dict.fromkeys(case["protocol"].control_dt for case in cases if case.get("protocol")))
+    config["episode_steps"] = episode_steps if episode_steps is not None else (resolved_steps[0] if len(resolved_steps) == 1 else None)
+    config["control_dt"] = control_dt if control_dt is not None else (resolved_dt[0] if len(resolved_dt) == 1 else None)
     return config
 
 
 def build_cases(args):
     suite = load_suite(args.suite)
-    scenarios = parse_csv(args.scenarios, suite["scenarios"])
-    objectives = parse_csv(args.objectives, suite["objectives"])
-    controllers = parse_csv(args.controllers, suite["controllers"])
+    explicit_cases = bool(suite.get("cases"))
+    scenario_filter = (
+        set(parse_csv(args.scenarios, suite["scenarios"]))
+        if explicit_cases and args.scenarios is not None else None
+    )
+    objective_filter = (
+        set(parse_csv(args.objectives, suite["objectives"]))
+        if explicit_cases and args.objectives is not None else None
+    )
+    controller_filter = (
+        set(parse_csv(args.controllers, suite["controllers"]))
+        if explicit_cases and args.controllers is not None else None
+    )
     seeds = parse_seed_list(args.seed_list, args.seed, args.episodes)
-    episode_steps = int(args.episode_steps if args.episode_steps is not None else suite.get("episode_steps", 80))
-    control_dt = float(args.control_dt if args.control_dt is not None else suite.get("control_dt", 0.5))
     cases = []
-    for objective in objectives:
+    declarations = suite.get("cases") or [{
+        "scenarios": parse_csv(args.scenarios, suite["scenarios"]),
+        "objectives": parse_csv(args.objectives, suite["objectives"]),
+        "controllers": parse_csv(args.controllers, suite["controllers"]),
+    }]
+    for declaration in declarations:
+        scenarios = expand_scenarios(declaration.get("scenarios", declaration.get("scenario", suite["scenarios"])))
+        objectives = list(declaration.get("objectives", [declaration["objective"]] if "objective" in declaration else suite["objectives"]))
+        controllers = list(declaration.get("controllers", [declaration["controller"]] if "controller" in declaration else suite["controllers"]))
         for scenario in scenarios:
-            protocol = resolve_protocol(
-                scenario,
-                objective,
-                {
-                    "action_mode": suite["action_mode"],
-                    "episode_steps": episode_steps,
-                    "control_dt": control_dt,
-                },
-            )
-            for controller in controllers:
-                controller_config = controller_config_for(args, controller, suite["action_mode"], objective)
-                cases.append({
-                    "name": f"{objective}:{scenario}:{controller}",
-                    "scenario": scenario,
-                    "objective": objective,
-                    "controller": controller,
-                    "action_mode": suite["action_mode"],
-                    "controller_config": controller_config,
-                    "protocol": protocol,
-                    "seeds": seeds,
-                })
+            if scenario_filter is not None and scenario not in scenario_filter:
+                continue
+            for objective in objectives:
+                if objective_filter is not None and objective not in objective_filter:
+                    continue
+                action_mode = declaration.get("action_mode", suite["action_mode"])
+                protocol_config = {"action_mode": action_mode}
+                task = declaration.get("task", suite.get("task"))
+                if task is not None:
+                    protocol_config["task"] = task
+                for key in (
+                    "dynamic", "randomize", "randomize_setpoints", "randomize_plant",
+                    "plant_drift", "integral_obs", "terminate_on_runaway", "noise",
+                    "noise_pct", "tracking_q_y", "tracking_r_move", "model_params",
+                ):
+                    if key in declaration:
+                        protocol_config[key] = declaration[key]
+                    elif key in suite:
+                        protocol_config[key] = suite[key]
+                if args.episode_steps is not None:
+                    protocol_config["episode_steps"] = int(args.episode_steps)
+                elif "episode_steps" in declaration:
+                    protocol_config["episode_steps"] = int(declaration["episode_steps"])
+                elif "episode_steps" in suite:
+                    protocol_config["episode_steps"] = int(suite["episode_steps"])
+                if args.control_dt is not None:
+                    protocol_config["control_dt"] = float(args.control_dt)
+                elif "control_dt" in declaration:
+                    protocol_config["control_dt"] = float(declaration["control_dt"])
+                elif "control_dt" in suite:
+                    protocol_config["control_dt"] = float(suite["control_dt"])
+                protocol = resolve_protocol(
+                    scenario,
+                    objective,
+                    protocol_config,
+                )
+                task_meta = protocol.metadata()["task_identity"]
+                for controller in controllers:
+                    if controller_filter is not None and controller not in controller_filter:
+                        continue
+                    controller_config = controller_config_for(args, controller, action_mode, objective)
+                    controller_config = _merge_config(controller_config, suite.get("controller_configs", {}).get(controller, {}))
+                    controller_config = _merge_config(controller_config, declaration.get("controller_configs", {}).get(controller, {}))
+                    cases.append({
+                        "name": f"{objective}:{scenario}:{task_meta['name']}:{controller}",
+                        "scenario": scenario,
+                        "task": task_meta["name"],
+                        "task_status": task_meta["status"],
+                        "task_profile_hash": task_meta["profile_hash"],
+                        "objective": objective,
+                        "controller": controller,
+                        "action_mode": action_mode,
+                        "controller_config": controller_config,
+                        "protocol": protocol,
+                        "seeds": seeds,
+                    })
+    if not cases:
+        raise ValueError("suite filters selected no benchmark cases")
     return suite, cases
+
+
+def _merge_config(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for key, value in dict(override or {}).items():
+        if key == "parameters" and isinstance(value, dict):
+            out[key] = {**dict(out.get(key) or {}), **value}
+        else:
+            out[key] = value
+    return out
 
 
 def controller_config_for(args, controller: str, action_mode: str, objective: str | None = None):
@@ -244,21 +338,33 @@ def _error_payload(ex: Exception, include_tracebacks: bool):
 
 def print_case(row: dict):
     status = row["status"].upper()
-    prefix = f"{status:7s} {row['objective']:9s} {row['scenario']:10s} {row['controller']:14s}"
+    prefix = (
+        f"{status:7s} {row['objective']:9s} {row['scenario']:10s} "
+        f"{row.get('task', 'default'):28s} {row['controller']:14s}"
+    )
     if row["status"] not in ("passed", "degraded"):
         print(f"{prefix} {row.get('message', '')}")
         return
     metric = row["metric"]
     value = row.get(metric, 0.0)
     std = row.get(f"{metric}_std", 0.0)
+    value_text = _format_metric_value(value)
+    std_text = _format_metric_value(std)
     step_ms = float(row.get("runtime_seconds_per_step") or 0.0) * 1000.0
     print(
-        f"{prefix} {metric}={value:9.2f} +/- {std:.2f} "
+        f"{prefix} {metric}={value_text:>9s} +/- {std_text} "
         f"kpi={row['kpi']:8.2f} profit={row['profit']:9.2f} "
         f"track={row['track']:8.2f} safety={row.get('constraint_violation_count', 0.0):6.1f} "
         f"fallback={row.get('controller_fallback_count', 0):3} "
         f"step={step_ms:7.2f}ms"
     )
+
+
+def _format_metric_value(value) -> str:
+    number = float(value or 0.0)
+    if number != 0.0 and abs(number) < 0.01:
+        return f"{number:.3e}"
+    return f"{number:.2f}"
 
 
 def main():
@@ -286,8 +392,8 @@ def main():
     args = ap.parse_args()
 
     suite, cases = build_cases(args)
-    episode_steps = int(args.episode_steps if args.episode_steps is not None else suite.get("episode_steps", 80))
-    control_dt = float(args.control_dt if args.control_dt is not None else suite.get("control_dt", 0.5))
+    episode_steps = int(args.episode_steps) if args.episode_steps is not None else suite.get("episode_steps")
+    control_dt = float(args.control_dt) if args.control_dt is not None else suite.get("control_dt")
     started = perf_counter()
     rows = []
     results = []
@@ -307,6 +413,7 @@ def main():
             errors.append({
                 "suite_case": suite_case["name"],
                 "scenario": suite_case["scenario"],
+                "task": suite_case["task"],
                 "objective": suite_case["objective"],
                 "controller": suite_case["controller"],
                 "status": artifact["status"],

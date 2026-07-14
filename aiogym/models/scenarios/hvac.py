@@ -12,6 +12,7 @@ class HVACModel(ProcessModelContract):
     state_units = {"T0": "degC", "T1": "degC"}
     state_bounds = {"T0": (-20.0, 60.0), "T1": (-20.0, 60.0)}
     action_names = ("hvac_zone_0", "hvac_zone_1")
+    action_kinds = {name: "heater" for name in action_names}
     output_names = ("zone_0_temperature", "zone_1_temperature")
     output_units = {"zone_0_temperature": "degC", "zone_1_temperature": "degC"}
     output_bounds = {"zone_0_temperature": (18, 26), "zone_1_temperature": (18, 26)}
@@ -37,9 +38,6 @@ class HVACModel(ProcessModelContract):
 
     def __init__(self):
         self.p = dict(C=6000.0, Pmax=1800.0, Kc=35.0, Ko=45.0, t_cold=5.0, t_amb=5.0, h_floor=1e-3)
-
-    def actuator_counts(self):
-        return (0, 0, 2)
 
     @property
     def height_max(self):
@@ -80,9 +78,6 @@ class HVACModel(ProcessModelContract):
     def constraint_penalty_scales(self):
         return {"hvac_comfort_low": 10.0, "hvac_comfort_high": 10.0}
 
-    def derivatives(self, x, act, env):
-        return self.dynamics(x, act, env)
-
     def _dynamics(self, x, u, env, ops):
         p = self.p
         Tout = env["t_amb"]
@@ -102,9 +97,6 @@ class HVACModel(ProcessModelContract):
 
     def initial_state(self):
         return [10.0, 10.0]
-
-    def clamp_state(self, x):
-        return x
 
     # ---- KPI support (HVAC scores tracking + safety; no excess-energy term) ----
     energy_scored = False

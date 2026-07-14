@@ -1,6 +1,13 @@
 """Evaluation protocols, metrics, and artifact reports."""
 
 from .objectives import StageRewardContext, StageRewardResult, stage_reward
+from .task_profiles import (
+    TASK_PROFILE_SCHEMA_VERSION,
+    list_task_profiles,
+    load_task_profile,
+    task_environment,
+    validate_task_profile,
+)
 
 from .protocols import (
     EVALUATION_SCHEMA_VERSION,
@@ -39,6 +46,11 @@ __all__ = [
     "StageRewardContext",
     "StageRewardResult",
     "stage_reward",
+    "TASK_PROFILE_SCHEMA_VERSION",
+    "list_task_profiles",
+    "load_task_profile",
+    "task_environment",
+    "validate_task_profile",
     "EVALUATION_SCHEMA_VERSION",
     "ROLLOUT_SCHEMA",
     "METRIC_DEFINITIONS",

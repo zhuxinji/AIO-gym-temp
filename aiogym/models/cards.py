@@ -10,7 +10,7 @@ import numpy as np
 from .._internal.serialization import jsonable as _jsonable
 from .registry import SCENARIOS, make_model
 
-MODEL_CARD_SCHEMA_VERSION = "aiogym.model_card.v1"
+MODEL_CARD_SCHEMA_VERSION = "aiogym.model_card.v2"
 
 HUMAN_MODEL_CARD_NOTES = {
     "cascade": {
@@ -23,13 +23,13 @@ HUMAN_MODEL_CARD_NOTES = {
         "best_use": "multi-loop level and temperature tracking, actuator allocation, and disturbance-rejection smoke tests",
     },
     "quadruple": {
-        "dynamics": "Four interacting tank balances route two pump streams through upper and lower tanks, with a thermal state attached to each tank.",
+        "dynamics": "Johansson's four nonlinear liquid-level balances route two voltage-driven pump streams through fixed three-way valve splits; upper tanks drain into the two lower tanks.",
         "assumptions": [
-            "Hydraulic coupling is simplified to benchmark-scale orifice flow.",
-            "Thermal dynamics share lumped heater and heat-loss terms.",
-            "The model is intended for control comparison rather than hardware sizing.",
+            "Liquid is incompressible and each outlet follows Torricelli flow.",
+            "Tank cross-sections, outlet areas, pump gains, and valve split fractions are constant within one run.",
+            "Pipe, sensor, and pump dynamics are neglected as in the reference nonlinear physical model.",
         ],
-        "best_use": "interacting level control, MIMO setpoint tracking, and robustness tests",
+        "best_use": "classic two-input/two-output MIMO level control, interaction analysis, and minimum/nonminimum-phase studies",
     },
     "cstr": {
         "dynamics": "A two-state exothermic reactor tracks concentration and temperature with feed dilution, Arrhenius reaction rate, heat release, and cooling action.",
@@ -89,6 +89,8 @@ REQUIRED_MODEL_CARD_FIELDS = (
     "action_vector",
     "dynamics_disturbances",
     "parameters",
+    "physical_metadata",
+    "solver",
     "disturbances",
     "disturbance_defaults",
     "constraints",
@@ -158,6 +160,15 @@ def validate_model_card(card: Mapping, expected_scenario: str | None = None) -> 
         raise ValueError(f"{card['scenario']} model card must include parameters")
     for name, row in card["parameters"].items():
         _require_model_card_fields(card["scenario"], f"parameter {name}", row, ("value", "unit", "bounds"))
+    if not isinstance(card["physical_metadata"], dict):
+        raise ValueError(f"{card['scenario']} physical_metadata must be a mapping")
+    _require_model_card_fields(
+        card["scenario"], "physical metadata", card["physical_metadata"],
+        ("parameter_status", "fidelity", "time_unit", "references", "solver"),
+    )
+    if not isinstance(card["solver"], dict):
+        raise ValueError(f"{card['scenario']} solver must be a mapping")
+    _require_model_card_fields(card["scenario"], "solver", card["solver"], ("method", "max_step"))
     if not isinstance(card["disturbances"], list):
         raise ValueError(f"{card['scenario']} disturbances must be a list")
     if not isinstance(card["constraints"], list) or not card["constraints"]:
@@ -217,6 +228,13 @@ def render_model_card_markdown(card: Mapping) -> str:
         lines.append("")
     lines.extend([
         "The executable source of truth is the model implementation under `aiogym.models.scenarios`.",
+        "",
+        "## Physical Metadata Status",
+        "",
+        f"- Parameter status: `{card.get('physical_metadata', {}).get('parameter_status', 'unknown')}`",
+        f"- Fidelity: `{card.get('physical_metadata', {}).get('fidelity', 'unknown')}`",
+        f"- Time unit: `{card.get('physical_metadata', {}).get('time_unit', 'unknown')}`",
+        f"- Solver: `{card.get('solver', {}).get('method', 'unknown')}` with maximum step `{card.get('solver', {}).get('max_step', 'unknown')}`",
         "",
         "## State Vector",
         "",
