@@ -483,6 +483,7 @@ class AIOGymNativeEnv(gym.Env):
             tracking_q_y=self.tracking_q_y,
             tracking_r_move=self.tracking_r_move,
             terminate_on_runaway=self.terminate_on_runaway,
+            dt=self.control_dt,
             economic_config=self._econ,
             reward_override=self.custom_stage_reward,
         )

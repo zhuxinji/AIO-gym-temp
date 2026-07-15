@@ -27,6 +27,7 @@ CONFIG_DIR = Path(__file__).resolve().parents[1] / "evaluation" / "suites"
 SCENARIO_ALIASES = {
     "ALL_SCENARIOS": tuple(SCENARIOS),
     "CORE_SCENARIOS": ("cascade", "quadruple", "cstr", "hvac"),
+    "ECONOMIC_SCENARIOS": ("cascade", "cstr", "hvac", "heater"),
 }
 SUMMARY_COLUMNS = (
     "suite_case",
@@ -316,6 +317,7 @@ def run_case(suite_case: dict, include_tracebacks: bool):
             seeds=suite_case["seeds"],
             controller_config=suite_case.get("controller_config") or {},
             include_episodes=True,
+            save_rollout=suite_case["objective"] == "tracking",
             suite_case=suite_case["name"],
         )
         result = case["result"]
@@ -326,7 +328,22 @@ def run_case(suite_case: dict, include_tracebacks: bool):
     row = case["row"]
     row["suite_runtime_seconds"] = float(perf_counter() - started)
     config = case["config"]
-    return {"status": row["status"], "row": row, "result": result, "config": config}
+    rollout = case.get("rollout")
+    if rollout is not None:
+        rollout.update({
+            "scenario": suite_case["scenario"],
+            "task": suite_case["task"],
+            "objective": suite_case["objective"],
+            "controller": suite_case["controller"],
+            "suite_case": suite_case["name"],
+        })
+    return {
+        "status": row["status"],
+        "row": row,
+        "result": result,
+        "config": config,
+        "rollout": rollout,
+    }
 
 
 def _error_payload(ex: Exception, include_tracebacks: bool):
@@ -398,6 +415,7 @@ def main():
     rows = []
     results = []
     configs = []
+    rollouts = []
     errors = []
 
     for suite_case in cases:
@@ -407,6 +425,8 @@ def main():
         if artifact["status"] in ("passed", "degraded"):
             results.append(artifact["result"])
             configs.append(artifact["config"])
+            if artifact.get("rollout") is not None:
+                rollouts.append(artifact["rollout"])
             if args.fail_fast and args.fail_on_degraded and artifact["status"] == "degraded":
                 break
         else:
@@ -453,6 +473,7 @@ def main():
         "degraded_cases": [row for row in rows if row["status"] == "degraded"],
         "configs": configs,
         "results": results,
+        "rollouts": rollouts,
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
@@ -467,6 +488,8 @@ def main():
             figure_artifacts[f"{key}_figure"] = path
         elif key == "tracking_comparison":
             figure_artifacts["tracking_comparison_figure"] = path
+        elif key == "tracking_control_by_scenario":
+            figure_artifacts["tracking_control_figures"] = path
         elif key == "summary_by_objective":
             figure_artifacts["summary_figures"] = path
         elif key == "leaderboard_by_objective":

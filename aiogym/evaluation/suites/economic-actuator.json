@@ -1,6 +1,6 @@
 {
   "description": "Economic benchmark for fixed actuator controllers.",
-  "scenarios": ["cascade", "quadruple", "cstr", "hvac"],
+  "scenarios": "ECONOMIC_SCENARIOS",
   "objectives": ["economic"],
   "controllers": ["pid", "mpc"],
   "action_mode": "actuator"

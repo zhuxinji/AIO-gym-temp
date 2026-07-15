@@ -429,11 +429,6 @@ class ProcessModelContract:
 
         return float(self.energy_kw(self.action_vector(act)))
 
-    def economic_energy_kw(self, act, x=None, env=None):
-        """Return the energy-rate term used by the model's economic objective."""
-
-        return float(self.energy_kw(self.action_vector(act)))
-
     def economic_value(self, x, u, env=None, backend="numeric", ca=None):
         return 0.0
 

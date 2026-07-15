@@ -7,6 +7,7 @@
     "P": 40,
     "move_supp": 0.8,
     "du_max": 0.15,
+    "steady_input_weight": 0.0,
     "cv_scale": null
   },
   "scenarios": {
@@ -28,12 +29,46 @@
   "profiles": {
     "quadruple-minimum-phase": {
       "scenarios": {
-        "quadruple": {"Ts": 1.0, "P": 40}
+        "quadruple": {
+          "Ts": 1.0,
+          "P": 5,
+          "move_supp": 0.05,
+          "du_max": 0.2,
+          "steady_input_weight": 0.0
+        }
       }
     },
     "quadruple-nonminimum-phase": {
       "scenarios": {
-        "quadruple": {"Ts": 1.0, "P": 160, "move_supp": 2.0, "du_max": 0.05}
+        "quadruple": {
+          "Ts": 1.0,
+          "P": 60,
+          "move_supp": 0.05,
+          "du_max": 0.1,
+          "steady_input_weight": 100.0
+        }
+      }
+    },
+    "quadruple-zero-boundary": {
+      "scenarios": {
+        "quadruple": {
+          "Ts": 1.0,
+          "P": 5,
+          "move_supp": 0.1,
+          "du_max": 0.15,
+          "steady_input_weight": 0.0
+        }
+      }
+    },
+    "quadruple-disturbance-rejection": {
+      "scenarios": {
+        "quadruple": {
+          "Ts": 1.0,
+          "P": 3,
+          "move_supp": 0.0,
+          "du_max": 0.4,
+          "steady_input_weight": 0.0
+        }
       }
     }
   }

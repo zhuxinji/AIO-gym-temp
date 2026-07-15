@@ -141,6 +141,38 @@ class QuadrupleModel(ProcessModelContract):
         h2 = (q2 / a[1]) ** 2 / (2.0 * g)
         return [h1, h2, h3, h4]
 
+    def tracking_steady_state_action(self, y_sp):
+        """Return the nominal steady input associated with lower-tank targets.
+
+        The inverse uses the two steady lower-tank flow balances.  It is
+        especially useful in the nonminimum-phase configuration, where a short
+        prediction horizon otherwise rewards the inverse response and can pick
+        the wrong pump allocation before the eventual benefit is visible.
+        """
+
+        target = [max(float(value), 0.0) for value in y_sp]
+        if len(target) != 2:
+            raise ValueError(f"quadruple y_sp must contain 2 values, got {len(target)}")
+        a = self.p["outlet_area"]
+        k1, k2 = (float(value) for value in self.p["pump_gain"])
+        gamma1, gamma2 = (float(value) for value in self.p["gamma"])
+        g = float(self.p["gravity"])
+        required = [
+            float(a[i]) * math.sqrt(2.0 * g * target[i])
+            for i in range(2)
+        ]
+        matrix = (
+            (gamma1 * k1, (1.0 - gamma2) * k2),
+            ((1.0 - gamma1) * k1, gamma2 * k2),
+        )
+        determinant = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
+        if abs(determinant) < 1e-12:
+            return self.default_action()
+        v1 = (required[0] * matrix[1][1] - matrix[0][1] * required[1]) / determinant
+        v2 = (matrix[0][0] * required[1] - required[0] * matrix[1][0]) / determinant
+        vmax = float(self.p["max_voltage"])
+        return [max(0.0, min(1.0, v1 / vmax)), max(0.0, min(1.0, v2 / vmax))]
+
     def initial_state(self):
         return self.equilibrium_state()
 
@@ -182,7 +214,10 @@ class QuadrupleModel(ProcessModelContract):
         outlet_factor = env.get("outlet_area_factor", 1.0)
         voltage = [u[i] * vmax for i in range(2)]
         outlet = [
-            outlet_factor * a[i] * ops.sqrt(2.0 * g * ops.max(x[i], 0.0))
+            # The numeric plant keeps the exact max(h, 0) law. CasADi uses the
+            # smooth counterpart so the square-root derivative stays finite as
+            # an NMPC prediction approaches an empty tank.
+            outlet_factor * a[i] * ops.sqrt(2.0 * g * ops.smooth_max(x[i], 0.0, 1e-6))
             for i in range(4)
         ]
         pump = [pump_factor * k[i] * voltage[i] for i in range(2)]

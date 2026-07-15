@@ -6,8 +6,8 @@
   "action_mode": "actuator",
   "task": "disturbance-rejection",
   "controller_configs": {
-    "pid": {"profile": "quadruple-minimum-phase"},
-    "mpc": {"profile": "quadruple-minimum-phase"},
-    "oracle": {"mode": "tracking"}
+    "pid": {"profile": "quadruple-disturbance-rejection"},
+    "mpc": {"profile": "quadruple-disturbance-rejection"},
+    "oracle": {"profile": "quadruple-disturbance-rejection", "mode": "tracking"}
   }
 }

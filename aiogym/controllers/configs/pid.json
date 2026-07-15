@@ -119,6 +119,94 @@
           ]
         }
       }
+    },
+    "quadruple-minimum-phase-benchmark": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 0,
+              "pid": [0.2422, 0.01395, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+            },
+            {
+              "u_index": 1,
+              "y_index": 1,
+              "pid": [0.2689, 0.01256, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+            }
+          ]
+        }
+      }
+    },
+    "quadruple-nonminimum-phase-benchmark": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 1,
+              "pid": [0.02461, 0.0002324, 0.0],
+              "bias": 0.315,
+              "source": "AIO-Gym fixed-protocol family tuning with cross pairing: nonminimum-phase-classic plus pplus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+            },
+            {
+              "u_index": 1,
+              "y_index": 0,
+              "pid": [0.07719, 0.0003802, 0.0],
+              "bias": 0.315,
+              "source": "AIO-Gym fixed-protocol family tuning with cross pairing: nonminimum-phase-classic plus pplus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+            }
+          ]
+        }
+      }
+    },
+    "quadruple-zero-boundary": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 0,
+              "pid": [0.2478, 0.02, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
+            },
+            {
+              "u_index": 1,
+              "y_index": 1,
+              "pid": [0.14, 0.02, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
+            }
+          ]
+        }
+      }
+    },
+    "quadruple-disturbance-rejection": {
+      "scenarios": {
+        "quadruple": {
+          "loops": [
+            {
+              "u_index": 0,
+              "y_index": 0,
+              "pid": [0.4571, 0.05, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol disturbance-rejection tuning, 120 random plus 60 refinement samples, seed 20260715"
+            },
+            {
+              "u_index": 1,
+              "y_index": 1,
+              "pid": [0.5, 0.05, 0.0],
+              "bias": 0.3,
+              "source": "AIO-Gym fixed-protocol disturbance-rejection tuning, 120 random plus 60 refinement samples, seed 20260715"
+            }
+          ]
+        }
+      }
     }
   }
 }

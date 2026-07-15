@@ -1,0 +1,75 @@
+{
+  "description": "All formal quadruple-tank control tasks, each evaluated with PID, MPC, and NMPC Oracle under task-specific profiles and separate rankings.",
+  "scenarios": ["quadruple"],
+  "objectives": ["tracking", "robustness"],
+  "controllers": ["pid", "mpc", "oracle"],
+  "action_mode": "actuator",
+  "cases": [
+    {
+      "scenario": "quadruple",
+      "task": "minimum-phase-classic",
+      "objective": "tracking",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-minimum-phase"},
+        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "nonminimum-phase-classic",
+      "objective": "tracking",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-nonminimum-phase"},
+        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "pminus-reference-step",
+      "objective": "tracking",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-minimum-phase"},
+        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "pplus-reference-step",
+      "objective": "tracking",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-nonminimum-phase"},
+        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "zero-boundary-stress",
+      "objective": "tracking",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-zero-boundary"},
+        "mpc": {"profile": "quadruple-zero-boundary"},
+        "oracle": {"profile": "quadruple-zero-boundary", "mode": "tracking"}
+      }
+    },
+    {
+      "scenario": "quadruple",
+      "task": "disturbance-rejection",
+      "objective": "robustness",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "pid": {"profile": "quadruple-disturbance-rejection"},
+        "mpc": {"profile": "quadruple-disturbance-rejection"},
+        "oracle": {"profile": "quadruple-disturbance-rejection", "mode": "tracking"}
+      }
+    }
+  ]
+}

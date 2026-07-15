@@ -6,8 +6,9 @@
   "action_mode": "actuator",
   "task": "nonminimum-phase-classic",
   "controller_configs": {
-    "pid": {"profile": "quadruple-nonminimum-phase"},
-    "mpc": {"profile": "quadruple-nonminimum-phase"}
+    "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
+    "mpc": {"profile": "quadruple-nonminimum-phase"},
+    "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
   },
   "control_dt": 1.0,
   "episode_steps": 1800

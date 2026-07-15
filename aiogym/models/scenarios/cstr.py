@@ -125,11 +125,9 @@ class CSTRModel(ProcessModelContract):
     energy_scored = False
 
     def energy_kw(self, u, backend="numeric", ca=None):
-        return u[1] * self.p["cool_max"] / 1000.0
-
-    def action_energy_kw(self, act, x=None, env=None):
-        u = self.action_vector(act)
-        return (u[0] * self.p["feed_power_max"] + u[1] * self.p["cool_max"]) / 1000.0
+        return (
+            u[0] * self.p["feed_power_max"] + u[1] * self.p["cool_max"]
+        ) / 1000.0
 
     def economic_value(self, x, u, env=None, backend="numeric", ca=None):
         env = env or {}

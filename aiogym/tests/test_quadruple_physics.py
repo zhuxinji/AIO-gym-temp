@@ -136,6 +136,83 @@ def test_nonminimum_phase_task_has_rhp_zero_and_matched_controller_profile():
     assert env.model.action_vector(nominal_action) == pytest.approx([0.315, 0.315])
 
 
+def test_nonminimum_steady_input_inverse_matches_requested_lower_levels():
+    model = apply_model_params(make_model("quadruple"), {
+        "gamma": [0.43, 0.34],
+        "nominal_voltage": [3.15, 3.15],
+    })
+    initial = model.initial_state()
+    target = [initial[0] + 1.0, initial[1]]
+    action = model.tracking_steady_state_action(target)
+    equilibrium = model.equilibrium_state([
+        action[0] * model.p["max_voltage"],
+        action[1] * model.p["max_voltage"],
+    ])
+    assert action == pytest.approx([0.2962154714, 0.3463036995], abs=1e-9)
+    assert model.controlled_output(equilibrium) == pytest.approx(target)
+    # This cross-coupled allocation is the key nonminimum-phase distinction:
+    # raise lower tank 1 by reducing pump 1 and increasing pump 2.
+    assert action[0] < model.default_action()[0]
+    assert action[1] > model.default_action()[1]
+
+
+def test_nonminimum_benchmark_pid_uses_cross_pairing():
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple", task="nonminimum-phase-classic", episode_steps=2
+    )
+    controller = make_controller(
+        "pid",
+        model=protocol.make_env().model,
+        scenario="quadruple",
+        config={"profile": "quadruple-nonminimum-phase-benchmark"},
+    )
+    loops = controller.metadata()["loops"]
+    assert [(loop["u_index"], loop["y_index"]) for loop in loops] == [(0, 1), (1, 0)]
+
+
+def test_nonminimum_mpc_profile_exposes_steady_input_guidance():
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple", task="nonminimum-phase-classic", episode_steps=2
+    )
+    controller = make_controller(
+        "mpc",
+        model=protocol.make_env().model,
+        scenario="quadruple",
+        config={"profile": "quadruple-nonminimum-phase"},
+    )
+    metadata = controller.metadata()
+    assert metadata["horizon"] == 60
+    assert metadata["steady_input_weight"] == 100.0
+
+
+@pytest.mark.parametrize(
+    "profile,horizon,solve_every,r_move,terminal_weight",
+    [
+        ("quadruple-minimum-phase", 6, 1, 0.05, 1.0),
+        ("quadruple-nonminimum-phase", 20, 2, 0.1, 10.0),
+        ("quadruple-zero-boundary", 16, 1, 0.05, 5.0),
+        ("quadruple-disturbance-rejection", 3, 1, 0.0, 1.0),
+    ],
+)
+def test_quadruple_oracle_profiles_expose_task_specific_tuning(
+    profile, horizon, solve_every, r_move, terminal_weight
+):
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple", task="minimum-phase-classic", episode_steps=2
+    )
+    controller = make_controller(
+        "oracle",
+        model=protocol.make_env().model,
+        scenario="quadruple",
+        config={"profile": profile},
+    )
+    metadata = controller.metadata()
+    assert metadata["horizon"] == horizon
+    assert metadata["solve_every"] == solve_every
+    assert metadata["r_move"] == pytest.approx(r_move)
+    assert metadata["terminal_weight"] == pytest.approx(terminal_weight)
+
+
 @pytest.mark.parametrize(
     "task,horizon,phase,initial_action",
     [

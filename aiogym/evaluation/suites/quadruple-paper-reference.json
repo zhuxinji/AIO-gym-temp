@@ -1,5 +1,5 @@
 {
-  "description": "Paper-faithful Johansson Fig. 10/11 P- and P+ decentralized PI reference-step experiments.",
+  "description": "Johansson Fig. 10/11 P- and P+ decentralized-PI nonlinear-model reference reproductions only.",
   "scenarios": ["quadruple"],
   "objectives": ["tracking"],
   "controllers": ["pid"],

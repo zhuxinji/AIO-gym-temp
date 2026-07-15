@@ -6,7 +6,8 @@
   "action_mode": "actuator",
   "task": "zero-boundary-stress",
   "controller_configs": {
-    "pid": {"profile": "quadruple-minimum-phase"},
-    "mpc": {"profile": "quadruple-nonminimum-phase"}
+    "pid": {"profile": "quadruple-zero-boundary"},
+    "mpc": {"profile": "quadruple-zero-boundary"},
+    "oracle": {"profile": "quadruple-zero-boundary", "mode": "tracking"}
   }
 }

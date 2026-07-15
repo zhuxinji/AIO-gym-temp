@@ -51,6 +51,7 @@ def stage_reward(
     tracking_q_y: Sequence[float],
     tracking_r_move: float,
     terminate_on_runaway: bool,
+    dt: float = 1.0,
     economic_config: Mapping[str, Any] | None = None,
     reward_override: Callable[[Sequence[float], Any, Sequence[float], StageRewardContext], float] | None = None,
 ) -> StageRewardResult:
@@ -58,6 +59,9 @@ def stage_reward(
 
     if reward_mode not in {"economic", "kpi", "tracking"}:
         raise ValueError("reward_mode must be one of: economic, kpi, tracking")
+    dt = float(dt)
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("dt must be finite and positive")
 
     # ``state`` is part of the public transition contract even though the current
     # built-in objectives depend only on the resulting state and action move.
@@ -105,7 +109,7 @@ def stage_reward(
     prod = 0.0
     profit = 0.0
     if reward_mode == "economic":
-        profit, prod = _economic_profit(
+        profit_rate, production_rate = _economic_profit(
             model,
             x_next,
             action,
@@ -113,8 +117,11 @@ def stage_reward(
             temps,
             runaway,
             env,
+            action_energy_kw,
             economic_config,
         )
+        profit = profit_rate * dt
+        prod = production_rate * dt
         reward = profit * float(reward_scale)
     elif reward_mode == "kpi":
         reward = -kpi.penalty * float(reward_scale)
@@ -210,7 +217,9 @@ def _constraint_penalty(model, cons_info):
     return float(total)
 
 
-def _economic_profit(model, state, action, levels, temps, runaway, disturbance, config):
+def _economic_profit(
+    model, state, action, levels, temps, runaway, disturbance, energy_kw, config
+):
     cfg = dict(config or model.economic_config)
     value = 0.0
     production = 0.0
@@ -218,7 +227,7 @@ def _economic_profit(model, state, action, levels, temps, runaway, disturbance, 
         production = float(model.production(state, action, disturbance))
         value = production
 
-    energy_kw = float(model.economic_energy_kw(action, state, disturbance))
+    energy_kw = float(energy_kw)
     violation = 0.0
     for i, (lower, upper) in enumerate(cfg["temp_band"]):
         if lower is not None and temps[i] < lower:

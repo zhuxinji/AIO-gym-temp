@@ -588,7 +588,7 @@ def test_benchmark_suite_configs():
             tracking_comparison_svg = f.read()
         suite_artifacts_ok = suite_artifacts_ok and "Tracking Cost" in tracking_summary_svg and "Profit" not in tracking_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "Profit" in economic_summary_svg and "Tracking Cost" not in economic_summary_svg
-        suite_artifacts_ok = suite_artifacts_ok and "tracking / cstr" in leaderboard_svg and "economic / cstr" in leaderboard_svg
+        suite_artifacts_ok = suite_artifacts_ok and "cstr / tracking" in leaderboard_svg and "cstr / economic" in leaderboard_svg
         suite_artifacts_ok = suite_artifacts_ok and "tracking comparison" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and "Tracking cost" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and "Runtime per step" in tracking_comparison_svg

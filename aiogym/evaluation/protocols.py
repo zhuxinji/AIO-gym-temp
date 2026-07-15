@@ -22,7 +22,7 @@ ROLLOUT_SCHEMA = {
     "setpoint": "active setpoint context exposed to the controller",
     "disturbance": "disturbance values applied by the process model",
     "reward": "training reward returned by the environment",
-    "profit": "raw economic profit for the step",
+    "profit": "time-integrated economic contribution for the transition",
     "constraint": "normalized process constraint penalty for the step",
     "info": "environment-specific diagnostic fields",
 }
@@ -30,9 +30,9 @@ ROLLOUT_SCHEMA = {
 
 METRIC_DEFINITIONS = {
     "return": "sum of environment reward over the rollout; reward is the training signal",
-    "profit": "sum of raw economic profit reported by the environment",
+    "profit": "time-integrated economic profit over the rollout",
     "normalized_score": "0-100 KPI score from KPIScorer; score is for reporting, not raw economics",
-    "production": "sum of process production reported by the environment",
+    "production": "time-integrated process production over the rollout",
     "energy_kwh": "total action energy over the rollout",
     "runtime_seconds": "wall-clock seconds spent evaluating one episode",
     "runtime_total_seconds": "total wall-clock seconds spent evaluating all episodes",

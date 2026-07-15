@@ -53,8 +53,6 @@ packages = [
 [tool.setuptools.package-data]
 aiogym = [
   "controllers/configs/*.json",
-  "controllers/examples/*.py",
-  "controllers/examples/*.md",
   "models/examples/*.py",
   "models/examples/*.md",
   "models/parameters/*.json",

@@ -126,6 +126,102 @@ def plot_rollouts(rollouts: list[dict], path: str, scenario: str):
     _plot_series_panels(rollouts, panels, path, f"{scenario} rollout comparison")
 
 
+def plot_tracking_control(rollouts: list[dict], path: str, scenario: str, task: str = "default"):
+    """Plot state, setpoint, and actuator trajectories for one tracking task."""
+
+    model = make_model(scenario)
+    state_rows = list(model.state_schema())
+    output_rows = list(model.controlled_output_schema())
+    output_to_state = _controlled_state_indices(rollouts, state_rows, output_rows)
+    state_to_output = {state_i: output_i for output_i, state_i in output_to_state.items()}
+    paper_reference = scenario == "quadruple" and task in {
+        "pminus-reference-step",
+        "pplus-reference-step",
+    }
+    paper_state_indices = set(output_to_state.values())
+    panels = []
+    for i, row in enumerate(output_rows):
+        if i in output_to_state:
+            continue
+        name = str(row.get("name") or f"y{i}")
+        unit = str(row.get("unit") or "")
+        panels.append({
+            "title": _quantity_title(name, unit),
+            "series": [
+                info_series("y", i, label=name),
+                info_series("y_sp", i, label=f"{name} setpoint", dashed=True, muted=True),
+            ],
+        })
+    for i, row in enumerate(state_rows):
+        if paper_reference and i not in paper_state_indices:
+            continue
+        name = str(row.get("name") or f"x{i}")
+        unit = str(row.get("unit") or "")
+        series = [state_series(i, label=name)]
+        if i in state_to_output:
+            series.append(info_series(
+                "y_sp",
+                state_to_output[i],
+                label=f"{name} setpoint",
+                dashed=True,
+                muted=True,
+            ))
+        panels.append({
+            "title": _quantity_title(name, unit),
+            "series": series,
+        })
+    for i, row in enumerate(model.action_schema()):
+        name = str(row.get("name") or f"u{i}")
+        unit = str(row.get("unit") or "")
+        panels.append({
+            "title": _quantity_title(name, unit),
+            "series": [{"kind": "action", "index": i, "label": name}],
+        })
+    label = scenario if task == "default" else f"{scenario} / {task}"
+    _plot_series_panels(rollouts, panels, path, f"{label} tracking control")
+
+
+def _quantity_title(name: str, unit: str) -> str:
+    return name if not unit else f"{name} ({unit})"
+
+
+def _controlled_state_indices(rollouts: list[dict], state_rows: list[dict],
+                              output_rows: list[dict]) -> dict[int, int]:
+    """Match controlled outputs to identical recorded state channels when possible."""
+
+    matched = {}
+    state_names = {str(row.get("name")): i for i, row in enumerate(state_rows)}
+    for output_i, row in enumerate(output_rows):
+        state_i = state_names.get(str(row.get("name")))
+        if state_i is not None:
+            matched[output_i] = state_i
+    samples = [
+        row
+        for artifact in rollouts[:1]
+        for row in artifact.get("rollout", [])[:32]
+    ]
+    used_states = set(matched.values())
+    for output_i in range(len(output_rows)):
+        if output_i in matched:
+            continue
+        for state_i in range(len(state_rows)):
+            if state_i in used_states:
+                continue
+            pairs = [
+                (
+                    _list_value(row.get("info", {}).get("y"), output_i),
+                    _list_value(row.get("next_state"), state_i),
+                )
+                for row in samples
+            ]
+            pairs = [(y, x) for y, x in pairs if y is not None and x is not None]
+            if pairs and all(abs(float(y) - float(x)) <= 1e-9 for y, x in pairs):
+                matched[output_i] = state_i
+                used_states.add(state_i)
+                break
+    return matched
+
+
 def plot_leaderboard(board: list[dict], path: str, title: str) -> None:
     metric = board[0]["metric"] if board else "metric"
     values = [0.0 if row["metric_value"] is None else float(row["metric_value"]) for row in board]
@@ -209,12 +305,14 @@ def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> N
     }
     cost_columns = [
         ("scenario", "Scenario", 150),
+        ("task", "Task", 220),
         ("best_controller", "Best", 150),
         ("best_tracking_cost", "Best cost", 105),
         ("oracle_gap_vs_best", "Oracle gap", 110),
     ]
     runtime_columns = [
         ("scenario", "Scenario", 150),
+        ("task", "Task", 220),
         ("fastest_controller", "Fastest", 150),
         ("fastest_step_ms", "Fastest ms", 110),
         ("best_step_ms", "Best cost ctrl ms", 130),
@@ -330,7 +428,7 @@ def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> 
         parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 30}" y2="{ly}" stroke="{color}" stroke-width="3"/>')
         parts.append(_svg_text(lx + 38, ly + 4, row["name"], size=12, fill="#334155"))
     parts.append(_svg_text(left - 12, top + 10, _fmt(yhi), size=10, anchor="end", fill="#64748b"))
-    parts.append(_svg_text(left + w / 2, top + h + 34, "Time", size=12, anchor="middle", fill="#334155"))
+    _append_time_axis(parts, left, top, w, h, xlo, xhi, show_label=True)
     parts.append("</svg>")
     _write_text(path, "\n".join(parts))
 
@@ -413,8 +511,16 @@ def state_series(index: int, label: str | None = None, dashed: bool = False):
     return {"kind": "state", "index": index, "label": label or f"x{index}", "dashed": dashed}
 
 
-def info_series(key: str, index: int, label: str | None = None, dashed: bool = False):
-    return {"kind": "info_vector", "key": key, "index": index, "label": label or f"{key}{index}", "dashed": dashed}
+def info_series(key: str, index: int, label: str | None = None, dashed: bool = False,
+                muted: bool = False):
+    return {
+        "kind": "info_vector",
+        "key": key,
+        "index": index,
+        "label": label or f"{key}{index}",
+        "dashed": dashed,
+        "muted": muted,
+    }
 
 
 def setpoint_series(key: str, index: int, label: str | None = None, dashed: bool = False):
@@ -442,17 +548,27 @@ def _max_info_vector_len(key: str):
 
 
 def _plot_series_panels(rollouts: list[dict], panels: list[dict], path: str, title: str):
-    width, height = 1200, 1120
-    left, right = 90, 40
-    panel_h, gap = 150, 48
-    top = 95
+    width = 1200
+    left, right = 110, 40
+    panel_h, gap = 160, 82
+    top = 105
+    height = max(400, top + len(panels) * (panel_h + gap) + 70)
     panel_boxes = [(left, top + i * (panel_h + gap), width - left - right, panel_h) for i in range(len(panels))]
     colors = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#475569", "#0f766e", "#be123c"]
-    parts = [_svg_header(width, height), _svg_text(60, 45, title, size=24, weight="700")]
+    controller_names = list(dict.fromkeys(
+        str(artifact.get("name", "controller"))
+        for artifact in rollouts
+        if artifact.get("rollout")
+    ))
+    controller_colors = {
+        name: colors[i % len(colors)]
+        for i, name in enumerate(controller_names)
+    }
+    parts = [_svg_header(width, height), _svg_text(60, 48, title, size=28, weight="700")]
 
     for pidx, (panel, box) in enumerate(zip(panels, panel_boxes)):
         x, y, w, h = box
-        parts.append(_svg_text(x, y - 20, panel["title"], size=15, weight="700"))
+        parts.append(_svg_text(x, y - 24, panel["title"], size=20, weight="700"))
         parts.extend(_svg_axes(x, y, w, h))
         collected = []
         for artifact in rollouts:
@@ -484,25 +600,38 @@ def _plot_series_panels(rollouts: list[dict], panels: list[dict], path: str, tit
         pad = (yhi - ylo) * 0.08
         ylo -= pad
         yhi += pad
-        for i, series in enumerate(collected):
-            color = colors[i % len(colors)]
+        for series in collected:
+            color = controller_colors.get(series["controller"], colors[0])
             if series["muted"]:
                 color = "#94a3b8"
             dash = ' stroke-dasharray="6 5"' if series["dashed"] else ""
             points = _polyline_points(series["x"], series["y"], xlo, xhi, ylo, yhi, x, y, w, h)
             parts.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2"{dash}/>')
-        parts.append(_svg_text(x - 12, y + 8, _fmt(yhi), size=10, anchor="end", fill="#64748b"))
-        parts.append(_svg_text(x - 12, y + h, _fmt(ylo), size=10, anchor="end", fill="#64748b"))
-        if pidx == len(panel_boxes) - 1:
-            parts.append(_svg_text(x + w / 2, y + h + 36, "Time", size=13, anchor="middle", fill="#334155"))
+        parts.append(_svg_text(x - 14, y + 10, _fmt(yhi), size=15, anchor="end", fill="#475569"))
+        parts.append(_svg_text(x - 14, y + h, _fmt(ylo), size=15, anchor="end", fill="#475569"))
+        _append_time_axis(
+            parts,
+            x,
+            y,
+            w,
+            h,
+            xlo,
+            xhi,
+            show_label=pidx == len(panel_boxes) - 1,
+        )
 
     legend_x, legend_y = 800, 32
-    names = [artifact.get("name", "controller") for artifact in rollouts if artifact.get("rollout")]
-    for i, name in enumerate(names):
+    for i, name in enumerate(controller_names):
         lx = legend_x + (i % 3) * 125
         ly = legend_y + (i // 3) * 22
-        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 26}" y2="{ly}" stroke="{colors[i % len(colors)]}" stroke-width="3"/>')
-        parts.append(_svg_text(lx + 34, ly + 4, name, size=12, fill="#334155"))
+        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 26}" y2="{ly}" stroke="{controller_colors[name]}" stroke-width="3"/>')
+        parts.append(_svg_text(lx + 34, ly + 5, name, size=15, fill="#334155"))
+    if any(spec.get("muted") for panel in panels for spec in panel["series"]):
+        i = len(controller_names)
+        lx = legend_x + (i % 3) * 125
+        ly = legend_y + (i // 3) * 22
+        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 26}" y2="{ly}" stroke="#94a3b8" stroke-width="3" stroke-dasharray="6 5"/>')
+        parts.append(_svg_text(lx + 34, ly + 5, "Setpoint", size=15, fill="#334155"))
     parts.append("</svg>")
     _write_text(path, "\n".join(parts))
 
@@ -569,6 +698,41 @@ def _polyline_points(xs, ys, xlo, xhi, ylo, yhi, x, y, w, h):
     return " ".join(points)
 
 
+def _append_time_axis(parts: list[str], x: float, y: float, w: float, h: float,
+                      xlo: float, xhi: float, *, show_label: bool) -> None:
+    for i in range(5):
+        fraction = i / 4.0
+        px = x + fraction * w
+        value = xlo + fraction * (xhi - xlo)
+        parts.append(
+            f'<line x1="{px:.2f}" y1="{y + h:.2f}" x2="{px:.2f}" '
+            f'y2="{y + h + 5:.2f}" stroke="#475569"/>'
+        )
+        parts.append(_svg_text(
+            px,
+            y + h + 23,
+            _fmt_axis(value),
+            size=15,
+            anchor="middle",
+            fill="#475569",
+        ))
+    if show_label:
+        parts.append(_svg_text(
+            x + w / 2,
+            y + h + 50,
+            "Time (s)",
+            size=18,
+            anchor="middle",
+            fill="#334155",
+        ))
+
+
+def _fmt_axis(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def _map_y(value: float, lo: float, hi: float, y: float, h: float):
     return y + h - (float(value) - lo) / (hi - lo) * h
 
@@ -578,11 +742,12 @@ def _map_x(value: float, lo: float, hi: float, x: float, w: float) -> float:
 
 
 def _fmt(value: float):
-    if abs(value) >= 100:
-        return f"{value:.0f}"
-    if abs(value) >= 10:
-        return f"{value:.1f}"
-    return f"{value:.2f}"
+    """Format plot values without rounding visible non-zero bars to zero."""
+
+    value = float(value)
+    if value == 0.0:
+        return "0"
+    return f"{value:.4g}"
 
 
 def _table_value(value, key: str) -> str:

@@ -125,7 +125,15 @@ their rankings:
 aiogym-suite-benchmark --suite quadruple-phase-comparison --episodes 1
 ```
 
-Run the paper-reference, zero-boundary, and deterministic-disturbance tasks:
+Run all six formal quadruple-tank tasks with PID, MPC, and NMPC Oracle on every
+task:
+
+```bash
+aiogym-suite-benchmark --suite quadruple --episodes 1
+```
+
+Run only the paper-reference decentralized-PI reproductions, or run the
+zero-boundary and deterministic-disturbance subsets:
 
 ```bash
 aiogym-suite-benchmark --suite quadruple-paper-reference --episodes 1
@@ -221,12 +229,6 @@ Use the Python model example for lower-level behavior:
 
 ```bash
 python aiogym/models/examples/custom_model.py
-```
-
-The controller example implements the `aiogym.controller.v1` contract:
-
-```bash
-python aiogym/controllers/examples/custom_controller.py
 ```
 
 Human-readable model documentation is generated under `docs/model_cards/`:

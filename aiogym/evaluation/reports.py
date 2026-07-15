@@ -197,6 +197,7 @@ def _artifact_section(root: Path, benchmark: Mapping[str, Any], artifacts: Mappi
         ("summary_csv", "summary/summary.csv"),
         ("tracking_comparison", "summary/tracking_comparison.csv"),
         ("tracking_comparison_figure", "figures/tracking_comparison.svg"),
+        ("rollouts", "rollouts/rollouts.json"),
         ("leaderboard", "summary/leaderboard.json"),
         ("all_summary_csv", "summary/all_summary.csv"),
         ("all_leaderboard", "summary/all_leaderboard.json"),
@@ -218,6 +219,7 @@ def _artifact_section(root: Path, benchmark: Mapping[str, Any], artifacts: Mappi
     rows.extend(_artifact_mapping_rows(root, artifacts, "summary_csvs"))
     rows.extend(_artifact_mapping_rows(root, artifacts, "leaderboards"))
     rows.extend(_artifact_mapping_rows(root, artifacts, "summary_figures"))
+    rows.extend(_artifact_mapping_rows(root, artifacts, "tracking_control_figures"))
     rows.extend(_artifact_mapping_rows(root, artifacts, "leaderboard_figures"))
     if not rows and benchmark.get("artifacts"):
         rows = [[key, _rel(value)] for key, value in sorted(artifacts.items())]
@@ -372,6 +374,7 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
         "summary_csv": _check_artifact_path(root, artifacts, "summary_csv", "summary/summary.csv"),
         "tracking_comparison": _check_artifact_path(root, artifacts, "tracking_comparison", "summary/tracking_comparison.csv"),
         "tracking_comparison_figure": _check_artifact_path(root, artifacts, "tracking_comparison_figure", "figures/tracking_comparison.svg"),
+        "rollouts": _check_artifact_path(root, artifacts, "rollouts", "rollouts/rollouts.json"),
         "leaderboard": _check_artifact_path(root, artifacts, "leaderboard", "summary/leaderboard.json"),
         "all_summary_csv": _check_artifact_path(root, artifacts, "all_summary_csv", "summary/all_summary.csv"),
         "all_leaderboard": _check_artifact_path(root, artifacts, "all_leaderboard", "summary/all_leaderboard.json"),
@@ -392,6 +395,31 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
     if tracking_rows_present:
         _add_exists(checks, "tracking_comparison", paths["tracking_comparison"], required=True)
         _add_exists(checks, "tracking_comparison_figure", paths["tracking_comparison_figure"], required=True)
+    rollouts = list(benchmark.get("rollouts") or [])
+    tracking_control_figures = (
+        artifacts.get("tracking_control_figures")
+        if isinstance(artifacts.get("tracking_control_figures"), Mapping)
+        else {}
+    )
+    if rollouts:
+        _add_exists(checks, "rollouts", paths["rollouts"], required=True)
+        for benchmark_case, raw in sorted(tracking_control_figures.items()):
+            path = _resolve_artifact_path(root, raw, "missing")
+            _add_exists(checks, f"tracking_control_figure:{benchmark_case}", path, required=True)
+        expected_control_cases = len({
+            (
+                str(rollout.get("scenario")),
+                str(rollout.get("task") or "default"),
+            )
+            for rollout in rollouts
+            if rollout.get("objective") == "tracking" and rollout.get("scenario")
+        })
+        checks.append(_check(
+            "tracking_control_figure_count",
+            len(tracking_control_figures) == expected_control_cases,
+            str(root / "figures"),
+            f"expected {expected_control_cases}, found {len(tracking_control_figures)}",
+        ))
     summary_csvs = artifacts.get("summary_csvs") if isinstance(artifacts.get("summary_csvs"), Mapping) else {}
     leaderboards = artifacts.get("leaderboards") if isinstance(artifacts.get("leaderboards"), Mapping) else {}
     summary_figures = artifacts.get("summary_figures") if isinstance(artifacts.get("summary_figures"), Mapping) else {}
@@ -417,6 +445,7 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
     all_leaderboard = _safe_json_list(checks, "all_leaderboard_json", paths["all_leaderboard"]) if has_objective_outputs else None
     curve_rows = _safe_json_list(checks, "learning_curve_json", paths["learning_curve"]) if learning_curve else None
     curve_csv_rows = _safe_csv_rows(checks, "learning_curve_csv_rows", paths["learning_curve_csv"]) if learning_curve else None
+    rollout_rows = _safe_json_list(checks, "rollouts_json", paths["rollouts"]) if rollouts else None
     if row_data is not None:
         _add_count_check(checks, "rows_json_count", len(row_data), expected_rows, paths["rows"])
     if summary_rows is not None:
@@ -442,6 +471,8 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
         _add_count_check(checks, "learning_curve_json_count", len(curve_rows), len(learning_curve), paths["learning_curve"])
     if curve_csv_rows is not None:
         _add_count_check(checks, "learning_curve_csv_count", len(curve_csv_rows), len(learning_curve), paths["learning_curve_csv"])
+    if rollout_rows is not None:
+        _add_count_check(checks, "rollouts_json_count", len(rollout_rows), len(rollouts), paths["rollouts"])
 
     _check_model_cards(root, artifacts, expected_scenarios, checks)
     return _check_result(root, checks)

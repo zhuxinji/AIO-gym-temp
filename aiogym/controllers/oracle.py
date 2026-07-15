@@ -37,7 +37,8 @@ def copy_economic_config(model):
 
 class NMPCOracle:
     def __init__(self, scenario="cstr", horizon=20, control_dt=0.5, mode="economic",
-                 du_max=0.4, q_y=1.0, r_move=0.05,
+                 du_max=0.4, q_y=1.0, r_move=0.05, steady_input_weight=0.0,
+                 terminal_weight=1.0,
                  nsub_max=6, ipopt_max_iter=80, ipopt_tol=1e-4, warm_start=False,
                  transcription="multiple_shooting", enforce_state_bounds=True,
                  enforce_temperature_cap=True, model=None):
@@ -67,6 +68,8 @@ class NMPCOracle:
         self.y_scales = [max(float(value), 1e-12) for value in self.model.controlled_output_scales()]
         self.q_y = self._resolve_q_y(q_y)
         self.r_move = nonnegative_float("r_move", r_move)
+        self.steady_input_weight = nonnegative_float("steady_input_weight", steady_input_weight)
+        self.terminal_weight = nonnegative_float("terminal_weight", terminal_weight)
         self.econ = copy_economic_config(self.model)
         self.nd = len(self.model.dynamics_disturbance_names())
         self.state_bounds = self._state_bounds() if self.enforce_state_bounds else [(None, None)] * self.nx
@@ -200,14 +203,16 @@ class NMPCOracle:
                 "ipopt.acceptable_tol": self.ipopt_tol,
                 "ipopt.tol": self.ipopt_tol}
 
-    def _constrain_state(self, opti, x):
+    def _constrain_state(self, opti, x, slack=None):
+        slack_value = 0 if slack is None else slack
         for i, (lo, hi) in enumerate(self.state_bounds):
             if lo is not None and hi is not None:
-                opti.subject_to(opti.bounded(lo, x[i], hi))
+                opti.subject_to(x[i] >= lo - slack_value)
+                opti.subject_to(x[i] <= hi + slack_value)
             elif lo is not None:
-                opti.subject_to(x[i] >= lo)
+                opti.subject_to(x[i] >= lo - slack_value)
             elif hi is not None:
-                opti.subject_to(x[i] <= hi)
+                opti.subject_to(x[i] <= hi + slack_value)
 
     def _build_multiple_shooting(self):
         N, nx, nu = self.N, self.nx, self.nu
@@ -222,20 +227,26 @@ class NMPCOracle:
         x0 = opti.parameter(nx)
         d = opti.parameter(self.nd)
         u_prev = opti.parameter(nu)
+        u_target = opti.parameter(nu)
         ysp = opti.parameter(self.ny)
         sp = {"y_sp": [ysp[i] for i in range(self.ny)]}
         J = 0
         opti.subject_to(X[:, 0] == x0)
-        slack = opti.variable(1, N)                                    # soft cap slack (feasibility)
+        slack = opti.variable(1, N)                                    # shared state/cap feasibility slack
         opti.subject_to(slack >= 0)
         for i, (lo, hi) in enumerate(self.state_bounds):
-            for k in range(N + 1):
+            # X[:, 0] is a measured parameter-equivalent state. Do not make the
+            # NLP infeasible merely because the real plant has already crossed
+            # a nominal bound; softly drive predicted future states back instead.
+            for k in range(1, N + 1):
+                state_slack = slack[0, k - 1]
                 if lo is not None and hi is not None:
-                    opti.subject_to(opti.bounded(lo, X[i, k], hi))
+                    opti.subject_to(X[i, k] >= lo - state_slack)
+                    opti.subject_to(X[i, k] <= hi + state_slack)
                 elif lo is not None:
-                    opti.subject_to(X[i, k] >= lo)
+                    opti.subject_to(X[i, k] >= lo - state_slack)
                 elif hi is not None:
-                    opti.subject_to(X[i, k] <= hi)
+                    opti.subject_to(X[i, k] <= hi + state_slack)
         for k in range(N):
             opti.subject_to(X[:, k + 1] == self._rk4(X[:, k], U[:, k], d))
             opti.subject_to(opti.bounded(0.0, U[:, k], 1.0))            # actuators in [0,1]
@@ -245,14 +256,18 @@ class NMPCOracle:
             if self.t_safe is not None:
                 for temp in temps:                                     # soft safety cap on temperature outputs
                     opti.subject_to(temp <= self.t_safe + slack[0, k])
-            J += self._stage_cost(X[:, k], U[:, k], sp, d) + self.r_move * ca.sumsqr(U[:, k] - up)
+            J += (
+                self._stage_cost(X[:, k], U[:, k], sp, d)
+                + self.r_move * ca.sumsqr(U[:, k] - up)
+                + self.steady_input_weight * ca.sumsqr(U[:, k] - u_target)
+            )
         if self.mode == "tracking":
-            J += self._tracking_state_cost(X[:, N], sp)
+            J += self.terminal_weight * self._tracking_state_cost(X[:, N], sp)
         J += 1e4 * ca.sumsqr(slack)                                    # heavily discourage cap violation
         opti.minimize(J)
         opti.solver("ipopt", self._solver_options())
         self.opti, self.X, self.U, self.slack = opti, X, U, slack
-        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "ysp": ysp}
+        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "u_target": u_target, "ysp": ysp}
 
     def _build_single_shooting(self):
         N, nx, nu = self.N, self.nx, self.nu
@@ -261,6 +276,7 @@ class NMPCOracle:
         x0 = opti.parameter(nx)
         d = opti.parameter(self.nd)
         u_prev = opti.parameter(nu)
+        u_target = opti.parameter(nu)
         ysp = opti.parameter(self.ny)
         sp = {"y_sp": [ysp[i] for i in range(self.ny)]}
         slack = opti.variable(1, N)
@@ -271,20 +287,24 @@ class NMPCOracle:
             up = u_prev if k == 0 else U[:, k - 1]
             opti.subject_to(opti.bounded(0.0, U[:, k], 1.0))
             opti.subject_to(opti.bounded(-self.du_max, U[:, k] - up, self.du_max))
-            J += self._stage_cost(x, U[:, k], sp, d) + self.r_move * ca.sumsqr(U[:, k] - up)
+            J += (
+                self._stage_cost(x, U[:, k], sp, d)
+                + self.r_move * ca.sumsqr(U[:, k] - up)
+                + self.steady_input_weight * ca.sumsqr(U[:, k] - u_target)
+            )
             x = self._rk4(x, U[:, k], d)
-            self._constrain_state(opti, x)
+            self._constrain_state(opti, x, slack=slack[0, k])
             temps = self.model.display_outputs(x, backend="casadi", ca=ca).get("temps", [])
             if self.t_safe is not None:
                 for temp in temps:
                     opti.subject_to(temp <= self.t_safe + slack[0, k])
         if self.mode == "tracking":
-            J += self._tracking_state_cost(x, sp)
+            J += self.terminal_weight * self._tracking_state_cost(x, sp)
         J += 1e4 * ca.sumsqr(slack)
         opti.minimize(J)
         opti.solver("ipopt", self._solver_options())
         self.opti, self.X, self.U, self.slack = opti, None, U, slack
-        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "ysp": ysp}
+        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "u_target": u_target, "ysp": ysp}
 
     def _numeric_rk4(self, x, u, disturbances):
         x = np.asarray(x, dtype=float)
@@ -315,6 +335,20 @@ class NMPCOracle:
         self._warm = None
         self.last_error = None
 
+    def _fallback_action(self):
+        """Move safely toward the model's nominal equilibrium action."""
+
+        delta = np.clip(self.u_init - self.u_prev, -self.du_max, self.du_max)
+        return np.clip(self.u_prev + delta, 0.0, 1.0)
+
+    def _steady_action_target(self, target):
+        resolver = getattr(self.model, "tracking_steady_state_action", None)
+        values = resolver(target) if self.mode == "tracking" and callable(resolver) else self.u_init
+        action = np.asarray(values, dtype=float).reshape(-1)
+        if len(action) != self.nu or not np.all(np.isfinite(action)):
+            return self.u_init.copy()
+        return np.clip(action, 0.0, 1.0)
+
     def _disturbance_vector(self, t_cold, t_amb, disturbances=None):
         values = dict(disturbances or {})
         values.update({"t_cold": t_cold, "t_amb": t_amb})
@@ -328,6 +362,7 @@ class NMPCOracle:
         o.set_value(self.par["u_prev"], self.u_prev)
         target = self.model.setpoint_vector(y_sp)
         o.set_value(self.par["ysp"], np.asarray(target, float))
+        o.set_value(self.par["u_target"], self._steady_action_target(target))
         try:
             dvec = self._disturbance_vector(t_cold, t_amb, disturbances)
             if (not self.warm_start) or self._warm is None:
@@ -355,7 +390,7 @@ class NMPCOracle:
             self.last_error = None
         except Exception as e:
             self.last_error = e
-            u = self.u_prev                                # keep last on solver failure
+            u = self._fallback_action()
         self.u_prev = np.asarray(u, float).reshape(-1)
         return list(self.u_prev)
 
@@ -388,7 +423,10 @@ class OracleAgent:
                 "solve_every": self.solve_every,
                 "horizon": self.orc.N, "control_dt": self.orc.dt, "mode": self.orc.mode,
                 "du_max": self.orc.du_max, "q_y": list(self.orc.q_y),
-                "r_move": self.orc.r_move, "nsub_max": self.orc.nsub_max,
+                "r_move": self.orc.r_move,
+                "steady_input_weight": self.orc.steady_input_weight,
+                "terminal_weight": self.orc.terminal_weight,
+                "nsub_max": self.orc.nsub_max,
                 "ipopt_max_iter": self.orc.ipopt_max_iter,
                 "warm_start": self.orc.warm_start,
                 "transcription": self.orc.transcription,

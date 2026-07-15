@@ -8,10 +8,59 @@ import unittest
 import numpy as np
 
 from aiogym.env import AIOGymNativeEnv
-from aiogym.models import SCENARIOS
+from aiogym.models import SCENARIOS, make_model
 from aiogym.evaluation.objectives import stage_reward
 
 class StageRewardContractTests(unittest.TestCase):
+    def test_economic_terms_integrate_time_and_use_reported_action_energy(self):
+        cstr = make_model("cstr")
+        cstr_state = [0.5, 60.0]
+        cstr_action = [1.0, 0.0]
+        cstr_context = {
+            "setpoint": cstr.default_setpoint_vector(),
+            "disturbance": cstr.runtime_env(cstr.disturbance_defaults()),
+            "previous_action": cstr_action,
+            "reward_mode": "economic",
+            "reward_scale": 1.0,
+            "tracking_q_y": [1.0],
+            "tracking_r_move": 0.0,
+            "terminate_on_runaway": False,
+        }
+        half_second = stage_reward(
+            cstr, cstr_state, cstr_action, cstr_state, dt=0.5, **cstr_context
+        )
+        one_second = stage_reward(
+            cstr, cstr_state, cstr_action, cstr_state, dt=1.0, **cstr_context
+        )
+        self.assertAlmostEqual(one_second.info["prod"], 2.0 * half_second.info["prod"])
+        self.assertAlmostEqual(one_second.info["profit"], 2.0 * half_second.info["profit"])
+        self.assertAlmostEqual(one_second.reward, one_second.info["profit"])
+        # Feed-pump power is part of action_energy_kw and must now also affect profit.
+        expected_rate = 1575.0 * 0.01 - 0.7 * 1.2
+        self.assertAlmostEqual(one_second.info["energy_kw"], 1.2)
+        self.assertAlmostEqual(one_second.info["profit"], expected_rate)
+
+        cascade = make_model("cascade")
+        cascade_state = [0.45, 39.0, 0.45, 53.0, 0.45, 66.0]
+        pump_only = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        result = stage_reward(
+            cascade,
+            cascade_state,
+            pump_only,
+            cascade_state,
+            setpoint=cascade.default_setpoint_vector(),
+            disturbance=cascade.runtime_env(cascade.disturbance_defaults()),
+            previous_action=pump_only,
+            reward_mode="economic",
+            reward_scale=1.0,
+            tracking_q_y=[1.0] * 6,
+            tracking_r_move=0.0,
+            terminate_on_runaway=False,
+            dt=2.0,
+        )
+        self.assertAlmostEqual(result.info["energy_kw"], 1.5)
+        self.assertAlmostEqual(result.info["profit"], -0.7 * 1.5 * 2.0)
+
     def test_stage_reward_matches_environment_step(self):
         for scenario in SCENARIOS:
             for reward_mode in ("tracking", "kpi", "economic"):
@@ -49,6 +98,7 @@ class StageRewardContractTests(unittest.TestCase):
                         tracking_q_y=env.tracking_q_y,
                         tracking_r_move=env.tracking_r_move,
                         terminate_on_runaway=env.terminate_on_runaway,
+                        dt=env.control_dt,
                         economic_config=env._econ,
                     )
 

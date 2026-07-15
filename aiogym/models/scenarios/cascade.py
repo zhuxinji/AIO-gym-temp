@@ -115,13 +115,9 @@ class CascadeModel(ProcessModelContract):
     energy_scored = True
 
     def energy_kw(self, u, backend="numeric", ca=None):
-        return sum(u[4 + i] * self.p["heater_max"] for i in range(3)) / 1000.0
-
-    def action_energy_kw(self, act, x=None, env=None):
-        u = self.action_vector(act)
-        input_energy_kw = u[0] * self.p["pump_power_max"] / 1000.0
-        thermal_energy_kw = sum(u[4 + i] * self.p["heater_max"] for i in range(3)) / 1000.0
-        return input_energy_kw + thermal_energy_kw
+        input_energy = u[0] * self.p["pump_power_max"]
+        thermal_energy = sum(u[4 + i] * self.p["heater_max"] for i in range(3))
+        return (input_energy + thermal_energy) / 1000.0
 
     def ideal_energy_kw(self, x, y_sp, env, act):
         p = self.p

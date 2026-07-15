@@ -28,6 +28,10 @@ def run_evaluation_case(
     if not seed_list:
         raise ValueError("benchmark case must include at least one seed")
     config = dict(controller_config or {})
+    if controller == "oracle":
+        parameters = dict(config.get("parameters") or {})
+        if "control_dt" not in config and "control_dt" not in parameters:
+            config["control_dt"] = float(protocol.control_dt)
     controller_model = apply_model_params(make_model(scenario), protocol.model_params)
     agent = make_controller(
         controller,

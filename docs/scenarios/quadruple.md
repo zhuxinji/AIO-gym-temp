@@ -7,28 +7,28 @@ heater extension has been removed.
 
 ## Equations
 
-With levels (h_i), tank areas (A_i), outlet areas (a_i), pump gains (k_i),
-physical pump voltages (v_i), valve splits \(\gamma_i\), and gravity (g):
+With levels $h_i$, tank areas $A_i$, outlet areas $a_i$, pump gains $k_i$,
+physical pump voltages $v_i$, valve splits $\gamma_i$, and gravity $g$:
 
-\[
+$$
 \dot h_1 = \frac{-a_1\sqrt{2gh_1}+a_3\sqrt{2gh_3}+\gamma_1k_1v_1}{A_1}
-\]
+$$
 
-\[
+$$
 \dot h_2 = \frac{-a_2\sqrt{2gh_2}+a_4\sqrt{2gh_4}+\gamma_2k_2v_2}{A_2}
-\]
+$$
 
-\[
+$$
 \dot h_3 = \frac{-a_3\sqrt{2gh_3}+(1-\gamma_2)k_2v_2}{A_3},\qquad
 \dot h_4 = \frac{-a_4\sqrt{2gh_4}+(1-\gamma_1)k_1v_1}{A_4}.
-\]
+$$
 
 The implementation keeps the reference units: cm, cm², cm³/s, V, and s.
-AIO-Gym actions (u_i\in[0,1]) map to voltage through (v_i=10u_i).
+AIO-Gym actions $u_i\in[0,1]$ map to voltage through $v_i=10u_i$.
 
-The minimum-phase condition is \(\gamma_1+\gamma_2>1\). The P− task uses
-\((\gamma_1,\gamma_2)=(0.70,0.60)\), while the P+ task uses
-\((0.43,0.34)\) and has a right-half-plane transmission zero. The latter
+The minimum-phase condition is $\gamma_1+\gamma_2>1$. The P− task uses
+$(\gamma_1,\gamma_2)=(0.70,0.60)$, while the P+ task uses
+$(0.43,0.34)$ and has a right-half-plane transmission zero. The latter
 creates inverse-response limitations and a much slower achievable closed-loop
 response; it is not merely a different controller tuning.
 
@@ -36,17 +36,17 @@ response; it is not merely a different controller tuning.
 
 | Quantity | Values | Unit |
 |---|---:|---|
-| (A_1,A_2,A_3,A_4) | 28, 32, 28, 32 | cm² |
-| (a_1,a_2,a_3,a_4) | 0.071, 0.057, 0.071, 0.057 | cm² |
-| (k_1,k_2) | 3.33, 3.35 | cm³/(V·s) |
-| \(\gamma_1,\gamma_2\) | 0.70, 0.60 | – |
-| (g) | 981 | cm/s² |
+| $A_1,A_2,A_3,A_4$ | 28, 32, 28, 32 | cm² |
+| $a_1,a_2,a_3,a_4$ | 0.071, 0.057, 0.071, 0.057 | cm² |
+| $k_1,k_2$ | 3.33, 3.35 | cm³/(V·s) |
+| $\gamma_1,\gamma_2$ | 0.70, 0.60 | – |
+| $g$ | 981 | cm/s² |
 
 The paper reports the P− operating point as
-\((12.4,12.7,1.8,1.4)\) cm at \((3,3)\) V. Because the reported parameters and
+$(12.4,12.7,1.8,1.4)$ cm at $(3,3)$ V. Because the reported parameters and
 levels are rounded experimental values, they do not form an exact equilibrium of
 the nonlinear equations. The simulator starts from the model-consistent
-equilibrium \((12.26297,12.78316,1.63394,1.40904)\) cm while retaining the
+equilibrium $(12.26297,12.78316,1.63394,1.40904)$ cm while retaining the
 reported point in the parameter profile.
 
 Primary reference: K. H. Johansson, “The Quadruple-Tank Process: A
@@ -72,8 +72,13 @@ The task uses 1 s control intervals for 600 steps. It starts at the exact 3 V
 equilibrium, applies an opposed 1 cm setpoint move at step 120, and reverses to
 an asymmetric target at step 360.
 
-The bundled PI controller uses Johansson's minimum-phase tuning, converted from
-physical sensor and voltage units to AIO-Gym's cm outputs and normalized actions.
+The paper-reference PI profile uses Johansson's minimum-phase tuning, converted
+from physical sensor and voltage units to AIO-Gym's cm outputs and normalized
+actions. The general `quadruple` benchmark uses a separate family-tuned PID
+profile, so improving the baseline does not alter the paper reproduction.
+The successive-linearization MPC uses a short task-validated prediction horizon
+for the minimum-phase response; the longer horizon previously used here made its
+single-move approximation unnecessarily sluggish.
 
 Run the complete PID/MPC/NMPC comparison with:
 
@@ -86,8 +91,12 @@ aiogym-suite-benchmark --suite quadruple-classic --episodes 1
 `nonminimum-phase-classic` changes the valve splits, pump gains, nominal pump
 voltages, exact equilibrium, setpoint experiment, and horizon as one coherent
 task. It runs for 1800 s because the P+ response reported by Johansson is much
-slower. The bundled PID profile uses the paper's P+ decentralized PI settings;
-the MPC profile uses a longer prediction horizon.
+slower. The paper-reference PID profile uses the paper's P+ decentralized PI
+settings; the benchmark-tuned PID uses cross pairing for this nonminimum-phase
+plant because it performed substantially better on both P+ benchmark tasks. The
+MPC profile combines a longer prediction horizon with a model-derived
+steady-state pump target so the initial inverse response does not send the pump
+allocation in the wrong long-term direction.
 
 ```python
 env = aiogym.make_env(
@@ -108,6 +117,35 @@ The comparison suite produces separate leaderboards for the two tasks. A lower
 tracking cost in P− and a lower tracking cost in P+ are two distinct ranking
 claims; the tool does not rank them against each other.
 
+Run all six formal quadruple-tank tasks, excluding the compatibility-only
+`legacy-default`, with:
+
+```bash
+aiogym-suite-benchmark --suite quadruple --episodes 1
+```
+
+The `quadruple` suite runs PID, MPC, and NMPC Oracle on every formal task.
+Rankings remain separate for each task and objective. Every tracking case also records the first
+evaluation seed as a rollout and writes one state/setpoint/actuator control chart
+per task under the run's `figures/tracking_control_*.svg` files. The tracking
+comparison table includes separate Scenario and Task columns.
+
+The NMPC Oracle uses task-family profiles rather than one generic tuning:
+minimum phase, nonminimum phase, zero-boundary stress, and disturbance rejection
+have separate prediction horizons, move penalties, and solve frequencies. These
+profiles are benchmark baselines tuned against the fixed suite protocol; they are
+not the paper-reference PI parameters.
+
+PID follows the same separation: the main suite uses four fixed benchmark
+profiles (minimum phase, nonminimum phase, zero boundary, and disturbance
+rejection), while `quadruple-paper-reference` retains the two converted paper PI
+profiles. The reproducible search entrypoint is:
+
+```bash
+python -m aiogym.controllers.tuning.tune_quadruple_pid \
+  --family minimum-phase --out /tmp/quadruple_pid_minimum-phase.json
+```
+
 ## Paper-reference steps
 
 The `classic` tasks above are useful AIO-Gym benchmarks, but their setpoint
@@ -125,6 +163,11 @@ reported experimental operating points remain in task metadata.
 ```bash
 aiogym-suite-benchmark --suite quadruple-paper-reference --episodes 1
 ```
+
+This suite contains only the two paper-reference tasks and the paper's
+decentralized PI controller. Its control charts show the two controlled lower
+tank levels and two pump voltages, matching the four simulated signals in each
+paper figure rather than adding the two unmeasured upper-tank states.
 
 ## Zero-boundary stress
 
@@ -155,8 +198,8 @@ The scenario-specific test suite verifies:
 
 - exact reference parameters, both operating points, and phase classification;
 - left- versus right-half-plane transmission-zero classification;
-- nonlinear equilibrium residual below (10^{-12});
-- total four-tank volumetric balance below (10^{-12}) cm³/s;
+- nonlinear equilibrium residual below $10^{-12}$;
+- total four-tank volumetric balance below $10^{-12}$ cm³/s;
 - correct diagonal pump routing;
 - RK4 0.1 s versus 0.05 s transient agreement;
 - deterministic task scheduling and task-specific PI bias smoke tests;

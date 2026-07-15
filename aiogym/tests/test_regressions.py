@@ -423,6 +423,7 @@ def test_predictive_controller_configs_fail_at_construction():
         ({"Ts": 0}, "Ts"),
         ({"move_supp": -1}, "move_supp"),
         ({"du_max": float("nan")}, "du_max"),
+        ({"steady_input_weight": -1.0}, "steady_input_weight"),
         ({"cv_scale": [1.0, 2.0, 3.0]}, "cv_scale"),
         ({"cv_scale": [0.0]}, "cv_scale"),
     )
@@ -440,6 +441,8 @@ def test_predictive_controller_configs_fail_at_construction():
         ({"mode": "trackingg"}, "mode"),
         ({"nsub_max": 0}, "nsub_max"),
         ({"ipopt_tol": float("inf")}, "ipopt_tol"),
+        ({"steady_input_weight": -1.0}, "steady_input_weight"),
+        ({"terminal_weight": -1.0}, "terminal_weight"),
         ({"q_y": [1.0, 2.0]}, "q_y"),
         ({"transcription": "collocation"}, "transcription"),
         ({"solve_every": 0}, "solve_every"),

@@ -15,7 +15,8 @@ class MPCAgent:
     action_mode = "actuator"
     control_structure = "fixed_sp_mpc"
 
-    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15, cv_scale=None):
+    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15,
+                 cv_scale=None, steady_input_weight=0.0):
         self.m = model
         self.nu = model.action_dim()
         self.nx = len(model.initial_state())
@@ -24,6 +25,9 @@ class MPCAgent:
         self.P = positive_int("P", P)
         self.move_supp = nonnegative_float("move_supp", move_supp)
         self.du_max = nonnegative_float("du_max", du_max)
+        self.steady_input_weight = nonnegative_float(
+            "steady_input_weight", steady_input_weight
+        )
         self.cv_scale = self._resolve_cv_scale(cv_scale)
         self.reset()
 
@@ -48,6 +52,7 @@ class MPCAgent:
                 "action_mode": self.action_mode, "control_structure": self.control_structure,
                 "Ts": self.Ts, "horizon": self.P,
                 "move_supp": self.move_supp, "du_max": self.du_max,
+                "steady_input_weight": self.steady_input_weight,
                 "cv_scale": self.cv_scale}
 
     def reset(self, seed=None):
@@ -108,6 +113,11 @@ class MPCAgent:
             xp = x0.copy(); xp[j] += eps
             C[:, j] = (self._cv(xp) - cv0) / eps
         target = np.asarray(m.setpoint_vector(sp.get("y_sp")), dtype=np.float64)
+        steady_resolver = getattr(m, "tracking_steady_state_action", None)
+        if callable(steady_resolver):
+            steady_input = np.asarray(steady_resolver(target), dtype=np.float64)
+        else:
+            steady_input = u0
         Wcv = self._wcv()
         c0 = (x0 + f0 * Ts) - Ad @ x0 - Bd @ u0
         xf = x0.copy()
@@ -123,6 +133,9 @@ class MPCAgent:
             H += G.T @ WG
             g += G.T @ (Wcv * e)
         H += self.move_supp * np.eye(nu)
+        if self.steady_input_weight:
+            H += self.steady_input_weight * np.eye(nu)
+            g += self.steady_input_weight * (u0 - steady_input)
         du = np.linalg.solve(H, -g)
         du = np.clip(du, -self.du_max, self.du_max)
         self.u = np.clip(u0 + du, 0.0, 1.0)

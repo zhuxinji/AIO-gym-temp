@@ -14,6 +14,7 @@ from aiogym.evaluation.plots import (
     plot_leaderboard,
     plot_rollouts,
     plot_summary,
+    plot_tracking_control,
     plot_tracking_comparison_table,
 )
 from aiogym.models import collect_model_cards
@@ -72,8 +73,12 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
                     summary_path = figures_dir / f"summary_{slug}.svg"
                     plot_summary(scenario_rows, str(summary_path), f"{title} {objective} {benchmark_case}")
                     summary_figures[objective][benchmark_case] = str(summary_path)
+                    case_title = benchmark_case
+                    repeated_scenario = f"{title} / "
+                    if case_title.startswith(repeated_scenario):
+                        case_title = case_title[len(repeated_scenario):]
                     leaderboard_sections.append({
-                        "title": f"{objective} / {benchmark_case}",
+                        "title": f"{case_title} / {objective}",
                         "metric": scenario_rows[0].get("metric") if scenario_rows else None,
                         "board": _leaderboard(scenario_rows),
                     })
@@ -83,8 +88,18 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
             figures["leaderboard_by_scenario"] = str(leaderboard_path)
             artifact_figures["summary_figures"] = summary_figures
             artifact_figures["leaderboard_figure"] = str(leaderboard_path)
-    rollouts = payload.get("rollouts") or []
-    if rollouts:
+    rollouts = list(payload.get("rollouts") or [])
+    tracking_rollout_groups = _tracking_rollout_groups(rollouts)
+    if tracking_rollout_groups:
+        control_figures = {}
+        for (scenario, task), case_rollouts in tracking_rollout_groups.items():
+            label = scenario if task == "default" else f"{scenario} / {task}"
+            control_path = figures_dir / f"tracking_control_{_slug(label)}.svg"
+            plot_tracking_control(case_rollouts, str(control_path), scenario, task)
+            control_figures[label] = str(control_path)
+        figures["tracking_control_by_scenario"] = control_figures
+        artifact_figures["tracking_control_figures"] = control_figures
+    elif rollouts:
         rollout_path = figures_dir / f"{title}_rollout.svg"
         plot_rollouts(rollouts, str(rollout_path), title)
         figures["rollout"] = str(rollout_path)
@@ -100,7 +115,10 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
         figures["learning_curve"] = str(curve_path)
         artifact_figures["learning_curve_figure"] = str(curve_path)
     payload.setdefault("artifacts", {})
-    for key in ("summary_figure", "leaderboard_figure", "summary_figures", "leaderboard_figures"):
+    for key in (
+        "summary_figure", "leaderboard_figure", "summary_figures", "leaderboard_figures",
+        "tracking_control_figures",
+    ):
         payload["artifacts"].pop(key, None)
     payload["artifacts"].update(artifact_figures)
     _write_json(benchmark_path, payload)
@@ -196,7 +214,10 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
 
 
 def _clear_comparison_figures(figures_dir: Path) -> None:
-    for pattern in ("summary*.svg", "leaderboard*.svg", "tracking_comparison.svg"):
+    for pattern in (
+        "summary*.svg", "leaderboard*.svg", "tracking_comparison.svg",
+        "tracking_control_*.svg",
+    ):
         for path in figures_dir.glob(pattern):
             path.unlink()
 
@@ -337,6 +358,19 @@ def _rows_by_benchmark_case(rows: Sequence[Mapping[str, Any]]) -> dict[str, list
     for row in rows:
         label = _benchmark_case_label(row)
         groups.setdefault(label, []).append(row)
+    return groups
+
+
+def _tracking_rollout_groups(rollouts: Sequence[Mapping[str, Any]]):
+    groups: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for rollout in rollouts:
+        if rollout.get("objective") != "tracking" or not rollout.get("scenario"):
+            continue
+        key = (
+            str(rollout["scenario"]),
+            str(rollout.get("task") or "default"),
+        )
+        groups.setdefault(key, []).append(rollout)
     return groups
 
 
