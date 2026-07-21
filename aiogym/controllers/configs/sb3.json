@@ -7,6 +7,7 @@
   },
   "scenarios": {
     "cascade": {},
+    "cascade_recirculating": {},
     "quadruple": {},
     "cstr": {},
     "hvac": {},

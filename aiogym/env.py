@@ -12,13 +12,16 @@ reward_mode:
              tracking + excess-energy + safety KPI
              (evaluation.metrics.kpi), so the RL optimizes exactly what it is judged on.
   "economic" CSTR production-maximisation (legacy economic demo).
-  "tracking" PC-Gym-style setpoint tracking: reward = -(normalized squared
-             SP error + input move penalty).
+  "tracking" setpoint tracking: reward = -(normalized squared SP error
+             + input move penalty + nominal steady-input deviation penalty).
 
-dynamic=True injects within-episode disturbances (setpoint steps, cold-inlet
-steps, ambient drift, demand surges) on top of domain-randomised start points.
-The policy OBSERVES the changed conditions (t_cold / t_amb / setpoints are all in
-obs), so this trains the online adaptation a fixed-tuning MPC can't match.
+``dynamic`` controls generic automatically generated within-episode events; it
+does not enable or disable the process model's physical dynamics. The model is
+integrated on every step for both values. ``dynamic=True`` can inject setpoint
+steps, cold-inlet steps, ambient drift, or demand surges on top of domain-
+randomised start points. Named tasks normally set it to ``False`` and declare
+their own deterministic event schedules. The policy observes changed conditions
+(t_cold / t_amb / setpoints are all in obs).
 """
 from __future__ import annotations
 import copy
@@ -73,26 +76,43 @@ class AIOGymNativeEnv(gym.Env):
                  reward_mode="kpi", dynamic=None, randomize=None, randomize_setpoints=None,
                  randomize_plant=None, plant_drift=None, integral_obs=None, action_mode=None,
                  noise=None, noise_pct=None, custom_stage_reward=None,
-                 custom_model=None, model_params=None,
+                 model_params=None,
                  terminate_on_runaway=None, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
-                 tracking_q_y=1.0, tracking_r_move=0.05,
+                 tracking_q_y=1.0, tracking_r_move=1.0, tracking_r_steady=1.0,
                  crystal_ln_sp=None, crystal_cv_sp=None, crystal_random_targets=False,
                  crystal_ln_range=(10.0, 11.5), crystal_cv_range=(0.75, 0.95)):
         super().__init__()
-        base_model = make_model(custom_model if custom_model is not None else scenario)
+        base_model = make_model(scenario)
         self.scenario = base_model.scenario
-        self.task_profile = None
-        task_defaults = {}
-        if task is not None:
-            from .evaluation.task_profiles import load_task_profile, task_environment
+        from .evaluation.task_profiles import resolve_environment_options
 
-            self.task_profile = load_task_profile(task, scenario=self.scenario)
-            task_defaults = task_environment(self.task_profile)
-        resolved_model_params = dict(
-            (self.task_profile or {}).get("model_params", {})
+        self.task_profile, environment_options = resolve_environment_options(
+            scenario=self.scenario,
+            task=task,
+            explicit={
+                "control_dt": control_dt,
+                "episode_steps": episode_steps,
+                "action_mode": action_mode,
+                "dynamic": dynamic,
+                "randomize": randomize,
+                "randomize_setpoints": randomize_setpoints,
+                "randomize_plant": randomize_plant,
+                "plant_drift": plant_drift,
+                "integral_obs": integral_obs,
+                "terminate_on_runaway": terminate_on_runaway,
+                "noise": noise,
+                "noise_pct": noise_pct,
+                "model_params": model_params,
+            },
+            defaults=_DIRECT_ENV_DEFAULTS,
+            default_control_dt=0.5,
+            default_episode_steps=600,
         )
-        resolved_model_params.update(dict(model_params or {}))
-        self.model = apply_model_params(base_model, resolved_model_params)
+        self.model = apply_model_params(base_model, environment_options["model_params"])
+        if self.task_profile is not None:
+            from .evaluation.task_profiles import configure_model_for_task
+
+            configure_model_for_task(self.model, self.task_profile)
         self._task_initial_state = copy.deepcopy(
             (self.task_profile or {}).get("initialization", {}).get("state")
         )
@@ -108,57 +128,27 @@ class AIOGymNativeEnv(gym.Env):
                 "name": str(event["name"]),
                 "value": copy.deepcopy(event["value"]),
             })
-        resolved_control_dt = (
-            control_dt if control_dt is not None else task_defaults.get("control_dt", 0.5)
-        )
-        resolved_episode_steps = (
-            episode_steps if episode_steps is not None else task_defaults.get("episode_steps", 600)
-        )
-        resolved_conditions = {}
-        for name, explicit in {
-            "dynamic": dynamic,
-            "randomize": randomize,
-            "randomize_setpoints": randomize_setpoints,
-            "randomize_plant": randomize_plant,
-            "plant_drift": plant_drift,
-            "integral_obs": integral_obs,
-            "action_mode": action_mode,
-            "noise": noise,
-            "noise_pct": noise_pct,
-            "terminate_on_runaway": terminate_on_runaway,
-        }.items():
-            resolved_conditions[name] = (
-                explicit
-                if explicit is not None
-                else task_defaults.get(name, _DIRECT_ENV_DEFAULTS[name])
-            )
-        dynamic = bool(resolved_conditions["dynamic"])
-        randomize = bool(resolved_conditions["randomize"])
-        randomize_setpoints = bool(resolved_conditions["randomize_setpoints"])
-        randomize_plant = bool(resolved_conditions["randomize_plant"])
-        plant_drift = bool(resolved_conditions["plant_drift"])
-        integral_obs = bool(resolved_conditions["integral_obs"])
-        action_mode = resolved_conditions["action_mode"]
-        noise = bool(resolved_conditions["noise"])
-        noise_pct = resolved_conditions["noise_pct"]
-        terminate_on_runaway = bool(resolved_conditions["terminate_on_runaway"])
-        self.control_dt = float(resolved_control_dt)
-        self.episode_steps = int(resolved_episode_steps)
-        if not np.isfinite(self.control_dt) or self.control_dt <= 0:
-            raise ValueError("control_dt must be finite and positive")
-        if self.episode_steps <= 0:
-            raise ValueError("episode_steps must be positive")
+        dynamic = environment_options["dynamic"]
+        randomize = environment_options["randomize"]
+        randomize_setpoints = environment_options["randomize_setpoints"]
+        randomize_plant = environment_options["randomize_plant"]
+        plant_drift = environment_options["plant_drift"]
+        integral_obs = environment_options["integral_obs"]
+        action_mode = environment_options["action_mode"]
+        noise = environment_options["noise"]
+        terminate_on_runaway = environment_options["terminate_on_runaway"]
+        self.control_dt = environment_options["control_dt"]
+        self.episode_steps = environment_options["episode_steps"]
         if reward_mode not in {"kpi", "economic", "tracking"}:
             raise ValueError("reward_mode must be one of: economic, kpi, tracking")
         if action_mode not in {"actuator", "setpoint"}:
             raise ValueError("action_mode must be one of: actuator, setpoint")
-        self.noise_pct = float(noise_pct)
-        if not np.isfinite(self.noise_pct) or self.noise_pct < 0:
-            raise ValueError("noise_pct must be finite and non-negative")
+        self.noise_pct = environment_options["noise_pct"]
         self.reward_mode = reward_mode
         self.reward_scale = reward_scale          # keep Q-magnitudes sane -> stable critic
         self.tracking_q_y = self._resolve_tracking_q_y(tracking_q_y)
         self.tracking_r_move = self._nonnegative("tracking_r_move", tracking_r_move)
+        self.tracking_r_steady = self._nonnegative("tracking_r_steady", tracking_r_steady)
         self.dynamic = dynamic
         self.randomize_plant = randomize_plant    # per-episode operating-regime variation
         self.plant_drift = plant_drift            # slow within-episode parameter drift
@@ -482,6 +472,7 @@ class AIOGymNativeEnv(gym.Env):
             reward_scale=self.reward_scale,
             tracking_q_y=self.tracking_q_y,
             tracking_r_move=self.tracking_r_move,
+            tracking_r_steady=self.tracking_r_steady,
             terminate_on_runaway=self.terminate_on_runaway,
             dt=self.control_dt,
             economic_config=self._econ,
@@ -600,8 +591,6 @@ class AIOGymNativeEnv(gym.Env):
         act = self._supervise(action) if self.pid is not None else self._split(action)
         state = list(self.integ.x)
         self.last_act = act
-        if self._k in self._task_setpoint_events:
-            self.y_sp = list(self._task_setpoint_events[self._k])
         for (t, event) in self._dist_events:
             if t == self._k:
                 self._apply_disturbance(event)
@@ -613,6 +602,12 @@ class AIOGymNativeEnv(gym.Env):
         self._k += 1
         reward, terminated, info = self._reward_done(state, act)
         self.previous_act = copy.deepcopy(act)
+        # Stage the next step's scheduled reference before returning its
+        # observation. The controller therefore sees an event at step k before
+        # selecting u_k, while the transition just completed is still scored
+        # against the reference that was active when its action was selected.
+        if self._k in self._task_setpoint_events:
+            self.y_sp = list(self._task_setpoint_events[self._k])
         truncated = self._k >= self.episode_steps
         return self._obs(), reward, terminated, truncated, info
 

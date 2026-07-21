@@ -1,7 +1,7 @@
 # Physical-model infrastructure
 
-This layer prepares AIO-Gym for physically grounded scenario replacements
-without silently changing the current seven benchmark models.
+This layer prepares AIO-Gym for physically grounded scenario additions and
+replacements without silently changing existing benchmark models.
 
 ## Design boundary
 
@@ -26,8 +26,12 @@ numeric and CasADi execution, or override `dynamics()` for a numeric-only model.
 Profiles that have not been migrated are marked `legacy-unverified`. This status
 is an explicit warning that their numerical values have not yet been accepted as
 reference-quality physical parameters. `quadruple` is the first migrated model
-and is marked `reference-parameterized`. The bundled `legacy-default` tasks are
-compatibility tasks, not new benchmark claims.
+and is marked `reference-parameterized`.
+
+`cascade_recirculating` demonstrates the separate-scenario path for a partially
+documented physical proposal: source-supported topology is retained, every
+unknown numerical parameter receives an explicit provisional status, and the
+original open `cascade` benchmark remains unchanged.
 
 ## Parameter profiles
 
@@ -74,17 +78,22 @@ status, and a SHA-256 task-profile hash. Leaderboard ranks restart for every
 not mixed.
 
 ```python
-env = aiogym.make_env("cstr", task="legacy-default")
+env = aiogym.make_env("quadruple", task="minimum-phase-classic")
 protocol = aiogym.BenchmarkProtocol.tracking(
-    "cstr",
-    task="legacy-default",
+    "quadruple",
+    task="minimum-phase-classic",
 )
 ```
 
-Priority is explicit argument, then task profile, then the historical default.
+Objective priority is runtime/API override, case config, suite config, then
+`task.default_objective`. If none is available, protocol construction fails with
+a clear error. Resolved protocol metadata records
+`objective_source`, reward mode, primary metric, and ranking direction.
+
 With no task, direct environments remain at 0.5 s and 600 steps; benchmark
-protocols remain at 0.5 s and 400 steps. Those no-task settings are a backward
-compatibility path; new reproducible benchmarks should name a task.
+protocols remain at 0.5 s and 400 steps. No-task benchmark conditions are now
+neutral and deterministic rather than changing with the selected objective.
+Named suites declare any noise, randomization, or plant drift explicitly.
 
 Suites can retain the legacy Cartesian matrix or declare task-aware cases:
 
@@ -97,9 +106,16 @@ Suites can retain the legacy Cartesian matrix or declare task-aware cases:
       "objective": "tracking",
       "controllers": ["pid", "mpc"]
     }
-  ]
 }
 ```
+
+Internally, each expanded suite entry becomes a `BenchmarkCase` containing an
+`EnvironmentSpec`, an `ObjectiveSpec`, controller configuration, and seeds.
+Environment construction is injectable, so the runner no longer has to create
+an `AIOGymNativeEnv` through the protocol itself.
+
+Results distinguish `execution_status` (`passed`, `degraded`, or `failed`) from
+`objective_status` (`met`, `not-met`, or `not-defined`).
 
 Controller tuning is selected independently with a controller `profile`. This
 keeps controller parameters out of the task definition while still allowing a

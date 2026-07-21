@@ -107,16 +107,16 @@ def _leaderboard_sections(leaderboard) -> list[str]:
 
 
 def _tracking_comparison_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    preferred = ["scenario", "task", "best_controller", "best_tracking_cost", "best_step_ms", "oracle_gap_vs_best"]
+    preferred = ["scenario", "task", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
     controller_columns = [
         key for key in rows[0].keys()
-        if key.endswith("_tracking_cost") or key.endswith("_step_ms")
+        if key.endswith("_tracking_error_cost") or key.endswith("_runtime_total_seconds")
     ] if rows else []
     columns = preferred + [key for key in controller_columns if key not in preferred]
     table_rows = []
     for row in rows:
         table_rows.append([
-            _fmt(row.get(column)) if not column.endswith(("_tracking_cost", "_step_ms")) and column != "oracle_gap_vs_best"
+            _fmt(row.get(column)) if not column.endswith(("_tracking_error_cost", "_runtime_total_seconds")) and column != "oracle_gap_vs_best"
             else _fmt_number(row.get(column))
             for column in columns
         ])
@@ -131,7 +131,7 @@ def _tracking_benchmark_case_count(rows: Sequence[Mapping[str, Any]]) -> int:
             str(row.get("task") or "default"),
         )
         for row in rows
-        if row.get("objective") == "tracking" and row.get("status") != "failed"
+        if row.get("objective") == "tracking" and row.get("execution_status") != "failed"
     })
 
 
@@ -146,15 +146,16 @@ def _leaderboard_section(leaderboard: Sequence[Mapping[str, Any]]) -> list[str]:
             _fmt(row.get("task", "default")),
             _fmt(row.get("objective")),
             _fmt(row.get("controller")),
-            _fmt(row.get("status")),
+            _fmt(row.get("execution_status")),
+            _fmt(row.get("objective_status", "not-defined")),
             _fmt(row.get("metric")),
             _fmt_number(row.get("metric_value")),
-            _fmt_number(row.get("kpi")),
+            _fmt_number(row.get("normalized_score")),
             _fmt_number(row.get("profit")),
             _fmt_number(row.get("constraint_violation_count")),
         ])
     return _markdown_table(
-        ["Rank", "Scenario", "Task", "Objective", "Controller", "Status", "Metric", "Value", "KPI", "Profit", "Violations"],
+        ["Rank", "Scenario", "Task", "Objective", "Controller", "Execution", "Objective Status", "Metric", "Value", "KPI", "Profit", "Violations"],
         rows,
     )
 
@@ -457,11 +458,11 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
     if all_summary_rows is not None:
         _add_count_check(checks, "all_summary_csv_count", len(all_summary_rows), expected_rows, paths["all_summary_csv"])
     if leaderboard is not None:
-        active_rows = sum(1 for row in rows if row.get("status") != "failed")
+        active_rows = sum(1 for row in rows if row.get("execution_status") != "failed")
         leaderboard_count = _leaderboard_count(leaderboard)
         _add_count_check(checks, "leaderboard_count", leaderboard_count, active_rows, paths["leaderboard"])
     if all_leaderboard is not None:
-        active_rows = sum(1 for row in rows if row.get("status") != "failed")
+        active_rows = sum(1 for row in rows if row.get("execution_status") != "failed")
         _add_count_check(checks, "all_leaderboard_count", len(all_leaderboard), active_rows, paths["all_leaderboard"])
     _check_objective_artifacts(root, checks, rows, summary_csvs, "summary_csv")
     _check_objective_artifacts(root, checks, rows, leaderboards, "leaderboard")
@@ -602,7 +603,7 @@ def _check_objective_artifacts(root: Path, checks: list[dict[str, Any]], rows: S
         elif name == "leaderboard":
             data = _safe_json_list(checks, f"{check_name}_json", path)
             if data is not None:
-                active_rows = sum(1 for row in objective_rows if row.get("status") != "failed")
+                active_rows = sum(1 for row in objective_rows if row.get("execution_status") != "failed")
                 _add_count_check(checks, f"{check_name}_count", len(data), active_rows, path)
 
 

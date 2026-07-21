@@ -55,17 +55,6 @@ def collect_offline(env, agent, episodes, seed=1000):
     return data
 
 
-def eval_policy(rlpd, env, episodes=12, seed=5000):
-    """Mean score over seeded episodes (higher = better).
-
-    Economic uses raw profit, track uses pure tracking return, and kpi uses the
-    composite KPI score.
-    """
-    metric = metric_for_reward_mode(env.reward_mode)
-    rep = evaluate_controller(rlpd, env, episodes=episodes, seed=seed)
-    return rep[metric], rep[f"{metric}_std"]
-
-
 def artifact_dir_for(args, base: str) -> str:
     return args.artifact_dir or f"{base}_artifacts"
 

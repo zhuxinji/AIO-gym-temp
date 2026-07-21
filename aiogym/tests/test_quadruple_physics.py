@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import aiogym
-from aiogym.controllers import make_controller
+from aiogym.controllers import build_context, make_controller
 from aiogym.evaluation import evaluate_controller
 from aiogym.models import Integrator, apply_model_params, make_model
 
@@ -80,22 +80,24 @@ def test_rk4_solution_is_step_converged_for_reference_transient():
 
 def test_reference_task_applies_equilibrium_and_setpoint_schedule():
     env = aiogym.make_env(
-        "quadruple", objective="tracking", task="minimum-phase-tracking"
+        "quadruple", objective="tracking", task="minimum-phase-classic"
     )
     env.reset(seed=0)
     assert env.control_dt == 1.0 and env.episode_steps == 600
     assert env.integ.x == pytest.approx(env.model.initial_state())
     initial = list(env.y_sp)
-    for _ in range(120):
+    for _ in range(119):
         env.step([0.3, 0.3])
     assert env.y_sp == initial
     env.step([0.3, 0.3])
-    assert env.y_sp == pytest.approx([initial[0] + 1.0, initial[1] - 1.0])
+    scheduled = [initial[0] + 1.0, initial[1] - 1.0]
+    assert env.y_sp == pytest.approx(scheduled)
+    assert build_context(env).setpoint["y_sp"] == pytest.approx(scheduled)
 
 
 def test_reference_pi_bias_and_closed_loop_smoke():
     env = aiogym.make_env(
-        "quadruple", objective="tracking", task="minimum-phase-tracking"
+        "quadruple", objective="tracking", task="minimum-phase-classic"
     )
     controller = make_controller("pid", scenario="quadruple")
     env.reset(seed=0)
@@ -104,7 +106,13 @@ def test_reference_pi_bias_and_closed_loop_smoke():
     )
     assert env.model.action_vector(nominal_action) == pytest.approx([0.3, 0.3])
     result = evaluate_controller(controller, env, episodes=1, seed_list=[0])
-    assert result["tracking_cost"] < 0.2
+    assert result["tracking_error_cost"] < 40.0
+    assert result["tracking_move_cost"] < 20.0
+    assert result["tracking_cost"] == pytest.approx(
+        result["tracking_error_cost"]
+        + result["tracking_move_cost"]
+        + result["tracking_steady_cost"]
+    )
     assert result["constraint_violation_count"] == 0
     assert result["normalized_score"] > 99.0
 
@@ -156,6 +164,13 @@ def test_nonminimum_steady_input_inverse_matches_requested_lower_levels():
     assert action[1] > model.default_action()[1]
 
 
+def test_zero_boundary_has_no_unique_steady_input_target():
+    model = apply_model_params(make_model("quadruple"), {"gamma": [0.55, 0.45]})
+    initial = model.initial_state()
+
+    assert model.tracking_steady_state_action([initial[0] + 0.5, initial[1]]) is None
+
+
 def test_nonminimum_benchmark_pid_uses_cross_pairing():
     protocol = aiogym.BenchmarkProtocol.tracking(
         "quadruple", task="nonminimum-phase-classic", episode_steps=2
@@ -170,7 +185,7 @@ def test_nonminimum_benchmark_pid_uses_cross_pairing():
     assert [(loop["u_index"], loop["y_index"]) for loop in loops] == [(0, 1), (1, 0)]
 
 
-def test_nonminimum_mpc_profile_exposes_steady_input_guidance():
+def test_nonminimum_mpc_profile_has_unconstrained_moves_and_feedforward_initialization():
     protocol = aiogym.BenchmarkProtocol.tracking(
         "quadruple", task="nonminimum-phase-classic", episode_steps=2
     )
@@ -182,16 +197,47 @@ def test_nonminimum_mpc_profile_exposes_steady_input_guidance():
     )
     metadata = controller.metadata()
     assert metadata["horizon"] == 60
-    assert metadata["steady_input_weight"] == 100.0
+    assert metadata["cv_scale"] == pytest.approx([1.0, 1.0])
+    assert metadata["initialization"] == "tracking_steady_state_action"
+    assert "du_max" not in metadata
+    assert "steady_input_weight" not in metadata
+
+
+def test_mpc_steady_feedforward_only_seeds_the_first_solve(monkeypatch):
+    model = aiogym.make_model("quadruple")
+    controller = make_controller(
+        "mpc",
+        model=model,
+        scenario="quadruple",
+        config={"profile": "quadruple-minimum-phase", "P": 1},
+    )
+    target = [model.default_setpoint_vector()[0] + 1.0, model.default_setpoint_vector()[1]]
+    seed = model.tracking_steady_state_action(target)
+    calls = []
+
+    def steady_action(y_sp):
+        calls.append(list(y_sp))
+        return seed
+
+    monkeypatch.setattr(model, "tracking_steady_state_action", steady_action)
+    monkeypatch.setattr(np.linalg, "solve", lambda H, g: np.zeros(model.action_dim()))
+    measurement = {"x": model.initial_state(), **model.disturbance_defaults()}
+
+    first = controller.compute(measurement, {"y_sp": target}, 1.0)
+    second = controller.compute(measurement, {"y_sp": target}, 1.0)
+
+    assert first == pytest.approx(seed)
+    assert second == pytest.approx(seed)
+    assert calls == [target]
 
 
 @pytest.mark.parametrize(
     "profile,horizon,solve_every,r_move,terminal_weight",
     [
-        ("quadruple-minimum-phase", 6, 1, 0.05, 1.0),
-        ("quadruple-nonminimum-phase", 20, 2, 0.1, 10.0),
-        ("quadruple-zero-boundary", 16, 1, 0.05, 5.0),
-        ("quadruple-disturbance-rejection", 3, 1, 0.0, 1.0),
+        ("quadruple-minimum-phase", 4, 1, 0.0, 0.0),
+        ("quadruple-nonminimum-phase", 180, 10, 0.0, 0.0),
+        ("quadruple-zero-boundary", 4, 1, 0.0, 0.0),
+        ("quadruple-disturbance-rejection", 3, 2, 0.0, 0.0),
     ],
 )
 def test_quadruple_oracle_profiles_expose_task_specific_tuning(
@@ -209,8 +255,132 @@ def test_quadruple_oracle_profiles_expose_task_specific_tuning(
     metadata = controller.metadata()
     assert metadata["horizon"] == horizon
     assert metadata["solve_every"] == solve_every
+    assert metadata["q_y"] == pytest.approx([1.0, 1.0])
     assert metadata["r_move"] == pytest.approx(r_move)
     assert metadata["terminal_weight"] == pytest.approx(terminal_weight)
+    assert metadata["initialization"] == "tracking_steady_state_action"
+    assert metadata["integration_substeps"] == 10
+    assert metadata["integration_max_step"] == pytest.approx(0.1)
+    assert "du_max" not in metadata
+    assert "steady_input_weight" not in metadata
+
+
+def test_oracle_setpoint_preview_is_opt_in_and_uses_future_task_events():
+    env = aiogym.make_env(
+        "quadruple", objective="tracking", task="minimum-phase-classic"
+    )
+    env.reset(seed=0)
+    controller = make_controller(
+        "oracle",
+        model=env.model,
+        scenario="quadruple",
+        config={
+            "profile": "quadruple-minimum-phase",
+            "horizon": 4,
+            "preview_setpoints": True,
+        },
+    )
+    initial = list(env.y_sp)
+    scheduled = list(env._task_setpoint_events[120])
+
+    env._k = 117
+    preview = controller._preview_targets(build_context(env))
+
+    assert controller.metadata()["preview_setpoints"] is True
+    assert np.asarray(preview[:3]) == pytest.approx(np.asarray([initial, initial, initial]))
+    assert preview[3] == pytest.approx(scheduled)
+    current, trajectory = controller.orc._setpoint_trajectory(initial, preview)
+    assert current == pytest.approx(initial)
+    assert trajectory.T == pytest.approx(np.asarray(preview))
+
+
+def test_standard_oracle_does_not_preview_setpoint_schedule():
+    controller = make_controller(
+        "oracle",
+        model=aiogym.make_model("quadruple"),
+        scenario="quadruple",
+        config={"profile": "quadruple-minimum-phase", "horizon": 1},
+    )
+
+    assert controller.metadata()["preview_setpoints"] is False
+
+
+def test_zero_boundary_oracle_falls_back_to_nominal_initial_guess():
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple", task="zero-boundary-stress", episode_steps=2
+    )
+    controller = make_controller(
+        "oracle",
+        model=protocol.make_env().model,
+        scenario="quadruple",
+        config={"profile": "quadruple-zero-boundary", "horizon": 1},
+    )
+    target = protocol.make_env().model.default_setpoint_vector()
+
+    assert controller.orc._steady_action_target(target) == pytest.approx(controller.orc.u_init)
+    assert "u_target" not in controller.orc.par
+    assert "steady_weight" not in controller.orc.par
+
+
+def test_oracle_replans_immediately_for_setpoint_and_disturbance_changes(monkeypatch):
+    model = aiogym.make_model("quadruple")
+    controller = make_controller(
+        "oracle",
+        model=model,
+        scenario="quadruple",
+        config={"profile": "quadruple-minimum-phase", "horizon": 1, "solve_every": 5},
+    )
+    calls = []
+
+    def fake_solve(x, t_cold, t_amb, disturbances=None, y_sp=None, advance_steps=1):
+        calls.append({"x": list(x), "disturbances": dict(disturbances or {}), "y_sp": list(y_sp)})
+        controller.orc.last_error = None
+        controller.orc.last_plan = None
+        return model.default_action()
+
+    monkeypatch.setattr(controller.orc, "solve", fake_solve)
+    measurement = {"x": model.initial_state(), **model.disturbance_defaults()}
+    setpoint = {"y_sp": model.default_setpoint_vector()}
+
+    controller.compute(measurement, setpoint, 1.0)
+    controller.compute({**measurement, "x": [value + 0.1 for value in measurement["x"]]}, setpoint, 1.0)
+    assert len(calls) == 1
+
+    changed_setpoint = {"y_sp": [setpoint["y_sp"][0] + 1.0, setpoint["y_sp"][1]]}
+    controller.compute(measurement, changed_setpoint, 1.0)
+    assert len(calls) == 2
+
+    changed_disturbance = {**measurement, "pump_flow_factor": 0.8}
+    controller.compute(changed_disturbance, changed_setpoint, 1.0)
+    assert len(calls) == 3
+
+
+def test_oracle_replays_the_optimized_plan_between_periodic_solves(monkeypatch):
+    model = aiogym.make_model("quadruple")
+    controller = make_controller(
+        "oracle",
+        model=model,
+        scenario="quadruple",
+        config={"profile": "quadruple-minimum-phase", "horizon": 3, "solve_every": 3},
+    )
+    plan = np.asarray([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=float)
+    calls = []
+
+    def fake_solve(x, t_cold, t_amb, disturbances=None, y_sp=None, advance_steps=1):
+        calls.append(advance_steps)
+        controller.orc.last_error = None
+        controller.orc.last_plan = plan.copy()
+        return list(plan[:, 0])
+
+    monkeypatch.setattr(controller.orc, "solve", fake_solve)
+    measurement = {"x": model.initial_state(), **model.disturbance_defaults()}
+    setpoint = {"y_sp": model.default_setpoint_vector()}
+
+    actions = [controller.compute(measurement, setpoint, 1.0) for _ in range(4)]
+
+    assert np.asarray(actions[:3]) == pytest.approx(plan.T)
+    assert actions[3] == pytest.approx(plan[:, 0])
+    assert calls == [1, 3]
 
 
 @pytest.mark.parametrize(

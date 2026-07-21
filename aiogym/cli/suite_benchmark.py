@@ -6,20 +6,19 @@ import argparse
 import json
 import os
 import re
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
 from aiogym._internal.config import parse_seed_list
-from aiogym._internal.serialization import write_json
 from aiogym.evaluation import (
+    BenchmarkCase,
     build_evaluation_report,
     primary_metric_for_objective,
     resolve_protocol,
 )
-from aiogym.evaluation.artifacts import plot_results, write_benchmark_artifacts
-from aiogym.evaluation.runner import run_evaluation_case
+from aiogym.evaluation.artifacts import finalize_benchmark_artifacts
+from aiogym.evaluation.runner import execute_benchmark_case
 from aiogym.models import SCENARIOS
 
 
@@ -36,14 +35,16 @@ SUMMARY_COLUMNS = (
     "task_status",
     "task_profile_hash",
     "objective",
+    "objective_source",
+    "objective_status",
     "action_mode",
     "controller",
     "control_structure",
-    "status",
+    "execution_status",
     "metric",
     "metric_mean",
     "metric_std",
-    "kpi",
+    "normalized_score",
     "profit",
     "production",
     "return",
@@ -52,6 +53,7 @@ SUMMARY_COLUMNS = (
     "tracking_return",
     "tracking_error_cost",
     "tracking_move_cost",
+    "tracking_steady_cost",
     "tracking_mse",
     "tracking_iae",
     "energy_kwh",
@@ -119,26 +121,6 @@ def parse_csv(raw: str | None, default):
     return values
 
 
-def skipped_row(suite_case: dict, status: str, message: str):
-    return {
-        "suite_case": suite_case["name"],
-        "scenario": suite_case["scenario"],
-        "task": suite_case.get("task", "default"),
-        "task_status": suite_case.get("task_status"),
-        "task_profile_hash": suite_case.get("task_profile_hash"),
-        "objective": suite_case["objective"],
-        "controller": suite_case["controller"],
-        "control_structure": None,
-        "action_mode": suite_case["action_mode"],
-        "status": status,
-        "metric": primary_metric_for_objective(suite_case["objective"]),
-        "message": message,
-        "episodes": 0,
-        "seed": suite_case["seeds"][0] if suite_case["seeds"] else None,
-        "seed_list": suite_case["seeds"],
-    }
-
-
 def build_summary_table(rows: list[dict]):
     table = []
     for row in rows:
@@ -178,6 +160,7 @@ def effective_suite_config(suite: dict, cases: list[dict], episode_steps: int | 
             "scenario": case["scenario"],
             "task": case.get("task", "default"),
             "objective": case["objective"],
+            "objective_source": case.get("objective_source"),
             "controller": case["controller"],
             "episode_steps": case["protocol"].episode_steps if case.get("protocol") else episode_steps,
             "control_dt": case["protocol"].control_dt if case.get("protocol") else control_dt,
@@ -198,9 +181,8 @@ def build_cases(args):
         set(parse_csv(args.scenarios, suite["scenarios"]))
         if explicit_cases and args.scenarios is not None else None
     )
-    objective_filter = (
-        set(parse_csv(args.objectives, suite["objectives"]))
-        if explicit_cases and args.objectives is not None else None
+    explicit_objectives = (
+        parse_csv(args.objectives, ()) if args.objectives is not None else None
     )
     controller_filter = (
         set(parse_csv(args.controllers, suite["controllers"]))
@@ -210,33 +192,49 @@ def build_cases(args):
     cases = []
     declarations = suite.get("cases") or [{
         "scenarios": parse_csv(args.scenarios, suite["scenarios"]),
-        "objectives": parse_csv(args.objectives, suite["objectives"]),
         "controllers": parse_csv(args.controllers, suite["controllers"]),
     }]
     for declaration in declarations:
         scenarios = expand_scenarios(declaration.get("scenarios", declaration.get("scenario", suite["scenarios"])))
-        objectives = list(declaration.get("objectives", [declaration["objective"]] if "objective" in declaration else suite["objectives"]))
+        if explicit_objectives is not None:
+            objective_candidates = [("explicit", value) for value in explicit_objectives]
+        elif "objectives" in declaration:
+            objective_candidates = [
+                ("case-config", value) for value in declaration["objectives"]
+            ]
+        elif "objective" in declaration:
+            objective_candidates = [("case-config", declaration["objective"])]
+        elif suite["objectives"]:
+            objective_candidates = [
+                ("suite-config", value) for value in suite["objectives"]
+            ]
+        else:
+            objective_candidates = [("task-default", None)]
         controllers = list(declaration.get("controllers", [declaration["controller"]] if "controller" in declaration else suite["controllers"]))
         for scenario in scenarios:
             if scenario_filter is not None and scenario not in scenario_filter:
                 continue
-            for objective in objectives:
-                if objective_filter is not None and objective not in objective_filter:
-                    continue
+            for objective_source, objective_value in objective_candidates:
                 action_mode = declaration.get("action_mode", suite["action_mode"])
                 protocol_config = {"action_mode": action_mode}
+                declaration_environment = dict(declaration.get("environment", {}))
+                suite_environment = dict(suite.get("environment", {}))
                 task = declaration.get("task", suite.get("task"))
                 if task is not None:
                     protocol_config["task"] = task
                 for key in (
                     "dynamic", "randomize", "randomize_setpoints", "randomize_plant",
                     "plant_drift", "integral_obs", "terminate_on_runaway", "noise",
-                    "noise_pct", "tracking_q_y", "tracking_r_move", "model_params",
+                    "noise_pct", "tracking_q_y", "tracking_r_move", "tracking_r_steady", "model_params",
                 ):
                     if key in declaration:
                         protocol_config[key] = declaration[key]
+                    elif key in declaration_environment:
+                        protocol_config[key] = declaration_environment[key]
                     elif key in suite:
                         protocol_config[key] = suite[key]
+                    elif key in suite_environment:
+                        protocol_config[key] = suite_environment[key]
                 if args.episode_steps is not None:
                     protocol_config["episode_steps"] = int(args.episode_steps)
                 elif "episode_steps" in declaration:
@@ -251,27 +249,44 @@ def build_cases(args):
                     protocol_config["control_dt"] = float(suite["control_dt"])
                 protocol = resolve_protocol(
                     scenario,
-                    objective,
+                    objective_value if objective_source == "explicit" else None,
                     protocol_config,
+                    case_objective=(
+                        objective_value if objective_source == "case-config" else None
+                    ),
+                    suite_objective=(
+                        objective_value if objective_source == "suite-config" else None
+                    ),
                 )
                 task_meta = protocol.metadata()["task_identity"]
+                objective = protocol.objective
                 for controller in controllers:
                     if controller_filter is not None and controller not in controller_filter:
                         continue
                     controller_config = controller_config_for(args, controller, action_mode, objective)
                     controller_config = _merge_config(controller_config, suite.get("controller_configs", {}).get(controller, {}))
                     controller_config = _merge_config(controller_config, declaration.get("controller_configs", {}).get(controller, {}))
+                    case_name = f"{objective}:{scenario}:{task_meta['name']}:{controller}"
+                    case_spec = BenchmarkCase.from_protocol(
+                        protocol,
+                        controller=controller,
+                        seeds=seeds,
+                        controller_config=controller_config,
+                        case_id=case_name,
+                    )
                     cases.append({
-                        "name": f"{objective}:{scenario}:{task_meta['name']}:{controller}",
+                        "name": case_name,
                         "scenario": scenario,
                         "task": task_meta["name"],
                         "task_status": task_meta["status"],
                         "task_profile_hash": task_meta["profile_hash"],
                         "objective": objective,
+                        "objective_source": protocol.objective_source,
                         "controller": controller,
                         "action_mode": action_mode,
                         "controller_config": controller_config,
                         "protocol": protocol,
+                        "case_spec": case_spec,
                         "seeds": seeds,
                     })
     if not cases:
@@ -303,63 +318,27 @@ def controller_config_for(args, controller: str, action_mode: str, objective: st
             raise SystemExit("controller 'onnx' requires --onnx-path")
         return {"path": args.onnx_path, "action_mode": action_mode}
     if controller == "oracle" and objective == "tracking":
-        return {"mode": "tracking"}
+        return {"profile": "tracking", "mode": "tracking"}
     return {}
 
 
 def run_case(suite_case: dict, include_tracebacks: bool):
-    started = perf_counter()
-    try:
-        case = run_evaluation_case(
-            scenario=suite_case["scenario"],
-            controller=suite_case["controller"],
-            protocol=suite_case["protocol"],
-            seeds=suite_case["seeds"],
-            controller_config=suite_case.get("controller_config") or {},
-            include_episodes=True,
-            save_rollout=suite_case["objective"] == "tracking",
-            suite_case=suite_case["name"],
-        )
-        result = case["result"]
-    except Exception as ex:
-        row = skipped_row(suite_case, "failed", str(ex))
-        return {"status": "failed", "row": row, "error": _error_payload(ex, include_tracebacks)}
-
-    row = case["row"]
-    row["suite_runtime_seconds"] = float(perf_counter() - started)
-    config = case["config"]
-    rollout = case.get("rollout")
-    if rollout is not None:
-        rollout.update({
-            "scenario": suite_case["scenario"],
-            "task": suite_case["task"],
-            "objective": suite_case["objective"],
-            "controller": suite_case["controller"],
-            "suite_case": suite_case["name"],
-        })
-    return {
-        "status": row["status"],
-        "row": row,
-        "result": result,
-        "config": config,
-        "rollout": rollout,
-    }
-
-
-def _error_payload(ex: Exception, include_tracebacks: bool):
-    data = {"type": ex.__class__.__name__, "message": str(ex)}
-    if include_tracebacks:
-        data["traceback"] = traceback.format_exc()
-    return data
+    return execute_benchmark_case(
+        suite_case["case_spec"],
+        include_episodes=True,
+        save_rollout=suite_case["objective"] == "tracking",
+        suite_case=suite_case["name"],
+        include_tracebacks=include_tracebacks,
+    )
 
 
 def print_case(row: dict):
-    status = row["status"].upper()
+    status = row["execution_status"].upper()
     prefix = (
         f"{status:7s} {row['objective']:9s} {row['scenario']:10s} "
         f"{row.get('task', 'default'):28s} {row['controller']:14s}"
     )
-    if row["status"] not in ("passed", "degraded"):
+    if row["execution_status"] not in ("passed", "degraded"):
         print(f"{prefix} {row.get('message', '')}")
         return
     metric = row["metric"]
@@ -370,7 +349,7 @@ def print_case(row: dict):
     step_ms = float(row.get("runtime_seconds_per_step") or 0.0) * 1000.0
     print(
         f"{prefix} {metric}={value_text:>9s} +/- {std_text} "
-        f"kpi={row['kpi']:8.2f} profit={row['profit']:9.2f} "
+        f"score={row['normalized_score']:8.2f} profit={row['profit']:9.2f} "
         f"track={row['track']:8.2f} safety={row.get('constraint_violation_count', 0.0):6.1f} "
         f"fallback={row.get('controller_fallback_count', 0):3} "
         f"step={step_ms:7.2f}ms"
@@ -443,10 +422,10 @@ def main():
                 break
 
     counts = {
-        "passed": sum(1 for row in rows if row["status"] == "passed"),
-        "degraded": sum(1 for row in rows if row["status"] == "degraded"),
-        "skipped": sum(1 for row in rows if row["status"] == "skipped"),
-        "failed": sum(1 for row in rows if row["status"] == "failed"),
+        "passed": sum(1 for row in rows if row["execution_status"] == "passed"),
+        "degraded": sum(1 for row in rows if row["execution_status"] == "degraded"),
+        "skipped": sum(1 for row in rows if row["execution_status"] == "skipped"),
+        "failed": sum(1 for row in rows if row["execution_status"] == "failed"),
         "total": len(rows),
     }
     summary_table = build_summary_table(rows)
@@ -470,7 +449,7 @@ def main():
         "runtime_seconds": float(perf_counter() - started),
         "rows": rows,
         "summary_table": summary_table,
-        "degraded_cases": [row for row in rows if row["status"] == "degraded"],
+        "degraded_cases": [row for row in rows if row["execution_status"] == "degraded"],
         "configs": configs,
         "results": results,
         "rollouts": rollouts,
@@ -479,27 +458,7 @@ def main():
     }
     artifact_dir = artifact_dir_for(suite["name"], args.artifact_dir)
     payload["artifact_dir"] = artifact_dir
-    payload["artifacts"] = write_benchmark_artifacts(artifact_dir, payload)
-    write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
-    figures = plot_results(artifact_dir)
-    figure_artifacts = {}
-    for key, path in figures.items():
-        if key in {"summary", "leaderboard", "rollout", "constraint_timeline"}:
-            figure_artifacts[f"{key}_figure"] = path
-        elif key == "tracking_comparison":
-            figure_artifacts["tracking_comparison_figure"] = path
-        elif key == "tracking_control_by_scenario":
-            figure_artifacts["tracking_control_figures"] = path
-        elif key == "summary_by_objective":
-            figure_artifacts["summary_figures"] = path
-        elif key == "leaderboard_by_objective":
-            figure_artifacts["leaderboard_figures"] = path
-        elif key == "summary_by_scenario":
-            figure_artifacts["summary_figures"] = path
-        elif key == "leaderboard_by_scenario":
-            figure_artifacts["leaderboard_figure"] = path
-    payload["artifacts"].update(figure_artifacts)
-    write_json(os.path.join(artifact_dir, "benchmark.json"), payload)
+    finalize_benchmark_artifacts(artifact_dir, payload, create_plots=True)
 
     print(
         f"saved artifacts {artifact_dir} "

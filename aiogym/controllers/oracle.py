@@ -37,9 +37,8 @@ def copy_economic_config(model):
 
 class NMPCOracle:
     def __init__(self, scenario="cstr", horizon=20, control_dt=0.5, mode="economic",
-                 du_max=0.4, q_y=1.0, r_move=0.05, steady_input_weight=0.0,
-                 terminal_weight=1.0,
-                 nsub_max=6, ipopt_max_iter=80, ipopt_tol=1e-4, warm_start=False,
+                 q_y=1.0, r_move=0.05, terminal_weight=1.0,
+                 ipopt_max_iter=80, ipopt_tol=1e-4, warm_start=False,
                  transcription="multiple_shooting", enforce_state_bounds=True,
                  enforce_temperature_cap=True, model=None):
         if not _HAVE_CASADI:
@@ -52,8 +51,12 @@ class NMPCOracle:
         if mode not in {"economic", "tracking"}:
             raise ValueError("mode must be one of: economic, tracking")
         self.mode = mode
-        self.du_max = nonnegative_float("du_max", du_max)
-        self.nsub_max = positive_int("nsub_max", nsub_max)
+        self.integration_max_step = positive_float(
+            "model solver max_step", self.model.solver_settings()["max_step"]
+        )
+        self.integration_substeps = max(
+            1, math.ceil(self.dt / self.integration_max_step - 1e-9)
+        )
         self.ipopt_max_iter = positive_int("ipopt_max_iter", ipopt_max_iter)
         self.ipopt_tol = positive_float("ipopt_tol", ipopt_tol)
         self.warm_start = bool(warm_start)
@@ -65,10 +68,8 @@ class NMPCOracle:
         self.nu = self.model.action_dim()
         self.nx = len(self.model.initial_state())
         self.ny = len(self.model.controlled_output(self.model.initial_state()))
-        self.y_scales = [max(float(value), 1e-12) for value in self.model.controlled_output_scales()]
         self.q_y = self._resolve_q_y(q_y)
         self.r_move = nonnegative_float("r_move", r_move)
-        self.steady_input_weight = nonnegative_float("steady_input_weight", steady_input_weight)
         self.terminal_weight = nonnegative_float("terminal_weight", terminal_weight)
         self.econ = copy_economic_config(self.model)
         self.nd = len(self.model.dynamics_disturbance_names())
@@ -80,6 +81,8 @@ class NMPCOracle:
         self.u_init = self._initial_action()
         self.u_prev = self.u_init.copy()
         self._warm = None
+        self._warm_target = None
+        self.last_plan = None
         self.last_error = None
         self._build()
 
@@ -143,11 +146,11 @@ class NMPCOracle:
             return min(caps) - 2.0
         return 40.0
 
-    # one RK4 step of the model dynamics over the control interval. Substeps capped
-    # for solve speed (a slightly coarse internal model is standard MPC practice).
+    # Match the environment Integrator exactly: RK4 with enough fixed substeps
+    # that no substep exceeds the model contract's solver max_step.
     def _rk4(self, x, u, d):
         f = lambda xx: self.model.dynamics(xx, u, d, backend="casadi", ca=ca)
-        nsub = max(1, min(self.nsub_max, int(round(self.dt / self.model.dt_micro))))
+        nsub = self.integration_substeps
         h = self.dt / nsub
         for _ in range(nsub):
             k1 = f(x); k2 = f(x + 0.5 * h * k1); k3 = f(x + 0.5 * h * k2); k4 = f(x + h * k3)
@@ -164,8 +167,7 @@ class NMPCOracle:
         c = 0
         for i, yi in enumerate(y):
             weight = self.q_y[i] if i < len(self.q_y) else 1.0
-            scale = self.y_scales[i] if i < len(self.y_scales) else 1.0
-            c += weight * ((yi - sp["y_sp"][i]) / scale) ** 2
+            c += weight * (yi - sp["y_sp"][i]) ** 2
         return c
 
     def _econ_profit(self, x, u, d):
@@ -175,6 +177,12 @@ class NMPCOracle:
         env = self.model.dynamics_disturbance_map(d)
         value = self.model.economic_value(x, u, env, backend="casadi", ca=ca)
         energy = self.model.energy_kw(u, backend="casadi", ca=ca)
+        shortfall_resolver = getattr(self.model, "product_flow_shortfall", None)
+        shortfall = (
+            shortfall_resolver(value, backend="casadi", ca=ca)
+            if callable(shortfall_resolver)
+            else 0.0
+        )
         viol = 0
         for i, (lo, hi) in enumerate(cfg["temp_band"]):
             if lo is not None:
@@ -189,7 +197,12 @@ class NMPCOracle:
                 viol += ca.fmax(0, lo - cv) / level_scale
             if hi is not None:
                 viol += ca.fmax(0, cv - hi) / level_scale
-        return cfg["w_value"] * value - cfg["w_energy"] * energy - cfg["w_viol"] * viol
+        return (
+            cfg["w_value"] * value
+            - cfg["w_energy"] * energy
+            - cfg["w_viol"] * viol
+            - float(cfg.get("w_product_shortfall", 0.0)) * shortfall
+        )
 
     def _build(self):
         if self.transcription == "single_shooting":
@@ -227,9 +240,7 @@ class NMPCOracle:
         x0 = opti.parameter(nx)
         d = opti.parameter(self.nd)
         u_prev = opti.parameter(nu)
-        u_target = opti.parameter(nu)
-        ysp = opti.parameter(self.ny)
-        sp = {"y_sp": [ysp[i] for i in range(self.ny)]}
+        ysp = opti.parameter(self.ny, N)
         J = 0
         opti.subject_to(X[:, 0] == x0)
         slack = opti.variable(1, N)                                    # shared state/cap feasibility slack
@@ -248,26 +259,29 @@ class NMPCOracle:
                 elif hi is not None:
                     opti.subject_to(X[i, k] <= hi + state_slack)
         for k in range(N):
+            sp = {"y_sp": [ysp[i, k] for i in range(self.ny)]}
             opti.subject_to(X[:, k + 1] == self._rk4(X[:, k], U[:, k], d))
             opti.subject_to(opti.bounded(0.0, U[:, k], 1.0))            # actuators in [0,1]
             up = u_prev if k == 0 else U[:, k - 1]
-            opti.subject_to(opti.bounded(-self.du_max, U[:, k] - up, self.du_max))  # move limit
             temps = self.model.display_outputs(X[:, k + 1], backend="casadi", ca=ca).get("temps", [])
             if self.t_safe is not None:
                 for temp in temps:                                     # soft safety cap on temperature outputs
                     opti.subject_to(temp <= self.t_safe + slack[0, k])
+            stage_state = X[:, k + 1] if self.mode == "tracking" else X[:, k]
             J += (
-                self._stage_cost(X[:, k], U[:, k], sp, d)
+                self._stage_cost(stage_state, U[:, k], sp, d)
                 + self.r_move * ca.sumsqr(U[:, k] - up)
-                + self.steady_input_weight * ca.sumsqr(U[:, k] - u_target)
             )
         if self.mode == "tracking":
-            J += self.terminal_weight * self._tracking_state_cost(X[:, N], sp)
+            terminal_sp = {"y_sp": [ysp[i, N - 1] for i in range(self.ny)]}
+            J += self.terminal_weight * self._tracking_state_cost(X[:, N], terminal_sp)
         J += 1e4 * ca.sumsqr(slack)                                    # heavily discourage cap violation
         opti.minimize(J)
         opti.solver("ipopt", self._solver_options())
         self.opti, self.X, self.U, self.slack = opti, X, U, slack
-        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "u_target": u_target, "ysp": ysp}
+        self.par = {
+            "x0": x0, "d": d, "u_prev": u_prev, "ysp": ysp,
+        }
 
     def _build_single_shooting(self):
         N, nx, nu = self.N, self.nx, self.nu
@@ -276,40 +290,42 @@ class NMPCOracle:
         x0 = opti.parameter(nx)
         d = opti.parameter(self.nd)
         u_prev = opti.parameter(nu)
-        u_target = opti.parameter(nu)
-        ysp = opti.parameter(self.ny)
-        sp = {"y_sp": [ysp[i] for i in range(self.ny)]}
+        ysp = opti.parameter(self.ny, N)
         slack = opti.variable(1, N)
         opti.subject_to(slack >= 0)
         x = x0
         J = 0
         for k in range(N):
+            sp = {"y_sp": [ysp[i, k] for i in range(self.ny)]}
             up = u_prev if k == 0 else U[:, k - 1]
             opti.subject_to(opti.bounded(0.0, U[:, k], 1.0))
-            opti.subject_to(opti.bounded(-self.du_max, U[:, k] - up, self.du_max))
+            x_next = self._rk4(x, U[:, k], d)
+            stage_state = x_next if self.mode == "tracking" else x
             J += (
-                self._stage_cost(x, U[:, k], sp, d)
+                self._stage_cost(stage_state, U[:, k], sp, d)
                 + self.r_move * ca.sumsqr(U[:, k] - up)
-                + self.steady_input_weight * ca.sumsqr(U[:, k] - u_target)
             )
-            x = self._rk4(x, U[:, k], d)
+            x = x_next
             self._constrain_state(opti, x, slack=slack[0, k])
             temps = self.model.display_outputs(x, backend="casadi", ca=ca).get("temps", [])
             if self.t_safe is not None:
                 for temp in temps:
                     opti.subject_to(temp <= self.t_safe + slack[0, k])
         if self.mode == "tracking":
-            J += self.terminal_weight * self._tracking_state_cost(x, sp)
+            terminal_sp = {"y_sp": [ysp[i, N - 1] for i in range(self.ny)]}
+            J += self.terminal_weight * self._tracking_state_cost(x, terminal_sp)
         J += 1e4 * ca.sumsqr(slack)
         opti.minimize(J)
         opti.solver("ipopt", self._solver_options())
         self.opti, self.X, self.U, self.slack = opti, None, U, slack
-        self.par = {"x0": x0, "d": d, "u_prev": u_prev, "u_target": u_target, "ysp": ysp}
+        self.par = {
+            "x0": x0, "d": d, "u_prev": u_prev, "ysp": ysp,
+        }
 
     def _numeric_rk4(self, x, u, disturbances):
         x = np.asarray(x, dtype=float)
         u = np.asarray(u, dtype=float)
-        nsub = max(1, min(self.nsub_max, int(round(self.dt / self.model.dt_micro))))
+        nsub = self.integration_substeps
         h = self.dt / nsub
         for _ in range(nsub):
             k1 = np.asarray(self.model.dynamics(x, u, disturbances), dtype=float)
@@ -333,17 +349,20 @@ class NMPCOracle:
     def reset(self):
         self.u_prev = self.u_init.copy()
         self._warm = None
+        self._warm_target = None
+        self.last_plan = None
         self.last_error = None
 
     def _fallback_action(self):
         """Move safely toward the model's nominal equilibrium action."""
 
-        delta = np.clip(self.u_init - self.u_prev, -self.du_max, self.du_max)
-        return np.clip(self.u_prev + delta, 0.0, 1.0)
+        return self.u_init.copy()
 
     def _steady_action_target(self, target):
         resolver = getattr(self.model, "tracking_steady_state_action", None)
-        values = resolver(target) if self.mode == "tracking" and callable(resolver) else self.u_init
+        values = resolver(target) if self.mode == "tracking" and callable(resolver) else None
+        if values is None:
+            return self.u_init.copy()
         action = np.asarray(values, dtype=float).reshape(-1)
         if len(action) != self.nu or not np.all(np.isfinite(action)):
             return self.u_init.copy()
@@ -354,30 +373,60 @@ class NMPCOracle:
         values.update({"t_cold": t_cold, "t_amb": t_amb})
         return self.model.disturbance_vector(values)
 
-    def solve(self, x, t_cold, t_amb, disturbances=None, y_sp=None):
+    def _setpoint_trajectory(self, y_sp, y_sp_preview=None):
+        current = self.model.setpoint_vector(y_sp)
+        if y_sp_preview is None:
+            targets = [current] * self.N
+        else:
+            targets = [self.model.setpoint_vector(values) for values in y_sp_preview]
+            if not targets:
+                targets = [current]
+            targets = targets[:self.N]
+            targets.extend([targets[-1]] * (self.N - len(targets)))
+        return current, np.asarray(targets, dtype=float).T
+
+    def solve(self, x, t_cold, t_amb, disturbances=None, y_sp=None,
+              y_sp_preview=None, advance_steps=1):
         o = self.opti
         o.set_value(self.par["x0"], np.asarray(x, float))
         if self.nd:
             o.set_value(self.par["d"], self._disturbance_vector(t_cold, t_amb, disturbances))
         o.set_value(self.par["u_prev"], self.u_prev)
-        target = self.model.setpoint_vector(y_sp)
-        o.set_value(self.par["ysp"], np.asarray(target, float))
-        o.set_value(self.par["u_target"], self._steady_action_target(target))
+        target, target_trajectory = self._setpoint_trajectory(y_sp, y_sp_preview)
+        o.set_value(self.par["ysp"], target_trajectory)
+        initial_action = self._steady_action_target(target)
+        target_signature = tuple(float(value) for value in target)
         try:
             dvec = self._disturbance_vector(t_cold, t_amb, disturbances)
-            if (not self.warm_start) or self._warm is None:
+            use_warm_start = (
+                self.warm_start
+                and self._warm is not None
+                and self._warm_target == target_signature
+            )
+            if not use_warm_start:
                 if self.X is not None:
-                    o.set_initial(self.X, self._initial_state_guess(x, self.u_prev, dvec))
-                o.set_initial(self.U, np.tile(self.u_prev.reshape(-1, 1), (1, self.N)))
+                    o.set_initial(self.X, self._initial_state_guess(x, initial_action, dvec))
+                o.set_initial(self.U, np.tile(initial_action.reshape(-1, 1), (1, self.N)))
                 o.set_initial(self.slack, np.zeros((1, self.N)))
             else:
                 Xw, Uw, Sw = self._warm
+                shift = min(max(int(advance_steps), 1), self.N)
                 if self.X is not None:
-                    Xw = np.column_stack([np.asarray(x, float), Xw[:, 2:], Xw[:, -1]])
+                    Xw = np.column_stack([
+                        np.asarray(x, float),
+                        Xw[:, shift + 1:],
+                        np.tile(Xw[:, -1:], (1, shift)),
+                    ])
                     o.set_initial(self.X, Xw)
-                Uw = np.column_stack([Uw[:, 1:], Uw[:, -1]])
+                Uw = np.column_stack([
+                    Uw[:, shift:],
+                    np.tile(Uw[:, -1:], (1, shift)),
+                ])
                 Sw = np.asarray(Sw, float).reshape(1, -1)
-                Sw = np.column_stack([Sw[:, 1:], Sw[:, -1]])
+                Sw = np.column_stack([
+                    Sw[:, shift:],
+                    np.tile(Sw[:, -1:], (1, shift)),
+                ])
                 o.set_initial(self.U, Uw)
                 o.set_initial(self.slack, Sw)
             sol = o.solve()
@@ -386,10 +435,13 @@ class NMPCOracle:
             Sv = np.asarray(sol.value(self.slack), float).reshape(1, self.N)
             if self.warm_start:
                 self._warm = (Xv, Uv, Sv)
+                self._warm_target = target_signature
+            self.last_plan = Uv.copy()
             u = np.clip(Uv[:, 0], 0.0, 1.0)
             self.last_error = None
         except Exception as e:
             self.last_error = e
+            self.last_plan = None
             u = self._fallback_action()
         self.u_prev = np.asarray(u, float).reshape(-1)
         return list(self.u_prev)
@@ -402,13 +454,16 @@ class OracleAgent:
     action_mode = "actuator"
     control_structure = "nmpc_oracle"
 
-    def __init__(self, scenario, solve_every=1, model=None, **kw):
+    def __init__(self, scenario, solve_every=1, preview_setpoints=False, model=None, **kw):
         self.orc = NMPCOracle(scenario, model=model, **kw)
         self.scenario = self.orc.scenario
         self.model = self.orc.model
         self.solve_every = positive_int("solve_every", solve_every)
+        self.preview_setpoints = bool(preview_setpoints)
         self._ticks = 0
         self._last = None
+        self._plan_step = 0
+        self._last_plan_signature = None
         self.solve_count = 0
         self.solver_success_count = 0
         self.solver_failure_count = 0
@@ -421,12 +476,14 @@ class OracleAgent:
                 "api": self.controller_api_version,
                 "action_mode": self.action_mode, "control_structure": self.control_structure,
                 "solve_every": self.solve_every,
+                "preview_setpoints": self.preview_setpoints,
                 "horizon": self.orc.N, "control_dt": self.orc.dt, "mode": self.orc.mode,
-                "du_max": self.orc.du_max, "q_y": list(self.orc.q_y),
+                "q_y": list(self.orc.q_y),
                 "r_move": self.orc.r_move,
-                "steady_input_weight": self.orc.steady_input_weight,
                 "terminal_weight": self.orc.terminal_weight,
-                "nsub_max": self.orc.nsub_max,
+                "initialization": "tracking_steady_state_action",
+                "integration_max_step": self.orc.integration_max_step,
+                "integration_substeps": self.orc.integration_substeps,
                 "ipopt_max_iter": self.orc.ipopt_max_iter,
                 "warm_start": self.orc.warm_start,
                 "transcription": self.orc.transcription,
@@ -448,6 +505,8 @@ class OracleAgent:
         self.orc.reset()
         self._ticks = 0
         self._last = None
+        self._plan_step = 0
+        self._last_plan_signature = None
         self.solve_count = 0
         self.solver_success_count = 0
         self.solver_failure_count = 0
@@ -455,18 +514,71 @@ class OracleAgent:
         self.last_solver_error = None
 
     def act(self, obs, context):
-        action = self.compute(context.measurement, context.setpoint, context.control_dt)
+        preview = self._preview_targets(context) if self.preview_setpoints else None
+        action = self.compute(
+            context.measurement,
+            context.setpoint,
+            context.control_dt,
+            y_sp_preview=preview,
+        )
         return np.asarray(self.model.action_vector(action), dtype=np.float32)
+
+    def _preview_targets(self, context):
+        """Return the active reference for each future stage in the NLP horizon."""
+
+        current = list(self.model.setpoint_vector(context.setpoint.get("y_sp")))
+        env = getattr(context, "env", None)
+        if env is None:
+            return [current] * self.orc.N
+        step = int(getattr(env, "_k", 0))
+        events = dict(getattr(env, "_task_setpoint_events", {}) or {})
+        targets = []
+        active = current
+        for offset in range(self.orc.N):
+            event = events.get(step + offset)
+            if event is not None:
+                active = list(self.model.setpoint_vector(event))
+            targets.append(list(active))
+        return targets
 
     def _x_from_meas(self, meas):
         if "x" in meas:
             return list(meas["x"])
         raise ValueError("oracle controller requires measurement['x']")
 
-    def compute(self, meas, sp, dt):
-        if self._last is None or self._ticks % self.solve_every == 0:
-            self._last = self.orc.solve(self._x_from_meas(meas), meas.get("t_cold", 15.0), meas.get("t_amb", 20.0),
-                                        disturbances=meas, y_sp=sp.get("y_sp"))
+    def _plan_signature(self, meas, sp, y_sp_preview=None):
+        """Return exogenous values that should trigger an immediate replan."""
+
+        target = tuple(float(value) for value in self.model.setpoint_vector(sp.get("y_sp")))
+        disturbances = tuple(float(value) for value in self.model.disturbance_vector(meas))
+        preview = None
+        if y_sp_preview is not None:
+            preview = tuple(tuple(float(value) for value in row) for row in y_sp_preview)
+        return target, disturbances, preview
+
+    def compute(self, meas, sp, dt, y_sp_preview=None):
+        plan_signature = self._plan_signature(meas, sp, y_sp_preview)
+        should_solve = (
+            self._last is None
+            or self._plan_step >= self.solve_every
+            or plan_signature != self._last_plan_signature
+        )
+        if should_solve:
+            solve_kwargs = {
+                "disturbances": meas,
+                "y_sp": sp.get("y_sp"),
+                "advance_steps": max(self._plan_step, 1),
+            }
+            if y_sp_preview is not None:
+                solve_kwargs["y_sp_preview"] = y_sp_preview
+            self._last = self.orc.solve(
+                self._x_from_meas(meas),
+                meas.get("t_cold", 15.0),
+                meas.get("t_amb", 20.0),
+                **solve_kwargs,
+            )
+            self._plan_step = 0
+            self._last_plan_signature = plan_signature
             self.solve_count += 1
             if self.orc.last_error is None:
                 self.solver_success_count += 1
@@ -474,5 +586,10 @@ class OracleAgent:
                 self.solver_failure_count += 1
                 self.fallback_count += 1
                 self.last_solver_error = f"{self.orc.last_error.__class__.__name__}: {self.orc.last_error}"
+        plan = self.orc.last_plan
+        if plan is not None and self._plan_step < plan.shape[1]:
+            self._last = np.clip(plan[:, self._plan_step], 0.0, 1.0)
+            self.orc.u_prev = np.asarray(self._last, dtype=float).reshape(-1)
+        self._plan_step += 1
         self._ticks += 1
         return self._last

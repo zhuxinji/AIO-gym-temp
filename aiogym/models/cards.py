@@ -16,11 +16,29 @@ HUMAN_MODEL_CARD_NOTES = {
     "cascade": {
         "dynamics": "Cascaded material balances move liquid through three heated tanks; energy balances mix inlet, interstage, ambient-loss, and heater terms.",
         "assumptions": [
-            "Well-mixed tanks with lumped heat loss and actuator effectiveness.",
-            "Levels are clamped to the declared tank range after integration.",
+            "Constant-area, perfectly mixed tanks use constant liquid density and heat capacity.",
+            "Each outlet is a one-way free drain with no downstream backpressure or reverse flow.",
+            "Pipes have no volume, transport delay, pressure dynamics, or heat loss.",
+            "Tank walls, heaters, pumps, valves, and sensors have no independent dynamics; boiling and other phase changes are excluded.",
+            "Negative levels and overflow are hard termination events; levels are not silently clamped.",
+            "Low liquid level or a 92 degC tank temperature disables that tank's heater before the 120 degC hard termination boundary.",
+            "Direct operation is batch; continuous throughput economics belongs to the continuous-benchmark task.",
             "Heat-transfer and flow coefficients are benchmark parameters, not plant-identification claims.",
         ],
-        "best_use": "multi-loop level and temperature tracking, actuator allocation, and disturbance-rejection smoke tests",
+        "best_use": "multi-loop level and temperature tracking, actuator allocation, safety-boundary tests, and task-declared continuous-production benchmarks",
+    },
+    "cascade_recirculating": {
+        "dynamics": "P101 removes liquid and enthalpy from Tank 3 and returns it to Tank 1; V12 and V23 close the gravity-fed loop, while only Tank 1 receives heater power.",
+        "assumptions": [
+            "The normal process is a closed liquid inventory with no product or makeup flow.",
+            "The provisional geometry interprets the PDF ranges as 16 L Tank 1, 16 L Tank 2, and 60 L Tank 3 inventory at the 0.40 m nominal level; these are range-derived design values, not as-built measurements.",
+            "The PDF specifies one 2 kW Tank 1 heater and gives design ranges for tank height, effective volume, and pump power; valve capacity, flow calibration, heat loss, and interlock setpoints remain unverified.",
+            "Pipes, sensors, pump, valves, and heater have no independent dynamics in the foundational model.",
+            "Tank 1 and Tank 2 passive standpipes return mass and enthalpy to Tank 3 using provisional overflow levels and coefficients.",
+            "P101 low level and H1 L2/L3/L4 protection disable equipment without projecting the physical state; only hard physical boundaries terminate simulation.",
+            "Tracking, KPI, robustness, and safety are supported; production economics is intentionally unsupported because the closed loop has no declared product stream or production-value basis.",
+        ],
+        "best_use": "closed-loop three-tank control development and staged software validation against the retrofit design intent",
     },
     "quadruple": {
         "dynamics": "Johansson's four nonlinear liquid-level balances route two voltage-driven pump streams through fixed three-way valve splits; upper tanks drain into the two lower tanks.",

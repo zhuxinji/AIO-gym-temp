@@ -6,12 +6,14 @@
     "Ts": 0.5,
     "P": 40,
     "move_supp": 0.8,
-    "du_max": 0.15,
-    "steady_input_weight": 0.0,
     "cv_scale": null
   },
   "scenarios": {
     "cascade": {},
+    "cascade_recirculating": {
+      "P": 20,
+      "move_supp": 0.8
+    },
     "quadruple": {},
     "cstr": {},
     "hvac": {},
@@ -22,7 +24,6 @@
       "Ts": 1.0,
       "P": 2,
       "move_supp": 0.0,
-      "du_max": 0.4,
       "cv_scale": [1.0, 1.0]
     }
   },
@@ -31,10 +32,9 @@
       "scenarios": {
         "quadruple": {
           "Ts": 1.0,
-          "P": 5,
-          "move_supp": 0.05,
-          "du_max": 0.2,
-          "steady_input_weight": 0.0
+          "P": 1,
+          "move_supp": 0.0,
+          "cv_scale": [1.0, 1.0]
         }
       }
     },
@@ -43,9 +43,8 @@
         "quadruple": {
           "Ts": 1.0,
           "P": 60,
-          "move_supp": 0.05,
-          "du_max": 0.1,
-          "steady_input_weight": 100.0
+          "move_supp": 0.0,
+          "cv_scale": [1.0, 1.0]
         }
       }
     },
@@ -53,10 +52,9 @@
       "scenarios": {
         "quadruple": {
           "Ts": 1.0,
-          "P": 5,
-          "move_supp": 0.1,
-          "du_max": 0.15,
-          "steady_input_weight": 0.0
+          "P": 1,
+          "move_supp": 0.0,
+          "cv_scale": [1.0, 1.0]
         }
       }
     },
@@ -66,8 +64,7 @@
           "Ts": 1.0,
           "P": 3,
           "move_supp": 0.0,
-          "du_max": 0.4,
-          "steady_input_weight": 0.0
+          "cv_scale": [1.0, 1.0]
         }
       }
     }

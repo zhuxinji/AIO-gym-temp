@@ -8,10 +8,65 @@ import unittest
 import numpy as np
 
 from aiogym.env import AIOGymNativeEnv
-from aiogym.models import SCENARIOS, make_model
+from aiogym.models import SCENARIOS, apply_model_params, make_model
 from aiogym.evaluation.objectives import stage_reward
 
 class StageRewardContractTests(unittest.TestCase):
+    def test_continuous_cascade_penalizes_product_flow_shortfall(self):
+        model = make_model("cascade")
+        model.configure_operation({
+            "mode": "continuous",
+            "product_flow_sp": 4.0e-4,
+            "min_product_flow": 4.0e-4,
+        })
+        target = model.default_setpoint_vector()
+        state = [target[0], target[3], target[1], target[4], target[2], target[5]]
+        disturbance = model.runtime_env(model.disturbance_defaults())
+        steady = model.steady_state_requirements(target, disturbance)
+        context = {
+            "setpoint": target,
+            "disturbance": disturbance,
+            "reward_mode": "economic",
+            "reward_scale": 1.0,
+            "tracking_q_y": [1.0] * 6,
+            "tracking_r_move": 0.0,
+            "terminate_on_runaway": False,
+            "dt": 1.0,
+        }
+        stopped = stage_reward(
+            model,
+            state,
+            [0.0] * 7,
+            state,
+            previous_action=[0.0] * 7,
+            **context,
+        )
+        producing = stage_reward(
+            model,
+            state,
+            steady["action"],
+            state,
+            previous_action=steady["action"],
+            **context,
+        )
+        self.assertLess(stopped.info["profit"], producing.info["profit"])
+        self.assertAlmostEqual(stopped.info["production"], 0.0)
+        self.assertAlmostEqual(stopped.info["product_flow_shortfall_m3s"], 4.0e-4)
+        self.assertAlmostEqual(producing.info["production"], 4.0e-4)
+        self.assertAlmostEqual(producing.info["product_flow_shortfall_m3s"], 0.0)
+
+        batch = make_model("cascade")
+        batch_result = stage_reward(
+            batch,
+            state,
+            [0.0] * 7,
+            state,
+            previous_action=[0.0] * 7,
+            **context,
+        )
+        self.assertAlmostEqual(batch_result.info["profit"], 0.0)
+        self.assertAlmostEqual(batch_result.info["product_flow_shortfall_m3s"], 0.0)
+
     def test_economic_terms_integrate_time_and_use_reported_action_energy(self):
         cstr = make_model("cstr")
         cstr_state = [0.5, 60.0]
@@ -32,7 +87,7 @@ class StageRewardContractTests(unittest.TestCase):
         one_second = stage_reward(
             cstr, cstr_state, cstr_action, cstr_state, dt=1.0, **cstr_context
         )
-        self.assertAlmostEqual(one_second.info["prod"], 2.0 * half_second.info["prod"])
+        self.assertAlmostEqual(one_second.info["production"], 2.0 * half_second.info["production"])
         self.assertAlmostEqual(one_second.info["profit"], 2.0 * half_second.info["profit"])
         self.assertAlmostEqual(one_second.reward, one_second.info["profit"])
         # Feed-pump power is part of action_energy_kw and must now also affect profit.
@@ -118,6 +173,51 @@ class StageRewardContractTests(unittest.TestCase):
                     ))
                     self.assertEqual(env.scorer.report(), score_after_step)
 
+    def test_quadruple_tracking_cost_includes_steady_input_deviation(self):
+        model = apply_model_params(make_model("quadruple"), {
+            "gamma": [0.43, 0.34],
+            "nominal_voltage": [3.15, 3.15],
+        })
+        state = model.initial_state()
+        setpoint = [state[0] + 1.0, state[1]]
+        action = model.default_action()
+        steady_action = model.tracking_steady_state_action(setpoint)
+        result = stage_reward(
+            model,
+            state,
+            action,
+            state,
+            setpoint=setpoint,
+            disturbance=model.runtime_env(model.disturbance_defaults()),
+            previous_action=action,
+            reward_mode="tracking",
+            reward_scale=1.0,
+            tracking_q_y=[1.0, 1.0],
+            tracking_r_move=1.0,
+            tracking_r_steady=1.0,
+            terminate_on_runaway=False,
+        )
+        expected_steady_cost = sum(
+            (value - target) ** 2
+            for value, target in zip(
+                model.physical_action_vector(action),
+                model.physical_action_vector(steady_action),
+            )
+        )
+
+        self.assertAlmostEqual(result.info["tracking_move_cost"], 0.0)
+        self.assertAlmostEqual(result.info["tracking_error_cost"], 1.0)
+        self.assertAlmostEqual(result.info["tracking_steady_cost"], expected_steady_cost)
+        self.assertEqual(
+            result.info["tracking_steady_action"],
+            model.physical_action_vector(steady_action),
+        )
+        self.assertAlmostEqual(
+            result.info["tracking_cost"],
+            result.info["tracking_error_cost"] + result.info["tracking_steady_cost"],
+        )
+        self.assertAlmostEqual(result.reward, -result.info["tracking_cost"])
+
     def test_stage_reward_repeated_calls_are_side_effect_free(self):
         env = AIOGymNativeEnv(
             "cstr",
@@ -139,6 +239,7 @@ class StageRewardContractTests(unittest.TestCase):
             "reward_scale": env.reward_scale,
             "tracking_q_y": tuple(env.tracking_q_y),
             "tracking_r_move": env.tracking_r_move,
+            "tracking_r_steady": env.tracking_r_steady,
             "terminate_on_runaway": env.terminate_on_runaway,
             "economic_config": copy.deepcopy(env._econ),
         }
@@ -272,7 +373,3 @@ class StageRewardContractTests(unittest.TestCase):
         state = list(env.integ.x)
         with self.assertRaisesRegex(ValueError, "finite scalar"):
             env.evaluate_transition(state, np.array([0.5, 0.5], dtype=np.float32), state)
-
-
-if __name__ == "__main__":
-    unittest.main()

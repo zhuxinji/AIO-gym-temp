@@ -49,7 +49,11 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
             })
             continue
         if name == "oracle":
-            mode = "tracking" if args.objective == "tracking" else baseline_protocol.env_reward_mode
+            mode = (
+                "tracking"
+                if baseline_protocol.objective == "tracking"
+                else baseline_protocol.env_reward_mode
+            )
             specs.append({
                 "name": name,
                 "protocol": baseline_protocol,
@@ -66,30 +70,6 @@ def controller_specs(args, baseline_protocol: BenchmarkProtocol):
     return specs
 
 
-def run_spec(spec: dict, scenario: str):
-    return run_evaluation_case(
-        scenario=scenario,
-        controller=spec["name"],
-        protocol=spec["protocol"],
-        seeds=spec["seed_list"],
-        controller_config=spec.get("config") or {},
-        include_episodes=True,
-    )["result"]
-
-
-def rollout_spec(spec: dict, scenario: str, max_steps: int | None = None):
-    return run_evaluation_case(
-        scenario=scenario,
-        controller=spec["name"],
-        protocol=spec["protocol"],
-        seeds=spec["seed_list"],
-        controller_config=spec.get("config") or {},
-        include_episodes=False,
-        save_rollout=True,
-        rollout_steps=max_steps,
-    )["rollout"]
-
-
 def figure_paths(out_path: str, scenario: str):
     base, _ = os.path.splitext(out_path)
     return {
@@ -103,7 +83,12 @@ def main():
         description="Run one scenario/objective/controller benchmark from the command line."
     )
     ap.add_argument("--scenario", default="cstr", choices=SCENARIOS)
-    ap.add_argument("--objective", default="economic", choices=["economic", "tracking", "robustness", "safety", "kpi"])
+    ap.add_argument(
+        "--objective",
+        default=None,
+        choices=["economic", "tracking", "robustness", "safety", "kpi"],
+        help="explicit evaluation objective; otherwise use task.default_objective",
+    )
     ap.add_argument("--task", default=None, help="named scenario task profile")
     ap.add_argument("--controllers", default="pid,mpc")
     ap.add_argument("--controller-profile", default=None, help="controller tuning profile for PID/MPC baselines")
@@ -166,7 +151,8 @@ def main():
         "benchmark": "controller_benchmark",
         "scenario": args.scenario,
         "task": baseline_protocol.metadata()["task_identity"]["name"],
-        "objective": args.objective,
+        "objective": baseline_protocol.objective,
+        "objective_source": baseline_protocol.objective_source,
         "controllers": [spec["name"] for spec in specs],
         "metric": primary_metric_for_objective(baseline_protocol.objective),
         "metric_direction": metric_direction(primary_metric_for_objective(baseline_protocol.objective)),
@@ -197,9 +183,9 @@ def main():
     for row in payload["rows"]:
         metric = row["metric"]
         print(
-            f"{row['name']:18s} {row['control_structure']:18s} "
+            f"{row['controller']:18s} {row['control_structure']:18s} "
             f"{metric}={row[metric]:9.2f} +/- {row[f'{metric}_std']:.2f} "
-            f"kpi={row['kpi']:8.2f} profit={row['profit']:8.2f} "
+            f"score={row['normalized_score']:8.2f} profit={row['profit']:8.2f} "
             f"track={row['track']:8.2f} constraint={row['constraint']:8.2f} "
             f"safety={row.get('constraint_violation_count', 0):6.1f} "
             f"status={row.get('controller_status', 'ok'):8s} "

@@ -14,6 +14,7 @@ import math
 RHO = 1000.0
 CP = 4186.0
 G = 9.81
+# Volumetric heat capacity of liquid water, J/(m3*K).
 RHO_CP = RHO * CP
 
 
@@ -30,6 +31,8 @@ def _is_model_instance(obj):
 
 
 class _NumericOps:
+    symbolic = False
+
     @staticmethod
     def sqrt(v):
         return math.sqrt(v)
@@ -67,6 +70,10 @@ class _NumericOps:
         return a if a < b else b
 
     @staticmethod
+    def if_else(condition, when_true, when_false):
+        return when_true if condition else when_false
+
+    @staticmethod
     def abs(v):
         return abs(v)
 
@@ -77,6 +84,8 @@ class _NumericOps:
 
 def _casadi_ops(ca):
     class _CasadiOps:
+        symbolic = True
+
         @staticmethod
         def sqrt(v):
             return ca.sqrt(v)
@@ -114,6 +123,10 @@ def _casadi_ops(ca):
             return ca.fmin(a, b)
 
         @staticmethod
+        def if_else(condition, when_true, when_false):
+            return ca.if_else(condition, when_true, when_false)
+
+        @staticmethod
         def abs(v):
             return ca.fabs(v)
 
@@ -137,6 +150,7 @@ class ProcessModelContract:
 
     display_name = "Process model"
     summary = ""
+    supported_objectives = ("tracking", "economic", "kpi", "robustness", "safety")
     state_names = ()
     state_units = {}
     state_bounds = {}
@@ -239,6 +253,16 @@ class ProcessModelContract:
         if len(values) != expected:
             raise ValueError(f"{self.scenario} expected {expected} action values, got {len(values)}")
         return values
+
+    def physical_action_vector(self, act):
+        """Return actuator values in the model's physical tracking-cost units.
+
+        Models whose canonical action vector is normalized should override this
+        method.  The default preserves existing models whose public actuator
+        vector is already expressed in its reporting unit.
+        """
+
+        return self.action_vector(act)
 
     def default_action(self):
         return [0.5] * self.action_dim()
@@ -351,13 +375,13 @@ class ProcessModelContract:
     def controlled_output_schema(self):
         y0 = list(self.controlled_output(self.initial_state()))
         names = self._vector_names(self.output_names, "y", len(y0))
-        legacy_bounds = self._legacy_controlled_output_bounds()
         rows = []
-        for i, name in enumerate(names):
-            bounds = self.output_bounds.get(name)
-            if bounds is None and i < len(legacy_bounds):
-                bounds = legacy_bounds[i]
-            rows.append({"name": name, "unit": self.output_units.get(name, ""), "bounds": bounds})
+        for name in names:
+            rows.append({
+                "name": name,
+                "unit": self.output_units.get(name, ""),
+                "bounds": self.output_bounds.get(name),
+            })
         return rows
 
     def controlled_output_scales(self):
@@ -371,9 +395,6 @@ class ProcessModelContract:
                     scale = float(hi) - float(lo)
             scales.append(max(float(scale if scale is not None else 1.0), 1e-12))
         return scales
-
-    def _legacy_controlled_output_bounds(self):
-        return [None] * len(list(self.controlled_output(self.initial_state())))
 
     def dynamics_disturbance_specs(self):
         specs = []
@@ -545,6 +566,11 @@ class ProcessModelContract:
 
     def process_constraint_info(self, x, levels, temps, env):
         return {}
+
+    def hard_termination_reasons(self, x, levels, temps, env):
+        """Return unconditional physical termination reasons for a transition."""
+
+        return ()
 
     def process_info(self, x, levels, temps, env):
         return {}

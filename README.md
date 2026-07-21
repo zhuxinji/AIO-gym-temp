@@ -7,8 +7,8 @@ requiring a browser or external simulator.
 
 ## Features
 
-- Seven process scenarios: `cascade`, `quadruple`, `cstr`, `hvac`,
-  `extraction`, `heater`, and `crystallization`.
+- Eight process scenarios: `cascade`, `cascade_recirculating`, `quadruple`,
+  `cstr`, `hvac`, `extraction`, `heater`, and `crystallization`.
 - A generic model contract based on state `x`, action `u`, controlled output
   `y`, setpoint `y_sp`, and declared disturbances.
 - PID, linear MPC, nonlinear MPC oracle, Python policy, SB3, and ONNX
@@ -70,13 +70,13 @@ while not (terminated or truncated):
 env.close()
 ```
 
-The direct factory accepts model and benchmark-objective options:
+The direct factory accepts scenario, task, and benchmark-objective options:
 
 ```python
 import aiogym
 
 env = aiogym.make_env(
-    model="quadruple",
+    scenario="quadruple",
     task="minimum-phase-classic",
     objective="tracking",
     seed=7,
@@ -85,7 +85,12 @@ env = aiogym.make_env(
 )
 ```
 
-`scenario`/`model` selects the process, `task` selects the operating point and
+`dynamic` controls generic automatically generated within-episode events; it
+does not switch the process differential equations on or off. Named tasks can
+disable generic events and still declare deterministic setpoint or disturbance
+schedules.
+
+`scenario` selects the process, `task` selects the operating point and
 experiment, and `objective` selects scoring. Reproducible benchmark artifacts
 record all three identities separately.
 
@@ -98,6 +103,9 @@ action      = flat u vector in [0, 1]
 
 Set `action_mode="setpoint"` to evaluate supervisory policies over the built-in
 PID layer when the selected model declares a supervisory layout.
+
+See the [public API guide](docs/public_api.md) for the complete model,
+environment, task, objective, controller, and benchmark calling hierarchy.
 
 ## Benchmarking
 
@@ -124,6 +132,45 @@ their rankings:
 ```bash
 aiogym-suite-benchmark --suite quadruple-phase-comparison --episodes 1
 ```
+
+Run the heated-tank cascade as an explicit continuous-production economic task:
+
+```bash
+aiogym-single-benchmark \
+  --scenario cascade \
+  --task continuous-benchmark \
+  --objective economic \
+  --controllers pid,mpc
+```
+
+Direct `cascade` environments retain batch semantics. The
+continuous task's `4.0e-4 m3/s` target is an assumed benchmark throughput, not a
+validated equipment rating. See [the cascade scenario guide](docs/scenarios/cascade.md).
+
+Run the PDF-derived closed-loop retrofit independently from the historical
+open cascade:
+
+```bash
+aiogym-single-benchmark \
+  --scenario cascade_recirculating \
+  --task commissioning \
+  --objective tracking \
+  --controllers pid,mpc,oracle
+```
+
+Run all four formal recirculating tasks under their task-owned default
+objectives with PID and MPC:
+
+```bash
+aiogym-suite-benchmark \
+  --suite cascade-recirculating \
+  --episodes 3
+```
+
+This scenario has one 2 kW Tank 1 heater, four actuator actions, passive
+overflow returns to Tank 3, and no production-economic objective. See the
+[recirculating scenario guide](docs/scenarios/cascade_recirculating.md) and
+[accuracy/authenticity report](docs/reports/cascade-recirculating-accuracy-authenticity.md).
 
 Run all six formal quadruple-tank tasks with PID, MPC, and NMPC Oracle on every
 task:
@@ -262,13 +309,10 @@ aiogym/
 
 ## Validation
 
-Run the backend test entrypoints from the repository root:
+Run the complete backend test suite from the repository root:
 
 ```bash
-python aiogym/tests/test_interface.py
-python aiogym/tests/test_regressions.py
-python aiogym/tests/test_crystallization.py
-python -m unittest aiogym.tests.test_objectives aiogym.tests.test_transitions -v
+python -m pytest -q
 ```
 
 Run a short end-to-end benchmark check:

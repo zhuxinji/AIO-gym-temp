@@ -119,6 +119,12 @@ class QuadrupleModel(ProcessModelContract):
         maximum = float(self.p["max_voltage"])
         return [float(value) / maximum for value in self.p["nominal_voltage"]]
 
+    def physical_action_vector(self, act):
+        """Map canonical pump commands in [0, 1] to physical volts."""
+
+        maximum = float(self.p["max_voltage"])
+        return [value * maximum for value in self.action_vector(act)]
+
     def mpc_init(self):
         return self.default_action()
 
@@ -148,6 +154,8 @@ class QuadrupleModel(ProcessModelContract):
         especially useful in the nonminimum-phase configuration, where a short
         prediction horizon otherwise rewards the inverse response and can pick
         the wrong pump allocation before the eventual benefit is visible.
+        Returns ``None`` when the steady-state map is singular and no unique
+        target-specific input exists.
         """
 
         target = [max(float(value), 0.0) for value in y_sp]
@@ -167,7 +175,9 @@ class QuadrupleModel(ProcessModelContract):
         )
         determinant = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
         if abs(determinant) < 1e-12:
-            return self.default_action()
+            # At the zero boundary the lower-tank steady-state map is singular,
+            # so there is no unique target-specific steady action to score.
+            return None
         v1 = (required[0] * matrix[1][1] - matrix[0][1] * required[1]) / determinant
         v2 = (matrix[0][0] * required[1] - required[0] * matrix[1][0]) / determinant
         vmax = float(self.p["max_voltage"])

@@ -74,6 +74,8 @@ def validate_model_readiness(model_or_name, *, integration_dt: float | None = No
     not_checked = ["mass_balance", "energy_balance", "reference_parameter_fidelity"]
     if "mass_balance" in checked_names:
         not_checked.remove("mass_balance")
+    if "energy_balance" in checked_names:
+        not_checked.remove("energy_balance")
     if "reference_parameters" in checked_names:
         not_checked.remove("reference_parameter_fidelity")
     not_applicable = list(getattr(model, "not_applicable_physics", ()))

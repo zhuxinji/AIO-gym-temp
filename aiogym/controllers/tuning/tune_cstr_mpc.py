@@ -38,7 +38,6 @@ def main():
     grid = {
         "P": [20, 40, 60],
         "move_supp": [0.005, 0.02, 0.08, 0.2],
-        "du_max": [0.25, 0.5, 1.0],
         "cv_scale": [1.5, 3.0, 6.0, 12.0],
     }
     keys = list(grid)
@@ -59,7 +58,7 @@ def main():
     for r in results[:12]:
         print(
             f"track={r['track']:.3f} return={r['return']:.3f} constraint={r['constraint']:.3f} "
-            f"P={r['P']} move_supp={r['move_supp']} du_max={r['du_max']} cv_scale={r['cv_scale']}"
+            f"P={r['P']} move_supp={r['move_supp']} cv_scale={r['cv_scale']}"
         )
 
     final = []
@@ -70,7 +69,7 @@ def main():
         final.append({**params, **rep})
         print(
             f"track={rep['track']:.3f} return={rep['return']:.3f} constraint={rep['constraint']:.3f} "
-            f"P={params['P']} move_supp={params['move_supp']} du_max={params['du_max']} cv_scale={params['cv_scale']}"
+            f"P={params['P']} move_supp={params['move_supp']} cv_scale={params['cv_scale']}"
         )
 
     final.sort(key=lambda r: (r["track"], r["constraint"]))
@@ -78,7 +77,7 @@ def main():
     for r in final[:5]:
         print(
             f"track={r['track']:.3f} return={r['return']:.3f} constraint={r['constraint']:.3f} "
-            f"P={r['P']} move_supp={r['move_supp']} du_max={r['du_max']} cv_scale={r['cv_scale']}"
+            f"P={r['P']} move_supp={r['move_supp']} cv_scale={r['cv_scale']}"
         )
 
 

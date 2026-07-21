@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Regression tests for public construction and benchmark edge cases."""
 from __future__ import annotations
 
@@ -11,8 +10,6 @@ import tempfile
 from types import SimpleNamespace
 
 import numpy as np
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from aiogym import make_env
 from aiogym._internal.config import parse_seed_list
@@ -32,10 +29,11 @@ from aiogym.controllers.pid import PIDAgent
 from aiogym.controllers.onnx import ONNXPolicyController
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import (
-    BenchmarkConfig,
+    BenchmarkCase,
     BenchmarkProtocol,
     check_benchmark_artifacts,
     evaluate_controller,
+    load_task_profile,
     plot_results,
     resolve_protocol,
     run_benchmark,
@@ -62,7 +60,7 @@ def test_skipped_rows_are_not_plotted():
                 "scenario": "cstr",
                 "objective": "tracking",
                 "controller": "missing",
-                "status": "skipped",
+                "execution_status": "skipped",
                 "metric": "tracking_cost",
             }],
         }
@@ -91,7 +89,7 @@ def test_robustness_extrema_respect_metric_direction():
 
 def test_make_env_preserves_non_protocol_overrides():
     env = make_env(
-        model="cstr",
+        scenario="cstr",
         objective="tracking",
         custom_stage_reward=lambda *_: 123.0,
         episode_steps=1,
@@ -107,8 +105,8 @@ def test_make_env_preserves_non_protocol_overrides():
 
 def test_direct_model_instances_are_isolated_per_environment():
     shared = make_model("cstr")
-    randomized = AIOGymNativeEnv(custom_model=shared, randomize_plant=True)
-    nominal = AIOGymNativeEnv(custom_model=shared)
+    randomized = AIOGymNativeEnv(shared, randomize_plant=True)
+    nominal = AIOGymNativeEnv(shared)
 
     randomized.reset(seed=1)
     assert randomized.model is not nominal.model
@@ -279,18 +277,26 @@ def test_onnx_policy_controller_validates_and_runs_export_contract():
 
 def test_invalid_suite_controller_is_failed_not_skipped():
     protocol = BenchmarkProtocol.tracking("cstr", episode_steps=1)
+    case = BenchmarkCase.from_protocol(
+        protocol,
+        controller="typo",
+        seeds=[0],
+        case_id="tracking:cstr:default:typo",
+    )
     result = run_case({
-        "name": "tracking:cstr:typo",
+        "name": "tracking:cstr:default:typo",
         "scenario": "cstr",
+        "task": "default",
         "objective": "tracking",
         "controller": "typo",
         "action_mode": "actuator",
         "controller_config": {},
         "protocol": protocol,
+        "case_spec": case,
         "seeds": [0],
     }, include_tracebacks=False)
     assert result["status"] == "failed"
-    assert result["row"]["status"] == "failed"
+    assert result["row"]["execution_status"] == "failed"
 
 
 def test_hvac_oracle_builds_with_casadi_outputs():
@@ -306,12 +312,17 @@ def test_hvac_oracle_builds_with_casadi_outputs():
 
 
 def test_oracle_scenario_overrides_are_exposed_in_metadata():
-    hvac = make_controller("oracle", scenario="hvac", config={"mode": "tracking"}).metadata()
-    extraction = make_controller("oracle", scenario="extraction", config={"mode": "tracking"}).metadata()
-    heater = make_controller("oracle", scenario="heater", config={"mode": "tracking"}).metadata()
+    hvac = make_controller("oracle", scenario="hvac", config={"profile": "tracking", "mode": "tracking"}).metadata()
+    extraction = make_controller("oracle", scenario="extraction", config={"profile": "tracking", "mode": "tracking"}).metadata()
+    heater = make_controller("oracle", scenario="heater", config={"profile": "tracking", "mode": "tracking"}).metadata()
     heater_economic = make_controller("oracle", scenario="heater").metadata()
-    assert hvac["du_max"] == 0.5 and hvac["warm_start"] is True
+    assert hvac["warm_start"] is True
     assert extraction["control_dt"] == 0.05 and extraction["ipopt_max_iter"] == 120
+    for tracking_oracle in (hvac, extraction, heater):
+        assert tracking_oracle["r_move"] == 0.0
+        assert tracking_oracle["terminal_weight"] == 0.0
+        assert "du_max" not in tracking_oracle
+        assert "steady_input_weight" not in tracking_oracle
     assert heater["transcription"] == "single_shooting"
     assert heater["enforce_state_bounds"] is False
     assert heater["enforce_temperature_cap"] is False
@@ -321,7 +332,9 @@ def test_oracle_scenario_overrides_are_exposed_in_metadata():
 
 def test_tracking_suite_uses_tracking_oracle_objective():
     args = SimpleNamespace(sb3_path=None, sb3_algo="sac", onnx_path=None)
-    assert controller_config_for(args, "oracle", "actuator", "tracking") == {"mode": "tracking"}
+    assert controller_config_for(args, "oracle", "actuator", "tracking") == {
+        "profile": "tracking", "mode": "tracking"
+    }
     assert controller_config_for(args, "oracle", "actuator", "economic") == {}
 
 
@@ -343,13 +356,14 @@ def test_artifact_check_accepts_failed_rows_and_model_card_paths():
                     "objective": "tracking",
                     "action_mode": "actuator",
                     "controller": "PID",
-                    "status": "passed",
-                    "metric": "tracking_cost",
+                    "execution_status": "passed",
+                    "metric": "tracking_error_cost",
                     "tracking_cost": 0.5,
+                    "tracking_error_cost": 0.5,
                     "tracking_return": -0.5,
                     "tracking_mse": 0.5,
                     "tracking_iae": 1.0,
-                    "kpi": 90.0,
+                    "normalized_score": 90.0,
                     "profit": 0.0,
                     "return": -1.0,
                     "track": 1.0,
@@ -363,8 +377,8 @@ def test_artifact_check_accepts_failed_rows_and_model_card_paths():
                     "objective": "tracking",
                     "action_mode": "actuator",
                     "controller": "oracle",
-                    "status": "failed",
-                    "metric": "tracking_cost",
+                    "execution_status": "failed",
+                    "metric": "tracking_error_cost",
                     "message": "boom",
                     "episodes": 0,
                     "seed_list": [0],
@@ -422,8 +436,6 @@ def test_predictive_controller_configs_fail_at_construction():
         ({"P": 0}, "P"),
         ({"Ts": 0}, "Ts"),
         ({"move_supp": -1}, "move_supp"),
-        ({"du_max": float("nan")}, "du_max"),
-        ({"steady_input_weight": -1.0}, "steady_input_weight"),
         ({"cv_scale": [1.0, 2.0, 3.0]}, "cv_scale"),
         ({"cv_scale": [0.0]}, "cv_scale"),
     )
@@ -439,9 +451,7 @@ def test_predictive_controller_configs_fail_at_construction():
         ({"horizon": 0}, "horizon"),
         ({"control_dt": 0}, "control_dt"),
         ({"mode": "trackingg"}, "mode"),
-        ({"nsub_max": 0}, "nsub_max"),
         ({"ipopt_tol": float("inf")}, "ipopt_tol"),
-        ({"steady_input_weight": -1.0}, "steady_input_weight"),
         ({"terminal_weight": -1.0}, "terminal_weight"),
         ({"q_y": [1.0, 2.0]}, "q_y"),
         ({"transcription": "collocation"}, "transcription"),
@@ -490,12 +500,16 @@ def test_removed_compatibility_surfaces_stay_removed():
 
     for build in (
         lambda: AIOGymNativeEnv("cstr", reward_mode="track"),
+        lambda: AIOGymNativeEnv(custom_model=make_model("cstr")),
         lambda: BenchmarkProtocol.tracking("cstr", reward_mode="track"),
+        lambda: make_env(config={"model": "cstr", "objective": "tracking"}),
+        lambda: run_benchmark({"scenario": "cstr", "objective": "tracking", "controller": "pid"}),
+        lambda: load_task_profile("quadruple/minimum-phase-tracking"),
         lambda: make_controller("nmpc", scenario="cstr"),
     ):
         try:
             build()
-        except (KeyError, TypeError, ValueError):
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
             pass
         else:
             raise AssertionError("removed compatibility input should be rejected")
@@ -563,12 +577,12 @@ def test_public_benchmark_supports_strict_and_batch_error_modes():
         base_config = {
             "scenario": "cstr",
             "objective": "tracking",
-            "controller": "typo",
+            "controllers": ["typo"],
             "seeds": [0],
             "episode_steps": 1,
         }
         batch = run_benchmark({**base_config, "output_dir": Path(tmpdir, "batch")})
-        assert batch["rows"][0]["status"] == "failed"
+        assert batch["rows"][0]["execution_status"] == "failed"
         assert batch["errors"][0]["controller"] == "typo"
 
         try:
@@ -586,7 +600,7 @@ def test_public_benchmark_supports_strict_and_batch_error_modes():
 def test_public_benchmark_rejects_empty_worklists():
     for options, expected in (({"controllers": []}, "controller"), ({"seeds": []}, "seed")):
         try:
-            run_benchmark({"scenario": "cstr", **options})
+            run_benchmark({"scenario": "cstr", "objective": "tracking", **options})
         except ValueError as ex:
             assert expected in str(ex)
         else:
@@ -612,11 +626,11 @@ def test_direct_evaluation_rejects_empty_episode_worklists():
 
     protocol = BenchmarkProtocol.tracking("cstr", episode_steps=1)
     try:
-        BenchmarkConfig.from_protocol(protocol, seeds=[])
+        BenchmarkCase.from_protocol(protocol, controller="pid", seeds=[])
     except ValueError as ex:
-        assert "seeds must contain" in str(ex)
+        assert "seeds must not be empty" in str(ex)
     else:
-        raise AssertionError("BenchmarkConfig should reject explicit empty seeds")
+        raise AssertionError("BenchmarkCase should reject explicit empty seeds")
 
 
 def test_benchmark_protocol_rejects_invalid_metadata():
@@ -644,33 +658,3 @@ def test_benchmark_protocol_rejects_invalid_metadata():
         assert "objective must be one of" in str(ex)
     else:
         raise AssertionError("unknown protocol objectives should produce a clear ValueError")
-
-
-if __name__ == "__main__":
-    test_skipped_rows_are_not_plotted()
-    test_robustness_extrema_respect_metric_direction()
-    test_make_env_preserves_non_protocol_overrides()
-    test_direct_model_instances_are_isolated_per_environment()
-    test_model_parameter_overrides_follow_schema_bounds()
-    test_registered_name_must_match_model_scenario()
-    test_controller_registration_requires_explicit_replacement()
-    test_policy_adapters_do_not_mask_internal_type_errors()
-    test_onnx_policy_controller_validates_and_runs_export_contract()
-    test_invalid_suite_controller_is_failed_not_skipped()
-    test_hvac_oracle_builds_with_casadi_outputs()
-    test_oracle_scenario_overrides_are_exposed_in_metadata()
-    test_tracking_suite_uses_tracking_oracle_objective()
-    test_artifact_check_accepts_failed_rows_and_model_card_paths()
-    test_single_benchmark_accepts_basename_output()
-    test_pid_json_is_the_single_default_config_source()
-    test_predictive_controller_configs_fail_at_construction()
-    test_invalid_environment_configuration_fails_early()
-    test_removed_compatibility_surfaces_stay_removed()
-    test_invalid_actions_fail_before_reaching_dynamics()
-    test_explicit_seed_list_overrides_episode_count()
-    test_training_outputs_are_unique_unless_explicitly_named()
-    test_public_benchmark_supports_strict_and_batch_error_modes()
-    test_public_benchmark_rejects_empty_worklists()
-    test_direct_evaluation_rejects_empty_episode_worklists()
-    test_benchmark_protocol_rejects_invalid_metadata()
-    print("ALL REGRESSION TESTS PASS OK")

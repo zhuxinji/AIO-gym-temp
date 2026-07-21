@@ -3,5 +3,11 @@
   "scenarios": "ALL_SCENARIOS",
   "objectives": ["kpi"],
   "controllers": ["sb3"],
-  "action_mode": "actuator"
+  "action_mode": "actuator",
+  "dynamic": true,
+  "randomize": true,
+  "randomize_setpoints": true,
+  "randomize_plant": true,
+  "plant_drift": true,
+  "noise": false
 }

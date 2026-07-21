@@ -14,6 +14,7 @@ from .core import (
 from .declarative import DeclarativeProcessModel, define_model
 from .scenarios import (
     CascadeModel,
+    RecirculatingCascadeModel,
     QuadrupleModel,
     CSTRModel,
     HVACModel,
@@ -60,6 +61,7 @@ __all__ = [
     "define_model",
     "Integrator",
     "CascadeModel",
+    "RecirculatingCascadeModel",
     "QuadrupleModel",
     "CSTRModel",
     "HVACModel",

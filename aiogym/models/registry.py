@@ -6,6 +6,7 @@ from typing import Mapping
 from .core import ProcessModelContract, _is_model_instance
 from .scenarios import (
     CascadeModel,
+    RecirculatingCascadeModel,
     QuadrupleModel,
     CSTRModel,
     HVACModel,
@@ -17,6 +18,7 @@ from .scenarios import (
 
 MODELS = {
     "cascade": CascadeModel,
+    "cascade_recirculating": RecirculatingCascadeModel,
     "quadruple": QuadrupleModel,
     "cstr": CSTRModel,
     "hvac": HVACModel,

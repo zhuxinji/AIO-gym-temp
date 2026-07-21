@@ -6,56 +6,65 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .._internal.config import as_list, load_config, protocol_data
-from .._internal.serialization import jsonable, write_json
+from .._internal.serialization import jsonable
 from .protocols import (
     PUBLIC_BENCHMARK_SCHEMA_VERSION,
-    BenchmarkConfig,
-    BenchmarkProtocol,
+    BenchmarkCase,
     resolve_protocol,
 )
 from .core import build_evaluation_report
-from .runner import run_evaluation_case
+from .runner import execute_benchmark_case
 
 
-def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> dict:
+def run_benchmark(
+    config: str | Path | Mapping[str, Any],
+    *,
+    objective: str | None = None,
+) -> dict:
     """Run a config-driven controller benchmark and write reusable artifacts."""
 
     cfg = _benchmark_config_dict(config)
-    scenario = cfg.get("scenario", cfg.get("model", "cstr"))
-    config_protocol = config.protocol if isinstance(config, BenchmarkConfig) else None
-    objective_spec = config_protocol if config_protocol is not None else cfg.get(
-        "objective", cfg.get("protocol", "tracking")
-    )
-    objective_name = (
-        objective_spec.get("objective", "tracking")
-        if isinstance(objective_spec, Mapping)
-        else str(objective_spec)
-    )
-    if isinstance(objective_spec, BenchmarkProtocol):
-        objective_name = objective_spec.objective
+    removed = sorted(set(cfg) & {
+        "model", "env", "protocol_kwargs", "controller", "seed_list",
+        "seed", "raise_on_error", "run_dir", "controller_config",
+    })
+    if removed:
+        raise ValueError(
+            f"unsupported benchmark config field(s): {', '.join(removed)}; "
+            "use the canonical public API fields"
+        )
+    scenario = cfg.get("scenario", "cstr")
     protocol_options = protocol_data(cfg)
-    protocol_options.update(dict(cfg.get("env", {})))
-    protocol_options.update(dict(cfg.get("protocol_kwargs", {})))
-    protocol_options["objective"] = objective_name
-    protocol = resolve_protocol(scenario, objective=objective_spec, data=protocol_options)
+    environment = cfg.get("environment", {})
+    if not isinstance(environment, Mapping):
+        raise TypeError("config['environment'] must be a mapping")
+    protocol_options.update(dict(environment))
+    raw_protocol = cfg.get("protocol")
+    if isinstance(raw_protocol, Mapping):
+        protocol_options.update(dict(raw_protocol))
+    elif raw_protocol is not None:
+        raise TypeError("config['protocol'] must be a mapping")
+    protocol = resolve_protocol(
+        scenario,
+        objective=objective,
+        data=protocol_options,
+    )
+    objective_name = protocol.objective
     task_meta = protocol.metadata()["task_identity"]
-    controller_names = as_list(cfg.get("controllers", cfg.get("controller", "pid")))
+    controller_names = as_list(cfg.get("controllers", ["pid"]))
     if not controller_names:
         raise ValueError("benchmark must include at least one controller")
     controller_configs = dict(cfg.get("controller_configs", {}))
-    seeds = tuple(int(seed) for seed in cfg.get("seeds", cfg.get("seed_list", [cfg.get("seed", 0)])))
+    seeds = tuple(int(seed) for seed in cfg.get("seeds", [0]))
     if not seeds:
         raise ValueError("benchmark must include at least one seed")
-    strict = bool(cfg.get("strict", cfg.get("raise_on_error", False)))
+    strict = bool(cfg.get("strict", False))
     include_episodes = bool(cfg.get("include_episodes", True))
     save_rollouts = bool(cfg.get("save_rollouts", False))
     rollout_steps = cfg.get("rollout_steps")
     out_dir = Path(cfg.get(
         "output_dir",
-        cfg.get(
-            "run_dir",
-            f"aiogym/runs/benchmark_{scenario}_{task_meta['name']}_{objective_name}",
-        ),
+        f"aiogym/runs/benchmark_{scenario}_{task_meta['name']}_{objective_name}",
     ))
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -63,47 +72,48 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
     rows = []
     rollouts = []
     errors = []
+    case_specs = []
     for name in controller_names:
-        try:
-            case = run_evaluation_case(
-                scenario=scenario,
-                controller=str(name),
-                protocol=protocol,
-                seeds=seeds,
-                controller_config=controller_configs.get(str(name), cfg.get("controller_config", {})),
-                include_episodes=include_episodes,
-                save_rollout=save_rollouts,
-                rollout_steps=rollout_steps,
-            )
-            result = case["result"]
-            results.append(result)
-            rows.append(case["row"])
-            if case["rollout"] is not None:
-                rollouts.append(case["rollout"])
-        except Exception as ex:
+        case_spec = BenchmarkCase.from_protocol(
+            protocol,
+            controller=str(name),
+            seeds=seeds,
+            controller_config=controller_configs.get(str(name), {}),
+        )
+        case_specs.append(case_spec)
+        artifact = execute_benchmark_case(
+            case_spec,
+            include_episodes=include_episodes,
+            save_rollout=save_rollouts,
+            rollout_steps=rollout_steps,
+        )
+        if artifact["status"] == "failed":
             if strict:
-                raise RuntimeError(f"controller '{name}' benchmark failed: {ex}") from ex
-            rows.append({
-                "scenario": scenario,
-                "task": task_meta["name"],
-                "task_status": task_meta["status"],
-                "task_profile_hash": task_meta["profile_hash"],
-                "objective": protocol.objective,
-                "controller": str(name),
-                "status": "failed",
-                "message": str(ex),
-            })
-            errors.append({
-                "controller": str(name),
-                "type": ex.__class__.__name__,
-                "message": str(ex),
-            })
+                raise RuntimeError(
+                    f"controller '{name}' benchmark failed: "
+                    f"{artifact['error']['message']}"
+                )
+            rows.append(artifact["row"])
+            errors.append({"controller": str(name), **artifact["error"]})
+            continue
+        results.append(artifact["result"])
+        rows.append(artifact["row"])
+        if artifact["rollout"] is not None:
+            rollouts.append(artifact["rollout"])
 
-    benchmark_config = BenchmarkConfig.from_protocol(
-        protocol,
-        controller=",".join(str(name) for name in controller_names),
-        seeds=seeds,
-    ).metadata()
+    benchmark_config = {
+        "schema_version": PUBLIC_BENCHMARK_SCHEMA_VERSION,
+        "scenario": scenario,
+        "task": task_meta["name"],
+        "task_status": task_meta["status"],
+        "task_profile_hash": task_meta["profile_hash"],
+        "objective": protocol.objective,
+        "objective_source": protocol.objective_source,
+        "controllers": [str(name) for name in controller_names],
+        "seed_list": list(seeds),
+        "protocol": protocol.metadata(),
+        "cases": [case.metadata() for case in case_specs],
+    }
     payload = {
         "schema_version": PUBLIC_BENCHMARK_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -116,6 +126,7 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
         "task_status": task_meta["status"],
         "task_profile_hash": task_meta["profile_hash"],
         "objective": protocol.objective,
+        "objective_source": protocol.objective_source,
         "controllers": [str(name) for name in controller_names],
         "rows": rows,
         "results": results,
@@ -123,19 +134,12 @@ def run_benchmark(config: str | Path | Mapping[str, Any] | BenchmarkConfig) -> d
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
-    benchmark_path = out_dir / "benchmark.json"
-    from .artifacts import write_benchmark_artifacts
+    from .artifacts import finalize_benchmark_artifacts
 
-    payload["artifacts"] = write_benchmark_artifacts(out_dir, payload)
-    write_json(benchmark_path, payload)
-    return payload
+    return finalize_benchmark_artifacts(out_dir, payload)
 
 
 def _benchmark_config_dict(
-    config: str | Path | Mapping[str, Any] | BenchmarkConfig,
+    config: str | Path | Mapping[str, Any],
 ) -> dict[str, Any]:
-    if isinstance(config, BenchmarkConfig):
-        data = config.metadata()
-        data["protocol"] = config.protocol
-        return data
     return load_config(config)

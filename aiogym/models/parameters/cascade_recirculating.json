@@ -1,0 +1,201 @@
+{
+  "schema_version": "aiogym.parameter_profile.v1",
+  "scenario": "cascade_recirculating",
+  "status": "design-provisional",
+  "fidelity": "first-principles-closed-loop-structure-with-partial-design-source",
+  "time_unit": "s",
+  "parameters": {
+    "area": {
+      "value": [0.04, 0.04, 0.15],
+      "unit": "m2",
+      "valid_range": [[0.03, 0.05], [0.03, 0.05], [0.12, 0.20]],
+      "source": "Range-derived interpretation of the three-tank design PDF",
+      "source_locator": "三级水箱加热系统.pdf page 1 gives 15-20 L and 0.4-0.5 m per small tank; pages 2-7 make Tank 3 the buffer replacing the former 60-80 L reservoir",
+      "status": "design-range-derived",
+      "description": "Constant equivalent areas selected so 0.40 m represents 16 L in Tank 1/Tank 2 and 60 L in Tank 3. The source configurations conflict, so field level-volume calibration remains required."
+    },
+    "height_max": {
+      "value": [0.5, 0.5, 0.5],
+      "unit": "m",
+      "valid_range": [0.4, 0.5],
+      "source": "Three-tank design PDF reference range",
+      "source_locator": "三级水箱加热系统.pdf page 1 states 0.4-0.5 m per tank; the retrofit drawing states that all dimensions are reference-only",
+      "status": "design-range-derived",
+      "description": "Provisional upper effective liquid height chosen at the top of the PDF reference range; Tank 3 applicability still requires field confirmation."
+    },
+    "cv_interstage": {
+      "value": [0.0026, 0.0026],
+      "unit": "m2.5/s",
+      "source": "AIO-Gym legacy cascade coefficient",
+      "source_locator": "No V12 or V23 flow test, valve curve, or discharge coefficient is bundled",
+      "status": "legacy-unverified",
+      "description": "Provisional Torricelli coefficients for V12 and V23. The PDF supports gravity flow but not these numerical values."
+    },
+    "overflow_level": {
+      "value": [0.48, 0.48],
+      "unit": "m",
+      "source": "AIO-Gym provisional passive-safety threshold",
+      "source_locator": "The PDF specifies Tank 1/Tank 2 standpipe returns to Tank 3 but gives no standpipe crest elevations",
+      "status": "assumed-benchmark",
+      "description": "Temporary overflow onset at 96% of the revised 0.50 m hard height; the PDF gives no standpipe crest setting."
+    },
+    "cv_overflow": {
+      "value": [0.0052, 0.0052],
+      "unit": "m2.5/s",
+      "source": "AIO-Gym provisional passive-safety capacity",
+      "source_locator": "No standpipe diameter, discharge test, or overflow routing loss data is bundled",
+      "status": "assumed-benchmark",
+      "description": "Temporary overflow coefficients set to twice the legacy interstage coefficient for software safety testing only."
+    },
+    "overflow_head_floor": {
+      "value": 1e-9,
+      "unit": "m",
+      "source": "AIO-Gym numerical convention",
+      "source_locator": "Inactive-overflow square-root derivative guard for CasADi NLP construction",
+      "status": "numerical-assumption",
+      "description": "Used only inside the gated square root; inactive overflow remains exactly zero in both numeric and CasADi backends."
+    },
+    "high_level_trip": {
+      "value": [0.45, 0.45],
+      "unit": "m",
+      "source": "AIO-Gym provisional L3 threshold",
+      "source_locator": "The PDF identifies high-level switches and a hardwired L3 interlock but gives no switch settings",
+      "status": "assumed-benchmark",
+      "description": "Temporary Tank 1/Tank 2 trip at 90% of the revised 0.50 m hard height and below the passive standpipe crest; not a certified protection setting."
+    },
+    "ua_loss": {
+      "value": [40.0, 40.0, 60.0],
+      "unit": "W/K",
+      "source": "AIO-Gym provisional benchmark assignment",
+      "source_locator": "No cooldown test or insulation specification is included in the retrofit PDF",
+      "status": "assumed-benchmark",
+      "description": "Per-tank ambient heat-loss conductances. Separate values allow the acrylic and stainless-steel vessels to be identified later."
+    },
+    "heater_power": {
+      "value": 2000.0,
+      "unit": "W",
+      "source": "Three-tank heating-system retrofit design PDF",
+      "source_locator": "三级水箱加热系统.pdf, drawing and Tank 1/heating sections on pages 2, 4, and 7",
+      "status": "design-specified",
+      "description": "One top-inserted 2 kW immersion heater H1 on Tank 1. Tank 2 is reserved only and Tank 3 is unheated."
+    },
+    "pump_flow_max": {
+      "value": 0.0016,
+      "unit": "m3/s",
+      "source": "AIO-Gym legacy cascade capacity",
+      "source_locator": "The PDF identifies existing P101 but provides no pump curve or rated flow",
+      "status": "legacy-unverified",
+      "description": "Temporary normalized P101 maximum flow pending VFD frequency-flow and system-head tests."
+    },
+    "pump_power_max": {
+      "value": 500.0,
+      "unit": "W",
+      "valid_range": [370.0, 750.0],
+      "source": "PDF pump-power reference range with retrofit budget cross-check",
+      "source_locator": "三级水箱加热系统.pdf page 1 gives 0.37-0.75 kW pump power; pages 5 and 7 give approximately 0.5 kW for pump/electronics combined",
+      "status": "design-range-informed",
+      "description": "Provisional 500 W benchmark inside the PDF pump range, not a P101 nameplate value; the retrofit 0.5 kW figure also includes electronics."
+    },
+    "t_amb": {
+      "value": 20.0,
+      "unit": "degC",
+      "source": "AIO-Gym benchmark convention",
+      "source_locator": "No laboratory ambient design condition is specified by the PDF",
+      "status": "assumed-benchmark",
+      "description": "Default ambient temperature for the lumped heat-loss model."
+    },
+    "h_floor": {
+      "value": 0.001,
+      "unit": "m",
+      "source": "AIO-Gym numerical convention",
+      "source_locator": "Temperature-balance denominator guard",
+      "status": "numerical-assumption",
+      "description": "Numerical volume floor only; it is not a residual-volume or sensor-limit claim."
+    },
+    "pump_min_level": {
+      "value": 0.05,
+      "unit": "m",
+      "source": "AIO-Gym provisional interlock threshold",
+      "source_locator": "The PDF requires Tank 3 low-level pump protection but does not give the LSL setting",
+      "status": "assumed-benchmark",
+      "description": "Temporary P101 dry-run cutoff pending the LSL device setting and pump submergence requirement."
+    },
+    "heater_min_level": {
+      "value": 0.05,
+      "unit": "m",
+      "source": "AIO-Gym provisional interlock threshold",
+      "source_locator": "The PDF requires an H1 dry-fire interlock but does not give the LSL setting",
+      "status": "assumed-benchmark",
+      "description": "Temporary Tank 1 heater cutoff pending immersion depth and LSL documentation."
+    },
+    "temperature_trip": {
+      "value": 92.0,
+      "unit": "degC",
+      "source": "AIO-Gym provisional interlock threshold",
+      "source_locator": "The PDF requires a hardwired over-temperature interlock but does not specify its setting",
+      "status": "assumed-benchmark",
+      "description": "Software representation of the unspecified L4 trip; not a certified protection setting."
+    },
+    "temperature_hard_limit": {
+      "value": 100.0,
+      "unit": "degC",
+      "source": "AIO-Gym single-phase simulation boundary",
+      "source_locator": "The PDF gives no hard temperature limit and the model excludes boiling",
+      "status": "assumed-benchmark",
+      "description": "Simulation termination boundary for an atmospheric-water abstraction, not an equipment rating."
+    }
+  },
+  "references": [
+    {
+      "id": "cascade-retrofit-layout-2024",
+      "title": "三级水箱系统升级布置图（阶梯式方案）及三级水箱加热系统说明",
+      "type": "design-proposal",
+      "drawing": "L-001",
+      "revision": "A",
+      "drawing_date": "2024-05-20",
+      "path": "../三级水箱加热系统.pdf",
+      "locator": "PDF pages 1-7",
+      "limitations": "方案讨论用设备布置图，非最终施工图；尺寸为参考值，现有设备数据仍需现场核验"
+    }
+  ],
+  "validity_domain": {
+    "level_m": [0.0, 0.5],
+    "temperature_degC": [0.0, 100.0],
+    "heater_efficiency_fraction": [0.4, 1.0],
+    "evidence_limit": "Loop topology and the 2 kW Tank 1 heater are design-specified. Geometry and pump power are range-informed interpretations across conflicting proposal versions; valve coefficients, pump flow, heat loss, and protection settings remain unverified.",
+    "reference_geometry": {
+      "small_tank_effective_volume_L": [15.0, 20.0],
+      "tank_height_m": [0.4, 0.5],
+      "tank_3_buffer_volume_candidate_L": [60.0, 80.0],
+      "gravity_drop_V12_m": 0.30,
+      "gravity_drop_V23_m": 0.30,
+      "pump_static_lift_m": 1.7,
+      "layout_bay_dimensions_are_not_vessel_dimensions": true
+    },
+    "assumptions": [
+      "closed liquid inventory with no normal product withdrawal or makeup stream",
+      "three constant-area perfectly mixed tanks with independent provisional geometry and UA",
+      "P101 transfers Tank 3 liquid and enthalpy directly to Tank 1",
+      "V12 and V23 follow one-way Torricelli flow without downstream backpressure",
+      "instantaneous normalized pump, valve, heater, and sensor response",
+      "Tank 1 and Tank 2 passive overflows return mass and enthalpy to Tank 3 using provisional Torricelli coefficients"
+    ]
+  },
+  "nominal_operating_point": {
+    "status": "benchmark-only",
+    "initial_state": [0.4, 20.0, 0.4, 20.0, 0.4, 20.0],
+    "default_setpoint": [0.4, 0.4, 0.4, 30.0, 28.932991890738368, 27.57566937897707],
+    "model_consistent_state": [0.4, 30.0, 0.4, 28.932991890738368, 0.4, 27.57566937897707],
+    "model_consistent_action": [0.05, 0.048650425541052, 0.048650425541052, 0.6059299191840791],
+    "circulation_flow_m3s": 0.00008,
+    "ideal_electric_power_kw": 1.2368598383681584,
+    "state_order": ["h1", "T1", "h2", "T2", "h3", "T3"],
+    "setpoint_order": ["h1", "h2", "h3", "T1", "T2", "T3"],
+    "action_order": ["pump_P101", "valve_V12", "valve_V23", "heater_H1"]
+  },
+  "solver": {
+    "method": "rk4",
+    "max_step": 0.02,
+    "integration_unit": "s"
+  }
+}

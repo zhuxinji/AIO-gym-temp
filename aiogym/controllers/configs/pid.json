@@ -16,6 +16,16 @@
       "demand_u_index": 3,
       "holds": []
     },
+    "cascade_recirculating": {
+      "loops": [
+        {"u_index": 0, "y_index": 0, "pid": [6.0, 0.2, 0.0], "bias": 0.05},
+        {"u_index": 1, "y_index": 1, "pid": [6.0, 0.2, 0.0], "bias": 0.048650425541052},
+        {"u_index": 2, "y_index": 2, "pid": [6.0, 0.2, 0.0], "bias": 0.048650425541052},
+        {"u_index": 3, "y_index": 3, "pid": [0.08, 0.005, 0.0], "bias": 0.6059299191840791}
+      ],
+      "demand_u_index": null,
+      "holds": []
+    },
     "quadruple": {
       "loops": [
         {
@@ -127,16 +137,16 @@
             {
               "u_index": 0,
               "y_index": 0,
-              "pid": [0.2422, 0.01395, 0.0],
+              "pid": [1.0159437333249033, 0.1, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym fixed-protocol family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
             },
             {
               "u_index": 1,
               "y_index": 1,
-              "pid": [0.2689, 0.01256, 0.0],
+              "pid": [2.0, 0.09001698960588032, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym fixed-protocol family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
             }
           ]
         }
@@ -151,14 +161,14 @@
               "y_index": 1,
               "pid": [0.02461, 0.0002324, 0.0],
               "bias": 0.315,
-              "source": "AIO-Gym fixed-protocol family tuning with cross pairing: nonminimum-phase-classic plus pplus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost family tuning with cross pairing: existing benchmark gains retained after 120 random plus 60 refinement samples, seed 20260715"
             },
             {
               "u_index": 1,
               "y_index": 0,
               "pid": [0.07719, 0.0003802, 0.0],
               "bias": 0.315,
-              "source": "AIO-Gym fixed-protocol family tuning with cross pairing: nonminimum-phase-classic plus pplus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost family tuning with cross pairing: existing benchmark gains retained after 120 random plus 60 refinement samples, seed 20260715"
             }
           ]
         }
@@ -171,16 +181,16 @@
             {
               "u_index": 0,
               "y_index": 0,
-              "pid": [0.2478, 0.02, 0.0],
+              "pid": [1.0, 0.07874058903578529, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym fixed-protocol zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
             },
             {
               "u_index": 1,
               "y_index": 1,
-              "pid": [0.14, 0.02, 0.0],
+              "pid": [0.9329673736992764, 0.1, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym fixed-protocol zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost zero-boundary-stress tuning, 120 random plus 60 refinement samples, seed 20260715"
             }
           ]
         }

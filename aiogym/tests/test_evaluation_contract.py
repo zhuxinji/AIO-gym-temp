@@ -1,9 +1,5 @@
 """Controller evaluation, metrics, artifacts, and oracle tests."""
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from interface_support import *  # noqa: F403
+from aiogym.tests.interface_support import *  # noqa: F403
 
 def test_controller_evaluation_protocol():
     """PID/MPC/oracle-style controllers and learned policies share one evaluator."""
@@ -58,10 +54,10 @@ def test_controller_evaluation_protocol():
     pid = evaluate_controller(pid_controller, fixed.make_env(), episodes=2,
                               seed=123, protocol=fixed, include_episodes=True)
     fixed_ok = (
-        pid["name"] == "PID"
+        pid["controller_name"] == "PID"
         and pid["episodes"] == 2
         and pid["seed_list"] == [123, 124]
-        and pid["schema_version"] == "aiogym.evaluation.v2"
+        and pid["schema_version"] == "aiogym.evaluation.v3"
         and pid["protocol"]["objective"] == "tracking"
         and pid["controller"]["api"] == "aiogym.controller.v1"
         and pid["controller"]["control_structure"] == "fixed_sp_pid"
@@ -87,11 +83,11 @@ def test_controller_evaluation_protocol():
         protocol=extraction_protocol,
     )
     extraction_ok = (
-        extraction["name"] == "PID"
+        extraction["controller_name"] == "PID"
         and extraction["controller"]["scenario"] == "extraction"
         and extraction["episodes"] == 1
         and extraction["constraint_violation_count"] == 0.0
-        and np.isfinite(extraction["kpi"])
+        and np.isfinite(extraction["normalized_score"])
     )
     check("extraction PID baseline evaluates through controller registry", extraction_ok)
 
@@ -112,7 +108,7 @@ def test_controller_evaluation_protocol():
                                       control_structure="constant_setpoint_policy")
     pol = evaluate_controller(policy_controller, env, episodes=2, seed=321, protocol=sup)
     policy_ok = (
-        pol["name"] == "constant-setpoint-policy"
+        pol["controller_name"] == "constant-setpoint-policy"
         and pol["metric"] == "profit"
         and pol["protocol"]["action_mode"] == "setpoint"
         and pol["controller"]["api"] == "aiogym.controller.v1"
@@ -193,11 +189,11 @@ def test_benchmark_config_and_report_schema():
     tracking_meta = protocols["tracking"].metadata()
     tracking_env_kwargs = protocols["tracking"].env_kwargs()
     protocol_ok = (
-        tracking_metrics[0] == "tracking_cost"
+        tracking_metrics[0] == "tracking_error_cost"
         and all(key.startswith("tracking_") for key in tracking_metrics)
         and "energy_kwh" not in tracking_metrics
         and "constraint_violation_count" not in tracking_metrics
-        and tracking_meta["primary_metric"] == "tracking_cost"
+        and tracking_meta["primary_metric"] == "tracking_error_cost"
         and tracking_meta["primary_metric_direction"] == "minimize"
         and tracking_meta["env_reward_mode"] == "tracking"
         and "reward_mode" not in tracking_meta
@@ -205,10 +201,10 @@ def test_benchmark_config_and_report_schema():
         and "env_reward_mode" not in tracking_env_kwargs
         and protocols["economic"].metadata()["metrics"][0] == "profit"
         and protocols["economic"].metadata()["primary_metric"] == "profit"
-        and protocols["robustness"].metadata()["noise"] is True
+        and protocols["robustness"].metadata()["noise"] is False
         and protocols["safety"].metadata()["metrics"][0] == "constraint_violation_count"
     )
-    config = BenchmarkConfig.from_protocol(protocols["tracking"], controller="pid", seeds=[11, 12])
+    config = BenchmarkCase.from_protocol(protocols["tracking"], controller="pid", seeds=[11, 12])
     config_meta = config.metadata()
     config_ok = (
         config_meta["objective"] == "tracking"
@@ -216,7 +212,7 @@ def test_benchmark_config_and_report_schema():
         and config_meta["controller"] == "pid"
         and config_meta["seed_list"] == [11, 12]
         and config_meta["episode_steps"] == 3
-        and config_meta["primary_metric"] == "tracking_cost"
+        and config_meta["primary_metric"] == "tracking_error_cost"
         and config_meta["primary_metric_direction"] == "minimize"
         and config_meta["protocol"]["env_reward_mode"] == "tracking"
         and "reward_mode" not in config_meta["protocol"]
@@ -233,9 +229,9 @@ def test_benchmark_config_and_report_schema():
     report = build_evaluation_report([result])
     report_ok = (
         {"tracking", "economic", "safety", "robustness"}.issubset(report)
-        and result["metric"] == "tracking_cost"
+        and result["metric"] == "tracking_error_cost"
         and result["metric_direction"] == "minimize"
-        and report["tracking"][0]["name"] == "PID"
+        and report["tracking"][0]["controller"] == "PID"
         and "tracking_cost" in report["tracking"][0]
         and "tracking_mse" in report["tracking"][0]
         and "tracking_iae" in report["tracking"][0]
@@ -243,7 +239,7 @@ def test_benchmark_config_and_report_schema():
         and "constraint_violation_count" in report["safety"][0]
         and "return_std" in report["robustness"][0]
     )
-    check("BenchmarkConfig + separated evaluation report schema", protocol_ok and config_ok and report_ok)
+    check("BenchmarkCase + separated evaluation report schema", protocol_ok and config_ok and report_ok)
 
 
 def test_kpi_tracking_setpoint_alignment():
@@ -256,22 +252,28 @@ def test_kpi_tracking_setpoint_alignment():
                           episode_steps=1)
     env.reset(seed=0)
     _, reward, _, _, info = env.step(np.full(env.action_space.shape[0], 0.5, np.float32))
-    normalized_level_err = abs(info["y"][0] - env.y_sp[0]) / (5.0 - 1.8)
-    normalized_temp_err = abs(info["y"][1] - env.y_sp[1]) / (372.0 - 364.0)
-    expected_error_cost = normalized_level_err ** 2 + normalized_temp_err ** 2
-    expected_cost = expected_error_cost + info["tracking_move_cost"]
+    raw_level_err = abs(info["y"][0] - env.y_sp[0])
+    raw_temp_err = abs(info["y"][1] - env.y_sp[1])
+    expected_error_cost = raw_level_err ** 2 + raw_temp_err ** 2
+    expected_cost = (
+        expected_error_cost
+        + info["tracking_move_cost"]
+        + info["tracking_steady_cost"]
+    )
+    normalized_level_err = raw_level_err / (5.0 - 1.8)
+    normalized_temp_err = raw_temp_err / (372.0 - 364.0)
     mean_output_err = 0.5 * (normalized_temp_err + normalized_level_err)
     report = env.scorer.report()
     tracking = _tracking_step_metrics(info, {"y_sp": env.y_sp}, 0.0, env.control_dt, env)
     scaled_ok = (
         abs(report["comp_tracking"] - W_TRACKING * mean_output_err) < 1e-9
-        and abs(tracking["tracking_iae"] - (normalized_temp_err + normalized_level_err) * env.control_dt) < 1e-9
+        and abs(tracking["tracking_iae"] - (raw_temp_err + raw_level_err) * env.control_dt) < 1e-9
         and abs(info["tracking_error_cost"] - expected_error_cost) < 1e-9
         and abs(tracking["tracking_cost"] - expected_cost) < 1e-9
         and abs(info["tracking_cost"] - expected_cost) < 1e-9
         and abs(reward + info["tracking_cost"]) < 1e-9
         and abs(info["tracking_return"] + info["tracking_cost"]) < 1e-9
-        and abs(tracking["tracking_mse"] - 0.5 * (normalized_level_err ** 2 + normalized_temp_err ** 2) * env.control_dt) < 1e-9
+        and abs(tracking["tracking_mse"] - 0.5 * (raw_level_err ** 2 + raw_temp_err ** 2) * env.control_dt) < 1e-9
         and abs(info["track"] - (normalized_temp_err + normalized_level_err)) < 1e-9
     )
 
@@ -333,7 +335,7 @@ def test_pure_tracking_reward_mode():
         and "pump_kw" not in info
         and info["constraint"] >= 0.0
     )
-    metric_ok = metric_for_reward_mode("tracking") == "return" and primary_metric_for_objective("tracking") == "tracking_cost"
+    metric_ok = metric_for_reward_mode("tracking") == "return" and primary_metric_for_objective("tracking") == "tracking_error_cost"
     check("Pure SP tracking reward excludes energy and constraints", pure_reward_ok and diagnostics_ok and metric_ok)
 
 
@@ -410,15 +412,17 @@ def test_benchmark_suite_configs():
         "action_mode": "actuator",
         "controller": "PID",
         "control_structure": "fixed_sp_pid",
-        "status": "passed",
-        "metric": "tracking_cost",
-        "kpi": 90.0,
-        "kpi_std": 1.5,
+        "execution_status": "passed",
+            "metric": "tracking_error_cost",
+        "normalized_score": 90.0,
+        "normalized_score_std": 1.5,
         "profit": 0.0,
         "return": -1.0,
         "return_std": 0.2,
         "track": 1.0,
-        "tracking_cost": 0.5,
+            "tracking_cost": 0.5,
+            "tracking_error_cost": 0.5,
+            "tracking_error_cost_std": 0.1,
         "tracking_cost_std": 0.1,
         "tracking_return": -0.5,
         "tracking_mse": 0.5,
@@ -472,17 +476,19 @@ def test_benchmark_suite_configs():
                     "objective": "tracking",
                     "action_mode": "actuator",
                     "controller": "PID",
-                    "status": "passed",
-                    "metric": "tracking_cost",
-                    "tracking_cost": 0.5,
+                    "execution_status": "passed",
+                        "metric": "tracking_error_cost",
+                        "tracking_cost": 0.5,
+                        "tracking_error_cost": 0.5,
                     "tracking_return": -0.5,
                     "tracking_mse": 0.5,
                     "tracking_iae": 1.0,
-                    "kpi": 90.0,
+                    "normalized_score": 90.0,
                     "profit": 0.0,
                     "return": -1.0,
                     "track": 1.0,
                     "constraint": 0.0,
+                    "runtime_total_seconds": 0.25,
                     "episodes": 1,
                     "seed_list": [11],
                 },
@@ -492,17 +498,19 @@ def test_benchmark_suite_configs():
                     "objective": "tracking",
                     "action_mode": "actuator",
                     "controller": "PID",
-                    "status": "passed",
-                    "metric": "tracking_cost",
-                    "tracking_cost": 1.5,
+                    "execution_status": "passed",
+                        "metric": "tracking_error_cost",
+                        "tracking_cost": 1.5,
+                        "tracking_error_cost": 1.5,
                     "tracking_return": -1.5,
                     "tracking_mse": 1.5,
                     "tracking_iae": 2.0,
-                    "kpi": 80.0,
+                    "normalized_score": 80.0,
                     "profit": 0.0,
                     "return": -2.0,
                     "track": 2.0,
                     "constraint": 0.0,
+                    "runtime_total_seconds": 0.5,
                     "episodes": 1,
                     "seed_list": [12],
                 },
@@ -512,13 +520,13 @@ def test_benchmark_suite_configs():
                     "objective": "economic",
                     "action_mode": "actuator",
                     "controller": "PID",
-                    "status": "passed",
+                    "execution_status": "passed",
                     "metric": "profit",
                     "tracking_cost": 1.5,
                     "tracking_return": -1.5,
                     "tracking_mse": 1.5,
                     "tracking_iae": 2.0,
-                    "kpi": 75.0,
+                    "normalized_score": 75.0,
                     "profit": 12.0,
                     "production": 4.0,
                     "return": 12.0,
@@ -529,7 +537,7 @@ def test_benchmark_suite_configs():
                 },
             ],
             "results": [],
-            "report": {"tracking": [{"metric": "tracking_cost", "name": "PID"}]},
+            "report": {"tracking": [{"metric": "tracking_cost", "controller": "PID"}]},
             "training": {"algo": "smoke", "total_timesteps": 2},
             "learning_curve": [
                 {"step": 0, "phase": "start", "metric": "tracking_cost", "metric_value": 3.0, "tracking_cost": 3.0, "tracking_mse": 3.0, "tracking_iae": 3.0},
@@ -569,8 +577,8 @@ def test_benchmark_suite_configs():
         suite_artifacts_ok = suite_artifacts_ok and "tracking_cost" in tracking_header and "tracking_mse" in tracking_header and "tracking_iae" in tracking_header and "profit" not in tracking_header
         suite_artifacts_ok = suite_artifacts_ok and "profit" in economic_header and "tracking_mse" not in economic_header
         suite_artifacts_ok = suite_artifacts_ok and {"profit", "tracking_cost", "tracking_mse", "tracking_iae"}.issubset(all_header)
-        suite_artifacts_ok = suite_artifacts_ok and {"scenario", "best_controller", "best_tracking_cost", "best_step_ms"}.issubset(set(tracking_comparison_header))
-        suite_artifacts_ok = suite_artifacts_ok and "PID_tracking_cost" in tracking_comparison_header and "PID_step_ms" in tracking_comparison_header
+        suite_artifacts_ok = suite_artifacts_ok and {"scenario", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds"}.issubset(set(tracking_comparison_header))
+        suite_artifacts_ok = suite_artifacts_ok and "PID_tracking_error_cost" in tracking_comparison_header and "PID_runtime_total_seconds" in tracking_comparison_header
         suite_artifacts_ok = suite_artifacts_ok and "cstr" in tracking_comparison_rows and "hvac" in tracking_comparison_rows
         suite_artifacts_ok = suite_artifacts_ok and set(figures["summary_by_scenario"]) == {"tracking", "economic"}
         suite_artifacts_ok = suite_artifacts_ok and set(figures["summary_by_scenario"]["tracking"]) == {"cstr", "hvac"}
@@ -586,12 +594,17 @@ def test_benchmark_suite_configs():
             leaderboard_svg = f.read()
         with open(figures["tracking_comparison"]) as f:
             tracking_comparison_svg = f.read()
-        suite_artifacts_ok = suite_artifacts_ok and "Tracking Cost" in tracking_summary_svg and "Profit" not in tracking_summary_svg
+        suite_artifacts_ok = suite_artifacts_ok and all(
+            label in tracking_summary_svg
+            for label in ("Tracking Cost", "Tracking Error Cost", "Move Cost", "Steady-input Cost")
+        )
+        suite_artifacts_ok = suite_artifacts_ok and "Normalized Tracking MSE" not in tracking_summary_svg
+        suite_artifacts_ok = suite_artifacts_ok and "Normalized Tracking IAE" not in tracking_summary_svg and "Profit" not in tracking_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "Profit" in economic_summary_svg and "Tracking Cost" not in economic_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "cstr / tracking" in leaderboard_svg and "cstr / economic" in leaderboard_svg
         suite_artifacts_ok = suite_artifacts_ok and "tracking comparison" in tracking_comparison_svg
-        suite_artifacts_ok = suite_artifacts_ok and "Tracking cost" in tracking_comparison_svg
-        suite_artifacts_ok = suite_artifacts_ok and "Runtime per step" in tracking_comparison_svg
+        suite_artifacts_ok = suite_artifacts_ok and "Tracking error cost" in tracking_comparison_svg
+        suite_artifacts_ok = suite_artifacts_ok and "Total runtime" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and "Oracle gap" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and os.path.exists(report_path)
         suite_artifacts_ok = suite_artifacts_ok and "AIO-Gym Benchmark Report" in report_text
@@ -640,17 +653,3 @@ def test_oracle():
     orc = evaluate_controller(OracleAgent("cstr", horizon=12, mode="economic"), mk(), episodes=2)["profit"]
     pid = evaluate_controller(PIDAgent(make_model("cstr")), mk(), episodes=2)["profit"]
     check(f"NMPC oracle {orc:.0f} > PID {pid:.0f}", orc > pid)
-
-def run_all():
-    print("controller evaluation protocol:"); test_controller_evaluation_protocol()
-    print("generic controller rollout:"); test_generic_controller_rollout()
-    print("benchmark config/report schema:"); test_benchmark_config_and_report_schema()
-    print("KPI/tracking setpoint alignment:"); test_kpi_tracking_setpoint_alignment()
-    print("pure SP tracking reward mode:"); test_pure_tracking_reward_mode()
-    print("setpoint randomization bounds:"); test_setpoint_randomization_uses_model_bounds()
-    print("benchmark suite configs:"); test_benchmark_suite_configs()
-    print("NMPC oracle baseline:"); test_oracle()
-
-
-if __name__ == "__main__":
-    run_all()

@@ -9,11 +9,32 @@
   "cases": [
     {
       "scenarios": ["cascade", "quadruple", "cstr", "hvac"],
-      "objective": "tracking"
+      "objective": "tracking",
+      "environment": {
+        "dynamic": false,
+        "randomize": false,
+        "randomize_setpoints": false,
+        "randomize_plant": false,
+        "plant_drift": false,
+        "noise": false
+      }
     },
     {
-      "scenarios": ["cascade", "cstr", "hvac"],
-      "objective": "economic"
+      "scenarios": ["cascade"],
+      "objective": "economic",
+      "task": "continuous-benchmark"
+    },
+    {
+      "scenarios": ["cstr", "hvac"],
+      "objective": "economic",
+      "environment": {
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "noise": false
+      }
     }
   ]
 }

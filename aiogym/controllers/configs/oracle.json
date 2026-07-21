@@ -6,43 +6,44 @@
     "horizon": 4,
     "control_dt": 0.5,
     "mode": "economic",
-    "du_max": 0.4,
     "q_y": 1.0,
     "r_move": 0.0,
     "terminal_weight": 1.0,
-    "nsub_max": 6,
     "ipopt_max_iter": 80,
     "ipopt_tol": 0.0001,
     "warm_start": false,
     "solve_every": 1
   },
-  "scenarios": {},
+  "scenarios": {
+    "cascade_recirculating": {
+      "mode": "tracking",
+      "horizon": 4,
+      "warm_start": true
+    }
+  },
   "profiles": {
     "tracking": {
+      "parameters": {
+        "q_y": 1.0,
+        "r_move": 0.0,
+        "terminal_weight": 0.0
+      },
       "scenarios": {
         "hvac": {
           "horizon": 4,
-          "du_max": 0.5,
-          "r_move": 0.05,
           "ipopt_max_iter": 100,
           "warm_start": true
         },
         "extraction": {
           "horizon": 4,
           "control_dt": 0.05,
-          "du_max": 0.5,
-          "r_move": 0.05,
-          "nsub_max": 6,
           "ipopt_max_iter": 120,
           "warm_start": true
         },
         "heater": {
           "horizon": 4,
           "control_dt": 0.5,
-          "du_max": 0.5,
           "q_y": [1.0, 1.0],
-          "r_move": 0.05,
-          "nsub_max": 10,
           "ipopt_max_iter": 200,
           "warm_start": true,
           "transcription": "single_shooting",
@@ -54,17 +55,14 @@
     "quadruple-minimum-phase": {
       "scenarios": {
         "quadruple": {
-          "horizon": 6,
+          "horizon": 4,
           "control_dt": 1.0,
           "mode": "tracking",
-          "du_max": 0.4,
           "q_y": [1.0, 1.0],
-          "r_move": 0.05,
-          "steady_input_weight": 0.0,
-          "terminal_weight": 1.0,
-          "nsub_max": 6,
-          "ipopt_max_iter": 120,
-          "ipopt_tol": 0.00001,
+          "r_move": 0.0,
+          "terminal_weight": 0.0,
+          "ipopt_max_iter": 300,
+          "ipopt_tol": 1e-8,
           "warm_start": true,
           "solve_every": 1,
           "transcription": "multiple_shooting",
@@ -76,19 +74,16 @@
     "quadruple-nonminimum-phase": {
       "scenarios": {
         "quadruple": {
-          "horizon": 20,
+          "horizon": 180,
           "control_dt": 1.0,
           "mode": "tracking",
-          "du_max": 0.1,
           "q_y": [1.0, 1.0],
-          "r_move": 0.1,
-          "steady_input_weight": 2.0,
-          "terminal_weight": 10.0,
-          "nsub_max": 6,
-          "ipopt_max_iter": 160,
+          "r_move": 0.0,
+          "terminal_weight": 0.0,
+          "ipopt_max_iter": 200,
           "ipopt_tol": 0.00001,
           "warm_start": true,
-          "solve_every": 2,
+          "solve_every": 10,
           "transcription": "multiple_shooting",
           "enforce_state_bounds": true,
           "enforce_temperature_cap": false
@@ -98,17 +93,14 @@
     "quadruple-zero-boundary": {
       "scenarios": {
         "quadruple": {
-          "horizon": 16,
+          "horizon": 4,
           "control_dt": 1.0,
           "mode": "tracking",
-          "du_max": 0.4,
           "q_y": [1.0, 1.0],
-          "r_move": 0.05,
-          "steady_input_weight": 0.0,
-          "terminal_weight": 5.0,
-          "nsub_max": 6,
-          "ipopt_max_iter": 160,
-          "ipopt_tol": 0.00001,
+          "r_move": 0.0,
+          "terminal_weight": 0.0,
+          "ipopt_max_iter": 300,
+          "ipopt_tol": 1e-8,
           "warm_start": true,
           "solve_every": 1,
           "transcription": "multiple_shooting",
@@ -123,16 +115,13 @@
           "horizon": 3,
           "control_dt": 1.0,
           "mode": "tracking",
-          "du_max": 0.4,
           "q_y": [1.0, 1.0],
           "r_move": 0.0,
-          "steady_input_weight": 0.0,
-          "terminal_weight": 1.0,
-          "nsub_max": 6,
+          "terminal_weight": 0.0,
           "ipopt_max_iter": 120,
           "ipopt_tol": 0.00001,
           "warm_start": true,
-          "solve_every": 1,
+          "solve_every": 2,
           "transcription": "multiple_shooting",
           "enforce_state_bounds": true,
           "enforce_temperature_cap": false

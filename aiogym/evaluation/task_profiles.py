@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import math
+from numbers import Integral
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,6 @@ from typing import Any
 
 TASK_PROFILE_SCHEMA_VERSION = "aiogym.task_profile.v1"
 _TASK_DIR = Path(__file__).with_name("tasks")
-_TASK_ALIASES = {
-    ("quadruple", "minimum-phase-tracking"): "minimum-phase-classic",
-}
 TASK_ENVIRONMENT_FIELDS = frozenset({
     "control_dt",
     "episode_steps",
@@ -29,6 +27,17 @@ TASK_ENVIRONMENT_FIELDS = frozenset({
     "noise",
     "noise_pct",
 })
+TASK_OPERATION_FIELDS = frozenset({"mode", "product_flow_sp", "min_product_flow"})
+ENVIRONMENT_BOOLEAN_FIELDS = (
+    "dynamic",
+    "randomize",
+    "randomize_setpoints",
+    "randomize_plant",
+    "plant_drift",
+    "integral_obs",
+    "terminate_on_runaway",
+    "noise",
+)
 
 
 def list_task_profiles(scenario: str | None = None) -> tuple[str, ...]:
@@ -53,11 +62,9 @@ def load_task_profile(
             parts = source.split("/", 1)
             if len(parts) == 2:
                 task_scenario, task_name = parts
-                task_name = _TASK_ALIASES.get((task_scenario, task_name), task_name)
                 path = _TASK_DIR / task_scenario / f"{task_name}.json"
             elif scenario:
-                task_name = _TASK_ALIASES.get((scenario, source), source)
-                path = _TASK_DIR / scenario / f"{task_name}.json"
+                path = _TASK_DIR / scenario / f"{source}.json"
         if not path.is_file():
             raise FileNotFoundError(f"task profile not found: {source}")
         with path.open(encoding="utf-8") as stream:
@@ -114,9 +121,13 @@ def validate_task_profile(
             raise ValueError("task noise_pct must be finite and non-negative")
     if "model_params" in profile and not isinstance(profile["model_params"], Mapping):
         raise TypeError("task profile model_params must be a mapping")
+    _validate_operation(profile.get("operation"))
     for section in ("initialization", "setpoints", "disturbances", "constraints", "acceptance"):
         if section in profile and not isinstance(profile[section], (Mapping, list)):
             raise TypeError(f"task profile {section} must be a mapping or list")
+    acceptance = profile.get("acceptance", {})
+    if isinstance(acceptance, Mapping) and "metrics" in acceptance:
+        _validate_acceptance_metrics(acceptance["metrics"])
     initialization = profile.get("initialization", {})
     if isinstance(initialization, Mapping) and "state" in initialization:
         _finite_numeric_vector("task initialization state", initialization["state"])
@@ -170,6 +181,122 @@ def task_environment(profile: Mapping[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(dict(profile["environment"]))
 
 
+def resolve_environment_options(
+    *,
+    scenario: str,
+    task: str | Path | Mapping[str, Any] | None,
+    explicit: Mapping[str, Any],
+    defaults: Mapping[str, Any],
+    default_control_dt: float,
+    default_episode_steps: int,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Resolve and validate task-owned environment settings in one place."""
+
+    profile = (
+        load_task_profile(task, scenario=scenario)
+        if task is not None
+        else None
+    )
+    task_defaults = task_environment(profile) if profile is not None else {}
+    provided = dict(explicit)
+
+    resolved = {}
+    for name in ("action_mode", *ENVIRONMENT_BOOLEAN_FIELDS):
+        value = provided.get(name)
+        resolved[name] = (
+            value
+            if value is not None
+            else task_defaults.get(name, defaults[name])
+        )
+
+    control_dt = provided.get("control_dt")
+    if control_dt is None:
+        control_dt = task_defaults.get("control_dt", default_control_dt)
+    if isinstance(control_dt, bool):
+        raise TypeError("control_dt must be numeric")
+    control_dt = float(control_dt)
+    if not math.isfinite(control_dt) or control_dt <= 0:
+        raise ValueError("control_dt must be finite and positive")
+
+    episode_steps = provided.get("episode_steps")
+    if episode_steps is None:
+        episode_steps = task_defaults.get("episode_steps", default_episode_steps)
+    if (
+        isinstance(episode_steps, bool)
+        or not isinstance(episode_steps, Integral)
+        or int(episode_steps) <= 0
+    ):
+        raise ValueError("episode_steps must be a positive integer")
+
+    noise_pct = provided.get("noise_pct")
+    if noise_pct is None:
+        noise_pct = task_defaults.get("noise_pct", defaults["noise_pct"])
+    if isinstance(noise_pct, bool):
+        raise TypeError("noise_pct must be numeric")
+    noise_pct = float(noise_pct)
+    if not math.isfinite(noise_pct) or noise_pct < 0:
+        raise ValueError("noise_pct must be finite and non-negative")
+
+    if resolved["action_mode"] not in {"actuator", "setpoint"}:
+        raise ValueError("action_mode must be one of: actuator, setpoint")
+    for name in ENVIRONMENT_BOOLEAN_FIELDS:
+        resolved[name] = bool(resolved[name])
+
+    explicit_model_params = provided.get("model_params")
+    if explicit_model_params is not None and not isinstance(explicit_model_params, Mapping):
+        raise TypeError("model_params must be a mapping")
+    model_params = dict((profile or {}).get("model_params", {}))
+    model_params.update(dict(explicit_model_params or {}))
+
+    resolved.update({
+        "control_dt": control_dt,
+        "episode_steps": int(episode_steps),
+        "noise_pct": noise_pct,
+        "model_params": model_params,
+    })
+    return profile, resolved
+
+
+def task_operation(profile: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return a normalized batch/continuous operation declaration, if present."""
+
+    validate_task_profile(profile)
+    operation = profile.get("operation")
+    if operation is None:
+        return None
+    mode = str(operation["mode"])
+    product_flow_sp = float(operation.get("product_flow_sp", 0.0))
+    min_product_flow = float(
+        operation.get(
+            "min_product_flow",
+            product_flow_sp if mode == "continuous" else 0.0,
+        )
+    )
+    return {
+        "mode": mode,
+        "product_flow_sp": product_flow_sp,
+        "min_product_flow": min_product_flow,
+    }
+
+
+def configure_model_for_task(model, profile: Mapping[str, Any] | None):
+    """Apply task context that affects model economics without changing ``p``."""
+
+    if profile is None:
+        return model
+    operation = task_operation(profile)
+    if operation is None:
+        return model
+    configure = getattr(model, "configure_operation", None)
+    if not callable(configure):
+        raise ValueError(
+            f"task {profile['name']!r} declares operation settings, but model "
+            f"{model.scenario!r} does not support them"
+        )
+    configure(operation)
+    return model
+
+
 def task_identity(profile: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return the stable task identity recorded in benchmark rows and artifacts."""
 
@@ -188,6 +315,35 @@ def task_identity(profile: Mapping[str, Any] | None) -> dict[str, Any]:
         "schema_version": str(profile["schema_version"]),
         "profile_hash": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
     }
+
+
+def evaluate_task_acceptance(
+    profile: Mapping[str, Any] | None,
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Evaluate optional metric thresholds without conflating them with execution."""
+
+    if profile is None:
+        return {"status": "not-defined", "checks": []}
+    validate_task_profile(profile)
+    acceptance = profile.get("acceptance", {})
+    thresholds = acceptance.get("metrics") if isinstance(acceptance, Mapping) else None
+    if not thresholds:
+        return {"status": "not-defined", "checks": []}
+    checks = []
+    met = True
+    for metric, bounds in thresholds.items():
+        value = result.get(metric)
+        check = {"metric": metric, "value": value, **dict(bounds)}
+        check_met = isinstance(value, (int, float))
+        if check_met and "min" in bounds:
+            check_met = float(value) >= float(bounds["min"])
+        if check_met and "max" in bounds:
+            check_met = float(value) <= float(bounds["max"])
+        check["met"] = bool(check_met)
+        checks.append(check)
+        met = met and bool(check_met)
+    return {"status": "met" if met else "not-met", "checks": checks}
 
 
 def _finite_numeric_vector(name: str, values) -> None:
@@ -211,3 +367,67 @@ def _finite_numeric_value(name: str, value) -> None:
         raise TypeError(f"{name} must be numeric or a numeric list") from exc
     if not all(math.isfinite(item) for item in numbers):
         raise ValueError(f"{name} must be finite")
+
+
+def _validate_operation(operation) -> None:
+    if operation is None:
+        return
+    if not isinstance(operation, Mapping):
+        raise TypeError("task profile operation must be a mapping")
+    unknown = set(operation) - TASK_OPERATION_FIELDS
+    if unknown:
+        raise ValueError(f"unknown task operation fields: {', '.join(sorted(unknown))}")
+    mode = operation.get("mode")
+    if mode not in {"batch", "continuous"}:
+        raise ValueError("task operation mode must be one of: batch, continuous")
+    if mode == "continuous" and "product_flow_sp" not in operation:
+        raise ValueError("continuous task operation requires product_flow_sp")
+    product_flow_sp = _nonnegative_operation_value(
+        "task operation product_flow_sp", operation.get("product_flow_sp", 0.0)
+    )
+    if mode == "continuous" and product_flow_sp <= 0.0:
+        raise ValueError("continuous task product_flow_sp must be positive")
+    if mode == "batch" and product_flow_sp != 0.0:
+        raise ValueError("batch task product_flow_sp must be zero")
+    min_product_flow = _nonnegative_operation_value(
+        "task operation min_product_flow",
+        operation.get("min_product_flow", product_flow_sp if mode == "continuous" else 0.0),
+    )
+    if mode == "batch" and min_product_flow != 0.0:
+        raise ValueError("batch task min_product_flow must be zero")
+    if min_product_flow > product_flow_sp:
+        raise ValueError("task operation min_product_flow must not exceed product_flow_sp")
+
+
+def _nonnegative_operation_value(name: str, value) -> float:
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be numeric")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"{name} must be numeric") from exc
+    if not math.isfinite(number) or number < 0.0:
+        raise ValueError(f"{name} must be finite and non-negative")
+    return number
+
+
+def _validate_acceptance_metrics(metrics) -> None:
+    if not isinstance(metrics, Mapping) or not metrics:
+        raise TypeError("task acceptance metrics must be a non-empty mapping")
+    for metric, bounds in metrics.items():
+        if not isinstance(metric, str) or not metric:
+            raise TypeError("task acceptance metric names must be non-empty strings")
+        if not isinstance(bounds, Mapping) or not bounds:
+            raise TypeError("task acceptance metric bounds must be a non-empty mapping")
+        unknown = set(bounds) - {"min", "max"}
+        if unknown:
+            raise ValueError(
+                f"unknown task acceptance bounds for {metric}: {', '.join(sorted(unknown))}"
+            )
+        for key, value in bounds.items():
+            _finite_numeric_value(f"task acceptance {metric} {key}", value)
+        if "min" in bounds and "max" in bounds:
+            if float(bounds["min"]) > float(bounds["max"]):
+                raise ValueError(
+                    f"task acceptance minimum exceeds maximum for {metric}"
+                )

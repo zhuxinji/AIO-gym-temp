@@ -126,7 +126,3 @@ class TransitionDatasetTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "action_mode='actuator'"):
             collect_transitions(_environment(action_mode="setpoint"), episodes=1)
-
-
-if __name__ == "__main__":
-    unittest.main()

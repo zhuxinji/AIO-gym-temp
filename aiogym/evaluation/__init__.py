@@ -3,9 +3,12 @@
 from .objectives import StageRewardContext, StageRewardResult, stage_reward
 from .task_profiles import (
     TASK_PROFILE_SCHEMA_VERSION,
+    configure_model_for_task,
+    evaluate_task_acceptance,
     list_task_profiles,
     load_task_profile,
     task_environment,
+    task_operation,
     validate_task_profile,
 )
 
@@ -17,12 +20,16 @@ from .protocols import (
     PROTOCOL_METRICS,
     PUBLIC_BENCHMARK_SCHEMA_VERSION,
     ROLLOUT_SCHEMA,
-    BenchmarkConfig,
+    BenchmarkCase,
     BenchmarkProtocol,
+    EnvironmentSpec,
+    ObjectiveSpec,
     metric_definitions,
     metric_direction,
     metric_for_reward_mode,
+    objective_spec,
     primary_metric_for_objective,
+    resolve_objective,
     resolve_protocol,
 )
 from .core import (
@@ -39,7 +46,7 @@ from .reports import (
     check_benchmark_artifacts,
     render_benchmark_report,
 )
-from .artifacts import plot_results, write_benchmark_artifacts
+from .artifacts import finalize_benchmark_artifacts, plot_results, write_benchmark_artifacts
 from .plots import plot_constraint_timeline, plot_leaderboard, plot_learning_curve, plot_rollouts, plot_summary
 
 __all__ = [
@@ -47,9 +54,12 @@ __all__ = [
     "StageRewardResult",
     "stage_reward",
     "TASK_PROFILE_SCHEMA_VERSION",
+    "configure_model_for_task",
+    "evaluate_task_acceptance",
     "list_task_profiles",
     "load_task_profile",
     "task_environment",
+    "task_operation",
     "validate_task_profile",
     "EVALUATION_SCHEMA_VERSION",
     "ROLLOUT_SCHEMA",
@@ -58,12 +68,16 @@ __all__ = [
     "PRIMARY_METRICS",
     "METRIC_DIRECTIONS",
     "PUBLIC_BENCHMARK_SCHEMA_VERSION",
-    "BenchmarkConfig",
+    "BenchmarkCase",
     "BenchmarkProtocol",
+    "EnvironmentSpec",
+    "ObjectiveSpec",
     "metric_for_reward_mode",
+    "objective_spec",
     "primary_metric_for_objective",
     "metric_direction",
     "metric_definitions",
+    "resolve_objective",
     "resolve_protocol",
     "evaluate_controller",
     "rollout_controller",
@@ -76,6 +90,7 @@ __all__ = [
     "render_benchmark_report",
     "check_benchmark_artifacts",
     "write_benchmark_artifacts",
+    "finalize_benchmark_artifacts",
     "plot_results",
     "plot_summary",
     "plot_rollouts",

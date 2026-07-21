@@ -23,6 +23,7 @@ PROTOCOL_KEYS = frozenset({
     "terminate_on_runaway",
     "tracking_q_y",
     "tracking_r_move",
+    "tracking_r_steady",
     "noise",
     "noise_pct",
     "model_params",

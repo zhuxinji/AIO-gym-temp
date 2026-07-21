@@ -3,14 +3,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import math
-from numbers import Integral
 from typing import Any, Mapping, Sequence
 
 
 from .._internal.serialization import jsonable as _jsonable
 
-EVALUATION_SCHEMA_VERSION = "aiogym.evaluation.v2"
-PUBLIC_BENCHMARK_SCHEMA_VERSION = "aiogym.public_benchmark.v1"
+EVALUATION_SCHEMA_VERSION = "aiogym.evaluation.v3"
+PUBLIC_BENCHMARK_SCHEMA_VERSION = "aiogym.public_benchmark.v2"
 
 
 ROLLOUT_SCHEMA = {
@@ -37,15 +36,16 @@ METRIC_DEFINITIONS = {
     "runtime_seconds": "wall-clock seconds spent evaluating one episode",
     "runtime_total_seconds": "total wall-clock seconds spent evaluating all episodes",
     "runtime_seconds_per_step": "wall-clock seconds per environment control step",
-    "tracking_cost": "cumulative PC-Gym-style tracking cost: normalized squared setpoint error plus input move penalty",
+    "tracking_cost": "cumulative tracking cost: raw squared setpoint error plus physical-input move and nominal steady-input deviation penalties",
     "tracking_return": "negative cumulative tracking_cost, matching the tracking reward returned by the environment",
-    "tracking_error_cost": "cumulative normalized squared setpoint-tracking error term",
-    "tracking_move_cost": "cumulative normalized control move penalty term",
-    "tracking_mse": "mean squared normalized tracking error over time and tracked outputs",
-    "tracking_iae": "integral absolute error normalized by each tracked variable range",
-    "tracking_ise": "integral squared normalized tracking error",
-    "tracking_itae": "time-weighted integral absolute normalized tracking error",
-    "tracking_overshoot": "largest positive normalized excursion above the active setpoint",
+    "tracking_error_cost": "cumulative raw squared setpoint-tracking error over all control steps and tracked outputs",
+    "tracking_move_cost": "cumulative squared control move in physical actuator units",
+    "tracking_steady_cost": "cumulative squared deviation from the model-resolved nominal steady input in physical actuator units; zero when no resolver is available",
+    "tracking_mse": "mean squared raw tracking error over time and tracked outputs",
+    "tracking_iae": "integral absolute raw tracking error",
+    "tracking_ise": "integral squared raw tracking error",
+    "tracking_itae": "time-weighted integral absolute raw tracking error",
+    "tracking_overshoot": "largest positive raw excursion above the active setpoint",
     "tracking_settling_time": "last time at which any tracked variable exceeded tolerance",
     "constraint": "sum of normalized soft constraint penalty reported by the environment",
     "constraint_violation_count": "number of steps with any process constraint violation",
@@ -67,7 +67,8 @@ METRIC_DEFINITIONS = {
 
 PROTOCOL_METRICS = {
     "tracking": (
-        "tracking_cost", "tracking_return", "tracking_error_cost", "tracking_move_cost",
+        "tracking_error_cost", "tracking_cost", "tracking_return", "tracking_move_cost",
+        "tracking_steady_cost",
         "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae", "tracking_overshoot",
         "tracking_settling_time",
     ),
@@ -101,7 +102,7 @@ PROTOCOL_METRICS = {
 
 
 PRIMARY_METRICS = {
-    "tracking": "tracking_cost",
+    "tracking": "tracking_error_cost",
     "economic": "profit",
     "kpi": "normalized_score",
     "robustness": "normalized_score",
@@ -109,10 +110,20 @@ PRIMARY_METRICS = {
 }
 
 
+OBJECTIVE_REWARD_MODES = {
+    "tracking": "tracking",
+    "economic": "economic",
+    "kpi": "kpi",
+    "robustness": "kpi",
+    "safety": "kpi",
+}
+
+
 METRIC_DIRECTIONS = {
     "tracking_cost": "minimize",
     "tracking_error_cost": "minimize",
     "tracking_move_cost": "minimize",
+    "tracking_steady_cost": "minimize",
     "tracking_return": "maximize",
     "tracking_mse": "minimize",
     "tracking_iae": "minimize",
@@ -138,7 +149,6 @@ METRIC_DIRECTIONS = {
     "safety_margin_min": "maximize",
     "profit": "maximize",
     "normalized_score": "maximize",
-    "kpi": "maximize",
     "return": "maximize",
     "production": "maximize",
 }
@@ -171,6 +181,76 @@ def metric_definitions(objective: str | None = None):
     return {key: METRIC_DEFINITIONS[key] for key in PROTOCOL_METRICS.get(objective, ()) if key in METRIC_DEFINITIONS}
 
 
+@dataclass(frozen=True)
+class ObjectiveSpec:
+    """Resolved evaluation semantics and the source that selected them."""
+
+    name: str
+    source: str
+    reward_mode: str
+    primary_metric: str
+    direction: str
+    metrics: tuple[str, ...]
+    reward_options: Mapping[str, Any] = field(default_factory=dict)
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "source": self.source,
+            "reward_mode": self.reward_mode,
+            "primary_metric": self.primary_metric,
+            "direction": self.direction,
+            "metrics": list(self.metrics),
+            "reward_options": _jsonable(dict(self.reward_options)),
+        }
+
+
+def objective_spec(
+    name: str,
+    *,
+    source: str = "explicit",
+    reward_options: Mapping[str, Any] | None = None,
+) -> ObjectiveSpec:
+    """Build validated objective semantics without constructing an environment."""
+
+    if name not in PRIMARY_METRICS:
+        raise ValueError(f"objective must be one of: {', '.join(PRIMARY_METRICS)}")
+    primary_metric = primary_metric_for_objective(name)
+    return ObjectiveSpec(
+        name=name,
+        source=str(source),
+        reward_mode=OBJECTIVE_REWARD_MODES[name],
+        primary_metric=primary_metric,
+        direction=metric_direction(primary_metric),
+        metrics=tuple(PROTOCOL_METRICS.get(name, ())),
+        reward_options=dict(reward_options or {}),
+    )
+
+
+def resolve_objective(
+    *,
+    explicit: str | None = None,
+    case_config: str | None = None,
+    suite_config: str | None = None,
+    task_profile: Mapping[str, Any] | None = None,
+) -> ObjectiveSpec:
+    """Resolve one objective using a single, user-visible precedence order."""
+
+    candidates = (
+        ("explicit", explicit),
+        ("case-config", case_config),
+        ("suite-config", suite_config),
+        ("task-default", (task_profile or {}).get("default_objective")),
+    )
+    for source, value in candidates:
+        if value is not None:
+            return objective_spec(str(value), source=source)
+    raise ValueError(
+        "no objective was resolved; specify an objective explicitly or use a "
+        "task with default_objective"
+    )
+
+
 def _empty_episode_totals(ep: int, seed: int):
     return {
         "episode": int(ep),
@@ -179,7 +259,6 @@ def _empty_episode_totals(ep: int, seed: int):
         "track": 0.0,
         "constraint": 0.0,
         "profit": 0.0,
-        "prod": 0.0,
         "production": 0.0,
         "energy_kwh": 0.0,
         "runtime_seconds": 0.0,
@@ -188,6 +267,7 @@ def _empty_episode_totals(ep: int, seed: int):
         "tracking_return": 0.0,
         "tracking_error_cost": 0.0,
         "tracking_move_cost": 0.0,
+        "tracking_steady_cost": 0.0,
         "tracking_mse": 0.0,
         "tracking_iae": 0.0,
         "tracking_ise": 0.0,
@@ -217,34 +297,19 @@ def _protocol_kwargs(defaults: Mapping[str, Any], overrides: Mapping[str, Any]):
     return data
 
 
-# Compatibility conditions for protocols without an explicit task. New task
-# profiles own these environment settings; objectives own scoring and reports.
-_IMPLICIT_TASK_DEFAULTS = {
-    "economic": {
-        "action_mode": "actuator", "dynamic": True, "randomize": True,
-        "randomize_setpoints": False, "randomize_plant": True, "plant_drift": True,
-        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
-    },
-    "tracking": {
-        "action_mode": "actuator", "dynamic": False, "randomize": False,
-        "randomize_setpoints": False, "randomize_plant": False, "plant_drift": False,
-        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
-    },
-    "kpi": {
-        "action_mode": "actuator", "dynamic": True, "randomize": True,
-        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
-        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
-    },
-    "robustness": {
-        "action_mode": "actuator", "dynamic": True, "randomize": True,
-        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
-        "integral_obs": False, "terminate_on_runaway": False, "noise": True,
-    },
-    "safety": {
-        "action_mode": "actuator", "dynamic": True, "randomize": True,
-        "randomize_setpoints": True, "randomize_plant": True, "plant_drift": True,
-        "integral_obs": False, "terminate_on_runaway": False, "noise": False,
-    },
+# Objective selection must not silently change the experiment. Task profiles or
+# explicit environment overrides own these neutral protocol defaults.
+_DEFAULT_ENVIRONMENT_CONDITIONS = {
+    "action_mode": "actuator",
+    "dynamic": False,
+    "randomize": False,
+    "randomize_setpoints": False,
+    "randomize_plant": False,
+    "plant_drift": False,
+    "integral_obs": False,
+    "terminate_on_runaway": False,
+    "noise": False,
+    "noise_pct": 0.01,
 }
 
 
@@ -261,6 +326,7 @@ class BenchmarkProtocol:
 
     scenario: str = "cstr"
     objective: str = "economic"
+    objective_source: str = "explicit"
     env_reward_mode: str = "economic"
     action_mode: str | None = None
     control_dt: float | None = None
@@ -274,7 +340,8 @@ class BenchmarkProtocol:
     integral_obs: bool | None = None
     terminate_on_runaway: bool | None = None
     tracking_q_y: Any = 1.0
-    tracking_r_move: float = 0.05
+    tracking_r_move: float = 1.0
+    tracking_r_steady: float = 1.0
     noise: bool | None = None
     noise_pct: float | None = None
     model_params: Mapping[str, Any] = field(default_factory=dict)
@@ -286,70 +353,66 @@ class BenchmarkProtocol:
             raise ValueError(
                 f"objective must be one of: {', '.join(PRIMARY_METRICS)}"
             )
+        from ..models import make_model
+
+        model_supported = tuple(
+            getattr(make_model(self.scenario), "supported_objectives", tuple(PRIMARY_METRICS))
+        )
+        if self.objective not in model_supported:
+            raise ValueError(
+                f"scenario {self.scenario!r} does not support objective {self.objective!r}; "
+                f"supported: {', '.join(model_supported)}"
+            )
         if self.env_reward_mode not in {"economic", "kpi", "tracking"}:
             raise ValueError("env_reward_mode must be one of: economic, kpi, tracking")
-        task = None
-        task_defaults = {}
-        if self.task is not None:
-            from .task_profiles import load_task_profile, task_environment
+        expected_reward_mode = OBJECTIVE_REWARD_MODES[self.objective]
+        if self.env_reward_mode != expected_reward_mode:
+            raise ValueError(
+                f"objective {self.objective!r} requires env_reward_mode "
+                f"{expected_reward_mode!r}, got {self.env_reward_mode!r}"
+            )
+        from .task_profiles import resolve_environment_options
 
-            task = load_task_profile(self.task, scenario=self.scenario)
-            task_defaults = task_environment(task)
+        task, environment_options = resolve_environment_options(
+            scenario=self.scenario,
+            task=self.task,
+            explicit={
+                "control_dt": self.control_dt,
+                "episode_steps": self.episode_steps,
+                "action_mode": self.action_mode,
+                "dynamic": self.dynamic,
+                "randomize": self.randomize,
+                "randomize_setpoints": self.randomize_setpoints,
+                "randomize_plant": self.randomize_plant,
+                "plant_drift": self.plant_drift,
+                "integral_obs": self.integral_obs,
+                "terminate_on_runaway": self.terminate_on_runaway,
+                "noise": self.noise,
+                "noise_pct": self.noise_pct,
+                "model_params": self.model_params,
+            },
+            defaults=_DEFAULT_ENVIRONMENT_CONDITIONS,
+            default_control_dt=0.5,
+            default_episode_steps=400,
+        )
+        if task is not None:
             supported = task.get("supported_objectives")
             if supported is not None and self.objective not in supported:
                 raise ValueError(
                     f"task {task['name']!r} does not support objective {self.objective!r}; "
                     f"supported: {', '.join(supported)}"
                 )
-        implicit = _IMPLICIT_TASK_DEFAULTS[self.objective]
-        resolved_conditions = {}
-        for name in (
-            "action_mode", "dynamic", "randomize", "randomize_setpoints",
-            "randomize_plant", "plant_drift", "integral_obs",
-            "terminate_on_runaway", "noise",
-        ):
-            explicit = getattr(self, name)
-            resolved_conditions[name] = (
-                explicit if explicit is not None else task_defaults.get(name, implicit[name])
-            )
-        if resolved_conditions["action_mode"] not in {"actuator", "setpoint"}:
-            raise ValueError("action_mode must be one of: actuator, setpoint")
-        control_dt = float(
-            self.control_dt if self.control_dt is not None else task_defaults.get("control_dt", 0.5)
-        )
-        if not math.isfinite(control_dt) or control_dt <= 0:
-            raise ValueError("control_dt must be finite and positive")
-        episode_steps = (
-            self.episode_steps
-            if self.episode_steps is not None
-            else task_defaults.get("episode_steps", 400)
-        )
-        if (
-            isinstance(episode_steps, bool)
-            or not isinstance(episode_steps, Integral)
-            or int(episode_steps) <= 0
-        ):
-            raise ValueError("episode_steps must be a positive integer")
-        noise_pct = float(
-            self.noise_pct if self.noise_pct is not None else task_defaults.get("noise_pct", 0.01)
-        )
-        if not math.isfinite(noise_pct) or noise_pct < 0:
-            raise ValueError("noise_pct must be finite and non-negative")
         tracking_r_move = float(self.tracking_r_move)
         if not math.isfinite(tracking_r_move) or tracking_r_move < 0:
             raise ValueError("tracking_r_move must be finite and non-negative")
-        if not isinstance(self.model_params, Mapping):
-            raise TypeError("model_params must be a mapping")
-        model_params = dict((task or {}).get("model_params", {}))
-        model_params.update(dict(self.model_params))
-        object.__setattr__(self, "control_dt", control_dt)
-        object.__setattr__(self, "episode_steps", int(episode_steps))
+        tracking_r_steady = float(self.tracking_r_steady)
+        if not math.isfinite(tracking_r_steady) or tracking_r_steady < 0:
+            raise ValueError("tracking_r_steady must be finite and non-negative")
         object.__setattr__(self, "task", task)
-        for name, value in resolved_conditions.items():
+        for name, value in environment_options.items():
             object.__setattr__(self, name, value)
-        object.__setattr__(self, "noise_pct", noise_pct)
         object.__setattr__(self, "tracking_r_move", tracking_r_move)
-        object.__setattr__(self, "model_params", model_params)
+        object.__setattr__(self, "tracking_r_steady", tracking_r_steady)
 
     @classmethod
     def economic(cls, scenario: str, **kw):
@@ -380,6 +443,7 @@ class BenchmarkProtocol:
         data = asdict(self)
         data.pop("scenario")
         data.pop("objective")
+        data.pop("objective_source")
         data["reward_mode"] = data.pop("env_reward_mode")
         if action_mode is not None:
             data["action_mode"] = action_mode
@@ -390,12 +454,27 @@ class BenchmarkProtocol:
 
         return AIOGymNativeEnv(self.scenario, **self.env_kwargs(action_mode=action_mode))
 
+    def resolved_objective(self) -> ObjectiveSpec:
+        return objective_spec(
+            self.objective,
+            source=self.objective_source,
+            reward_options={
+                "tracking_q_y": self.tracking_q_y,
+                "tracking_r_move": self.tracking_r_move,
+                "tracking_r_steady": self.tracking_r_steady,
+            },
+        )
+
+    def environment_spec(self) -> "EnvironmentSpec":
+        return EnvironmentSpec.from_protocol(self)
+
     def metadata(self):
         from .task_profiles import task_identity
 
         primary_metric = primary_metric_for_objective(self.objective)
         data = asdict(self)
         data["task_identity"] = task_identity(self.task)
+        data["objective_spec"] = self.resolved_objective().metadata()
         data["metrics"] = list(PROTOCOL_METRICS.get(self.objective, ()))
         data["primary_metric"] = primary_metric
         data["primary_metric_direction"] = metric_direction(primary_metric)
@@ -404,75 +483,171 @@ class BenchmarkProtocol:
 
 
 @dataclass(frozen=True)
-class BenchmarkConfig:
-    """Fully reproducible benchmark declaration.
+class EnvironmentSpec:
+    """Task-owned environment construction data, independent of ranking."""
 
-    ``BenchmarkProtocol`` describes the environment. ``BenchmarkConfig`` binds
-    that protocol to a controller, seed list, disturbance policy, and metrics.
-    """
+    scenario: str
+    task: Any = None
+    action_mode: str = "actuator"
+    control_dt: float = 0.5
+    episode_steps: int = 400
+    dynamic: bool = False
+    randomize: bool = False
+    randomize_setpoints: bool = False
+    randomize_plant: bool = False
+    plant_drift: bool = False
+    integral_obs: bool = False
+    terminate_on_runaway: bool = False
+    noise: bool = False
+    noise_pct: float = 0.01
+    model_params: Mapping[str, Any] = field(default_factory=dict)
 
-    protocol: BenchmarkProtocol = field(default_factory=BenchmarkProtocol)
-    controller: str = "pid"
-    seeds: tuple[int, ...] = (0,)
+    @classmethod
+    def from_protocol(cls, protocol: BenchmarkProtocol) -> "EnvironmentSpec":
+        return cls(
+            scenario=protocol.scenario,
+            task=protocol.task,
+            action_mode=str(protocol.action_mode),
+            control_dt=float(protocol.control_dt),
+            episode_steps=int(protocol.episode_steps),
+            dynamic=bool(protocol.dynamic),
+            randomize=bool(protocol.randomize),
+            randomize_setpoints=bool(protocol.randomize_setpoints),
+            randomize_plant=bool(protocol.randomize_plant),
+            plant_drift=bool(protocol.plant_drift),
+            integral_obs=bool(protocol.integral_obs),
+            terminate_on_runaway=bool(protocol.terminate_on_runaway),
+            noise=bool(protocol.noise),
+            noise_pct=float(protocol.noise_pct),
+            model_params=dict(protocol.model_params),
+        )
+
+    def env_kwargs(self, objective: ObjectiveSpec) -> dict[str, Any]:
+        data = asdict(self)
+        data.pop("scenario")
+        data["reward_mode"] = objective.reward_mode
+        data.update(dict(objective.reward_options))
+        return data
+
+    def make_env(self, objective: ObjectiveSpec):
+        from ..env import AIOGymNativeEnv
+
+        return AIOGymNativeEnv(
+            self.scenario,
+            **self.env_kwargs(objective),
+        )
+
+
+@dataclass(frozen=True)
+class BenchmarkCase:
+    """One resolved task/objective/controller/seed evaluation unit."""
+
+    case_id: str
+    environment: EnvironmentSpec
+    objective: ObjectiveSpec
+    controller: str
+    seeds: tuple[int, ...]
     controller_config: Mapping[str, Any] = field(default_factory=dict)
-    disturbance: str = "task_and_model_schema"
-    metrics: tuple[str, ...] = ()
+    protocol: BenchmarkProtocol | None = field(default=None, repr=False)
 
     def __post_init__(self):
-        if not isinstance(self.controller, str) or not self.controller.strip():
-            raise ValueError("controller must be a non-empty string")
         seeds = tuple(int(seed) for seed in self.seeds)
         if not seeds:
-            raise ValueError("seeds must contain at least one seed")
+            raise ValueError("benchmark case seeds must not be empty")
+        if not isinstance(self.controller, str) or not self.controller.strip():
+            raise ValueError("benchmark case controller must be a non-empty string")
         object.__setattr__(self, "seeds", seeds)
 
     @classmethod
-    def from_protocol(cls, protocol: BenchmarkProtocol, controller: str = "pid",
-                      seeds: Sequence[int] | None = None, **kw):
-        return cls(protocol=protocol, controller=controller,
-                   seeds=tuple((0,) if seeds is None else seeds), **kw)
+    def from_protocol(
+        cls,
+        protocol: BenchmarkProtocol,
+        *,
+        controller: str,
+        seeds: Sequence[int],
+        controller_config: Mapping[str, Any] | None = None,
+        case_id: str | None = None,
+    ) -> "BenchmarkCase":
+        from .task_profiles import task_identity
 
-    def metadata(self):
-        metrics = self.metrics or PROTOCOL_METRICS.get(self.protocol.objective, ())
-        primary_metric = primary_metric_for_objective(self.protocol.objective)
-        task_meta = self.protocol.metadata()["task_identity"]
+        task_name = task_identity(protocol.task)["name"]
+        return cls(
+            case_id=case_id
+            or f"{protocol.objective}:{protocol.scenario}:{task_name}:{controller}",
+            environment=protocol.environment_spec(),
+            objective=protocol.resolved_objective(),
+            controller=controller,
+            seeds=tuple(seeds),
+            controller_config=dict(controller_config or {}),
+            protocol=protocol,
+        )
+
+    def metadata(self) -> dict[str, Any]:
+        from .task_profiles import task_identity
+
+        task_meta = task_identity(self.environment.task)
+        metrics = PROTOCOL_METRICS.get(self.objective.name, ())
+        primary_metric = self.objective.primary_metric
         return {
             "schema_version": EVALUATION_SCHEMA_VERSION,
-            "objective": self.protocol.objective,
-            "scenario": self.protocol.scenario,
+            "case_id": self.case_id,
+            "scenario": self.environment.scenario,
             "task": task_meta["name"],
             "task_status": task_meta["status"],
             "task_profile_hash": task_meta["profile_hash"],
+            "objective": self.objective.name,
+            "objective_source": self.objective.source,
+            "objective_spec": self.objective.metadata(),
             "controller": self.controller,
             "controller_config": _jsonable(dict(self.controller_config)),
             "seed_list": list(self.seeds),
-            "disturbance": self.disturbance,
+            "environment": _jsonable(asdict(self.environment)),
             "metrics": list(metrics),
             "primary_metric": primary_metric,
             "primary_metric_direction": metric_direction(primary_metric),
-            "episode_steps": self.protocol.episode_steps,
-            "protocol": self.protocol.metadata(),
+            "episode_steps": self.environment.episode_steps,
+            "protocol": self.protocol.metadata() if self.protocol is not None else None,
             "metric_definitions": {key: METRIC_DEFINITIONS[key] for key in metrics if key in METRIC_DEFINITIONS},
         }
 
 
 def resolve_protocol(
     scenario: str,
-    objective,
-    data: Mapping[str, Any],
+    objective=None,
+    data: Mapping[str, Any] | None = None,
+    *,
+    case_objective: str | None = None,
+    suite_objective: str | None = None,
 ) -> BenchmarkProtocol:
-    """Resolve a protocol object from an objective name or config mapping."""
+    """Resolve a protocol after loading task-owned objective defaults."""
 
     if isinstance(objective, BenchmarkProtocol):
         return objective
-    cfg = dict(data)
+    cfg = dict(data or {})
+    explicit = None
+    configured = cfg.pop("objective", None)
     if isinstance(objective, Mapping):
         cfg.update(objective)
-        objective_name = cfg.pop("objective", "tracking")
-    elif objective is None:
-        objective_name = cfg.pop("objective", "tracking")
-    else:
-        objective_name = cfg.pop("objective", str(objective))
+        configured = cfg.pop("objective", configured)
+    elif objective is not None:
+        explicit = str(objective)
+
+    if "reward_mode" in cfg:
+        reward_mode = cfg.pop("reward_mode")
+        cfg.setdefault("env_reward_mode", reward_mode)
+
+    task = None
+    if cfg.get("task") is not None:
+        from .task_profiles import load_task_profile
+
+        task = load_task_profile(cfg["task"], scenario=scenario)
+        cfg["task"] = task
+    resolved = resolve_objective(
+        explicit=explicit,
+        case_config=case_objective if case_objective is not None else configured,
+        suite_config=suite_objective,
+        task_profile=task,
+    )
     factories = {
         "economic": BenchmarkProtocol.economic,
         "tracking": BenchmarkProtocol.tracking,
@@ -480,7 +655,6 @@ def resolve_protocol(
         "safety": BenchmarkProtocol.safety,
         "kpi": BenchmarkProtocol.kpi,
     }
-    if objective_name not in factories:
-        raise ValueError(f"objective must be one of: {', '.join(factories)}")
-    factory = factories[objective_name]
+    factory = factories[resolved.name]
+    cfg["objective_source"] = resolved.source
     return factory(scenario, **cfg)

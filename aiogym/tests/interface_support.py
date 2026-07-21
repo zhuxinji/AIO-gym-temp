@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""Training-interface tests for AIO-Gym.
-
-Exercises the Gymnasium/RL surface that
-PC-Gym-style benchmarking and parallel training depend on. Run: python aiogym/tests/test_interface.py
-"""
+"""Shared fixtures and helpers for AIO-Gym interface tests."""
 import json
 import os
-import sys
 import tempfile
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-os.environ["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import gymnasium as gym
@@ -18,7 +10,7 @@ import aiogym  # registers ids
 from aiogym.controllers import as_controller, load_controller_config, make_controller, registered_controllers
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import (
-    BenchmarkConfig,
+    BenchmarkCase,
     BenchmarkProtocol,
     build_evaluation_report,
     evaluate_controller,

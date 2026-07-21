@@ -114,11 +114,10 @@ aiogym-suite-benchmark --suite quadruple-phase-comparison --episodes 1
 ```
 
 The comparison suite produces separate leaderboards for the two tasks. A lower
-tracking cost in P− and a lower tracking cost in P+ are two distinct ranking
+tracking error cost in P− and a lower tracking error cost in P+ are two distinct ranking
 claims; the tool does not rank them against each other.
 
-Run all six formal quadruple-tank tasks, excluding the compatibility-only
-`legacy-default`, with:
+Run all six formal quadruple-tank tasks with:
 
 ```bash
 aiogym-suite-benchmark --suite quadruple --episodes 1
@@ -130,11 +129,44 @@ evaluation seed as a rollout and writes one state/setpoint/actuator control char
 per task under the run's `figures/tracking_control_*.svg` files. The tracking
 comparison table includes separate Scenario and Task columns.
 
+Tracking leaderboards use cumulative raw squared output error in cm²
+(`tracking_error_cost`) as the primary metric. The regularized `tracking_cost`
+uses physical pump-voltage differences in V² for its move/steady-input
+components. These metrics are summed over all control steps and channels; they
+are not divided by the episode length, number of outputs, output range, or
+actuator range. The components remain secondary diagnostics, so a
+controller cannot win the tracking ranking merely by moving less while tracking
+the controlled outputs poorly.
+
 The NMPC Oracle uses task-family profiles rather than one generic tuning:
 minimum phase, nonminimum phase, zero-boundary stress, and disturbance rejection
-have separate prediction horizons, move penalties, and solve frequencies. These
-profiles are benchmark baselines tuned against the fixed suite protocol; they are
-not the paper-reference PI parameters.
+have separate prediction horizons and solve frequencies. To keep
+the benchmark computationally practical, they currently re-solve every 1, 10, 1, and 2
+control steps, respectively (every 1, 10, 1, and 2 s). A setpoint or explicit
+disturbance change triggers an
+immediate re-solve even between those periodic updates. The actions between solves
+are replayed from the optimized plan instead of holding only its first action. For
+tracking cases, raw output error is both the internal objective and the reported
+primary metric. Minimum-phase and zero-boundary Oracle profiles use no move,
+steady-input, or terminal tracking regularization. The nonminimum-phase MPC and
+Oracle profiles impose no move-rate limit. Both use the model's exact nonlinear
+steady-state inverse only to initialize the first optimization after reset or a
+setpoint change; it is not part of the final objective. At the 1 s control
+interval, the nonminimum-phase MPC and Oracle horizons are 60 and 180 steps
+(60 s and 180 s), respectively. Minimum-phase and zero-boundary Oracle horizons
+are 4 steps; the disturbance-rejection horizon is 3 steps. These horizons are tuned
+profile values, not framework limits; controller construction accepts any
+positive horizon. Feasibility slack remains a constrained-solver safeguard.
+Oracle and the environment both integrate every 1 s control interval using
+10 RK4 substeps of at most 0.1 s.
+Setpoint preview is disabled in the standard benchmark. For an explicitly
+noncausal upper-bound experiment, Oracle accepts `preview_setpoints=true` and
+uses deterministic task setpoint events that enter its prediction horizon.
+State/input constraints remain optimization safeguards outside the reported
+error cost. The disturbance-rejection case retains a
+robustness-specific objective because its primary metric is `normalized_score`,
+not `tracking_error_cost`. These profiles are cost-bounded benchmark baselines, not the
+paper-reference PI parameters.
 
 PID follows the same separation: the main suite uses four fixed benchmark
 profiles (minimum phase, nonminimum phase, zero boundary, and disturbance

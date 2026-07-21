@@ -1,13 +1,7 @@
-#!/usr/bin/env python3
 """Smoke tests for the crystallization backend scenario."""
 from __future__ import annotations
 
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
@@ -116,8 +110,8 @@ def test_pid_tracking_rollout():
         seed=0,
         protocol=protocol,
     )
-    assert result["name"] == "PID"
-    assert result["metric"] == "tracking_cost"
+    assert result["controller_name"] == "PID"
+    assert result["metric"] == "tracking_error_cost"
     assert np.isfinite(result["tracking_cost"])
     assert np.isfinite(result["tracking_mse"])
     assert np.isfinite(result["tracking_iae"])
@@ -158,17 +152,3 @@ def test_random_target_observation():
     obs, _ = env.reset(seed=0)
     assert np.isclose(obs[5], 0.82)
     assert np.isclose(obs[6], 10.25)
-
-
-if __name__ == "__main__":
-    test_registered_model_contract()
-    test_reset_contract()
-    test_action_to_temperature_mapping()
-    test_unified_reward_modes_are_finite()
-    test_tracking_controllers_build()
-    test_crystallization_mpc_uses_affine_output_linearization()
-    test_pid_tracking_rollout()
-    test_nominal_rollout_no_nan()
-    test_custom_setpoint_observation()
-    test_random_target_observation()
-    print("ALL CRYSTALLIZATION TESTS PASS OK")

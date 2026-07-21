@@ -1,9 +1,5 @@
 """Model contract, model-card, custom-model, and public API tests."""
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from interface_support import *  # noqa: F403
+from aiogym.tests.interface_support import *  # noqa: F403
 
 def test_model_contract():
     """Every process model exposes a usable backend contract for tooling."""
@@ -139,7 +135,7 @@ def test_custom_model_entrypoints():
         registered_ok = env.scenario == "mini_tank" and env._env()["feed_bias"] == 0.0
         registered_ok = registered_ok and env.observation_space.contains(obs) and np.isfinite(reward)
 
-        direct_env = AIOGymNativeEnv(custom_model=MiniTankModel(), dynamic=False, randomize=False, randomize_setpoints=False)
+        direct_env = AIOGymNativeEnv(MiniTankModel(), dynamic=False, randomize=False, randomize_setpoints=False)
         direct_env.reset(seed=0)
         direct_env._apply_disturbance("feed_bias_step")
         sampled = direct_env._env()["feed_bias"]
@@ -224,9 +220,9 @@ def test_public_api_entrypoints():
     public_surface_ok = public_surface_ok and top_run_benchmark is eval_run_benchmark
     public_surface_ok = public_surface_ok and top_plot_results is eval_plot_results
 
-    env = aiogym.make_env(model="cstr", objective="tracking", seed=7, episode_steps=3)
+    env = aiogym.make_env(scenario="cstr", objective="tracking", seed=7, episode_steps=3)
     override_env = aiogym.make_env(
-        model="cstr",
+        scenario="cstr",
         objective="tracking",
         seed=7,
         episode_steps=1,
@@ -234,7 +230,7 @@ def test_public_api_entrypoints():
     )
     unknown_param_ok = False
     try:
-        aiogym.make_env(model="cstr", model_params={"not_a_param": 1.0})
+        aiogym.make_env(scenario="cstr", model_params={"not_a_param": 1.0})
     except KeyError:
         unknown_param_ok = True
     env_ok = env.scenario == "cstr" and env.reward_mode == "tracking" and env.episode_steps == 3
@@ -259,7 +255,7 @@ def test_public_api_entrypoints():
         payload = aiogym.run_benchmark({
             "scenario": "cstr",
             "objective": "tracking",
-            "controller": "pid",
+            "controllers": ["pid"],
             "seeds": [7],
             "episode_steps": 3,
             "model_params": {"Dmax": 0.015},
@@ -269,11 +265,11 @@ def test_public_api_entrypoints():
         })
         benchmark_path = os.path.join(tmpdir, "benchmark.json")
         figures = aiogym.plot_results(tmpdir)
-        api_ok = payload["schema_version"] == "aiogym.public_benchmark.v1"
+        api_ok = payload["schema_version"] == "aiogym.public_benchmark.v2"
         api_ok = api_ok and payload["scenario"] == "cstr" and payload["objective"] == "tracking"
         api_ok = api_ok and payload["results"][0]["model"]["parameters"]["Dmax"]["value"] == 0.015
         api_ok = api_ok and payload["results"][0]["protocol"]["model_params"]["Dmax"] == 0.015
-        api_ok = api_ok and payload["rows"][0]["status"] in {"passed", "degraded"}
+        api_ok = api_ok and payload["rows"][0]["execution_status"] in {"passed", "degraded"}
         api_ok = api_ok and os.path.exists(benchmark_path)
         for key in ("input_config", "benchmark_config", "model_card", "rows", "summary_csv",
                     "leaderboard", "results", "report", "rollouts"):
@@ -282,13 +278,3 @@ def test_public_api_entrypoints():
             api_ok = api_ok and os.path.exists(figures[key])
 
     check("public make_env/run_benchmark/plot_results API", public_surface_ok and env_ok and public_model_ok and api_ok)
-
-def run_all():
-    print("model contracts:"); test_model_contract()
-    print("model-card export:"); test_model_card_export()
-    print("custom model entrypoints:"); test_custom_model_entrypoints()
-    print("public API entrypoints:"); test_public_api_entrypoints()
-
-
-if __name__ == "__main__":
-    run_all()

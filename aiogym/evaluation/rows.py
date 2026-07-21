@@ -21,20 +21,27 @@ def compact_result_row(
     controller_meta = dict(result.get("controller") or {})
     diagnostics = dict(result.get("controller_diagnostics") or {})
     metric = str(result.get("metric") or "")
-    name = str(result.get("name") or controller_meta.get("name") or controller or "")
+    name = str(result.get("controller_name") or controller_meta.get("name") or controller or "")
     controller_status = str(result.get("controller_status", "ok"))
+    execution_status = str(
+        result.get(
+            "execution_status",
+            "degraded" if controller_status == "degraded" else "passed",
+        )
+    )
     row = {
         "suite_case": suite_case,
         "scenario": scenario or result.get("scenario") or dict(result.get("model") or {}).get("scenario"),
         "task": task or result.get("task") or "default",
         "task_status": task_status or result.get("task_status") or "implicit-default",
         "task_profile_hash": task_profile_hash or result.get("task_profile_hash"),
-        "name": name,
         "objective": objective or result.get("objective"),
+        "objective_source": result.get("objective_source"),
+        "objective_status": result.get("objective_status", "not-defined"),
         "action_mode": action_mode or controller_meta.get("action_mode"),
         "controller": name,
         "control_structure": controller_meta.get("control_structure"),
-        "status": "degraded" if controller_status == "degraded" else "passed",
+        "execution_status": execution_status,
         "controller_status": controller_status,
         "controller_solve_count": diagnostics.get("solve_count", 0),
         "controller_solver_success_count": diagnostics.get("solver_success_count", 0),
@@ -50,9 +57,9 @@ def compact_result_row(
         row[metric] = result.get(metric)
         row[f"{metric}_std"] = result.get(f"{metric}_std")
     for key in (
-        "kpi", "normalized_score", "profit", "production", "return", "track",
+        "normalized_score", "profit", "production", "return", "track",
         "constraint", "tracking_cost", "tracking_return", "tracking_error_cost",
-        "tracking_move_cost", "tracking_mse", "tracking_iae", "energy_kwh",
+        "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "energy_kwh",
         "runtime_seconds", "runtime_seconds_per_step", "runtime_total_seconds",
         "constraint_violation_count", "constraint_violation_severity", "safety_margin_min",
     ):

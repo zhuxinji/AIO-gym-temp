@@ -17,15 +17,15 @@ from aiogym.evaluation.runner import run_evaluation_case
 FAMILIES = {
     "minimum-phase": {
         "tasks": [("minimum-phase-classic", "tracking"), ("pminus-reference-step", "tracking")],
-        "baseline_profile": "quadruple-minimum-phase",
+        "baseline_profile": "quadruple-minimum-phase-benchmark",
         "bias": 0.3,
-        "kp_bounds": (0.03, 0.5),
-        "ki_bounds": (0.0003, 0.03),
+        "kp_bounds": (0.03, 2.0),
+        "ki_bounds": (0.0003, 0.1),
         "topologies": ["direct"],
     },
     "nonminimum-phase": {
         "tasks": [("nonminimum-phase-classic", "tracking"), ("pplus-reference-step", "tracking")],
-        "baseline_profile": "quadruple-nonminimum-phase",
+        "baseline_profile": "quadruple-nonminimum-phase-benchmark",
         "bias": 0.315,
         "kp_bounds": (0.001, 0.3),
         "ki_bounds": (0.000001, 0.01),
@@ -33,10 +33,10 @@ FAMILIES = {
     },
     "zero-boundary": {
         "tasks": [("zero-boundary-stress", "tracking")],
-        "baseline_profile": "quadruple-minimum-phase",
+        "baseline_profile": "quadruple-zero-boundary",
         "bias": 0.3,
-        "kp_bounds": (0.01, 0.4),
-        "ki_bounds": (0.00001, 0.02),
+        "kp_bounds": (0.01, 1.0),
+        "ki_bounds": (0.00001, 0.1),
         "topologies": ["direct"],
     },
     "disturbance-rejection": {
@@ -96,6 +96,7 @@ def _evaluate(task: str, objective: str, loops: list[dict]) -> dict:
         "metric": row["metric"],
         "metric_value": row[row["metric"]],
         "tracking_cost": row.get("tracking_cost"),
+        "tracking_error_cost": row.get("tracking_error_cost"),
         "tracking_mse": row.get("tracking_mse"),
         "tracking_iae": row.get("tracking_iae"),
         "normalized_score": row.get("normalized_score"),

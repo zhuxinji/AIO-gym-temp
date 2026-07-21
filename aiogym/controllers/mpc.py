@@ -15,8 +15,7 @@ class MPCAgent:
     action_mode = "actuator"
     control_structure = "fixed_sp_mpc"
 
-    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, du_max=0.15,
-                 cv_scale=None, steady_input_weight=0.0):
+    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, cv_scale=None):
         self.m = model
         self.nu = model.action_dim()
         self.nx = len(model.initial_state())
@@ -24,10 +23,6 @@ class MPCAgent:
         self.Ts = positive_float("Ts", Ts)
         self.P = positive_int("P", P)
         self.move_supp = nonnegative_float("move_supp", move_supp)
-        self.du_max = nonnegative_float("du_max", du_max)
-        self.steady_input_weight = nonnegative_float(
-            "steady_input_weight", steady_input_weight
-        )
         self.cv_scale = self._resolve_cv_scale(cv_scale)
         self.reset()
 
@@ -51,14 +46,15 @@ class MPCAgent:
                 "api": self.controller_api_version,
                 "action_mode": self.action_mode, "control_structure": self.control_structure,
                 "Ts": self.Ts, "horizon": self.P,
-                "move_supp": self.move_supp, "du_max": self.du_max,
-                "steady_input_weight": self.steady_input_weight,
+                "move_supp": self.move_supp,
+                "initialization": "tracking_steady_state_action",
                 "cv_scale": self.cv_scale}
 
     def reset(self, seed=None):
         initializer = getattr(self.m, "mpc_init", None)
         initial_action = initializer() if callable(initializer) else self.m.default_action()
         self.u = np.asarray(self.m.action_vector(initial_action), dtype=np.float64)
+        self._needs_initial_seed = True
         self._clock = 1e9
 
     def act(self, obs, context):
@@ -90,6 +86,15 @@ class MPCAgent:
                if k not in ("x", "y", "levels", "temps", "conc")}
         env.setdefault("extra_outflow", 0.0)
         x0 = self._toX(meas)
+        target = np.asarray(m.setpoint_vector(sp.get("y_sp")), dtype=np.float64)
+        if self._needs_initial_seed:
+            steady_resolver = getattr(m, "tracking_steady_state_action", None)
+            steady_input = steady_resolver(target) if callable(steady_resolver) else None
+            if steady_input is not None:
+                candidate = np.asarray(steady_input, dtype=np.float64).reshape(-1)
+                if len(candidate) == nu and np.all(np.isfinite(candidate)):
+                    self.u = np.clip(candidate, 0.0, 1.0)
+            self._needs_initial_seed = False
         u0 = self.u.copy()
         f = lambda x: np.asarray(m.dynamics(list(x), u0, env), dtype=np.float64)
         f0 = f(x0)
@@ -112,12 +117,6 @@ class MPCAgent:
         for j in range(nx):
             xp = x0.copy(); xp[j] += eps
             C[:, j] = (self._cv(xp) - cv0) / eps
-        target = np.asarray(m.setpoint_vector(sp.get("y_sp")), dtype=np.float64)
-        steady_resolver = getattr(m, "tracking_steady_state_action", None)
-        if callable(steady_resolver):
-            steady_input = np.asarray(steady_resolver(target), dtype=np.float64)
-        else:
-            steady_input = u0
         Wcv = self._wcv()
         c0 = (x0 + f0 * Ts) - Ad @ x0 - Bd @ u0
         xf = x0.copy()
@@ -133,9 +132,5 @@ class MPCAgent:
             H += G.T @ WG
             g += G.T @ (Wcv * e)
         H += self.move_supp * np.eye(nu)
-        if self.steady_input_weight:
-            H += self.steady_input_weight * np.eye(nu)
-            g += self.steady_input_weight * (u0 - steady_input)
         du = np.linalg.solve(H, -g)
-        du = np.clip(du, -self.du_max, self.du_max)
         self.u = np.clip(u0 + du, 0.0, 1.0)

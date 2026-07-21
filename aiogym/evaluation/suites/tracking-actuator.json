@@ -3,5 +3,11 @@
   "scenarios": ["cascade", "quadruple", "cstr", "hvac"],
   "objectives": ["tracking"],
   "controllers": ["pid", "mpc"],
-  "action_mode": "actuator"
+  "action_mode": "actuator",
+  "dynamic": false,
+  "randomize": false,
+  "randomize_setpoints": false,
+  "randomize_plant": false,
+  "plant_drift": false,
+  "noise": false
 }

@@ -33,11 +33,7 @@ def _call_compatible(func, calls, label: str):
 
 @dataclass(frozen=True)
 class ControllerContext:
-    """Per-step information exposed to controllers.
-
-    ``env`` is included for adapters around older controllers. New controllers
-    should prefer the explicit measurement, setpoint, and info fields.
-    """
+    """Per-step information exposed to controllers."""
 
     measurement: Mapping[str, Any]
     setpoint: Mapping[str, Any]
@@ -248,10 +244,7 @@ def _merged_controller_config(name: str, scenario: str | None,
                               config: Mapping[str, Any] | None = None) -> dict[str, Any]:
     override = dict(config or {})
     explicit_profile = override.pop("profile", None)
-    # ``mode`` selected profiles before named task/controller profiles existed.
-    # Keep that public behavior while allowing an explicit profile to win.
-    profile = explicit_profile if explicit_profile is not None else override.get("mode")
-    base = load_controller_config(name, scenario, profile=profile)
+    base = load_controller_config(name, scenario, profile=explicit_profile)
     params = dict(base.get("parameters", {}))
     params.update(override.pop("parameters", {}))
     flat = {k: v for k, v in override.items() if k not in _CONFIG_META_KEYS}

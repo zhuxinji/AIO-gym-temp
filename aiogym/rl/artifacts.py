@@ -1,14 +1,13 @@
 """Helpers for publishing RL training runs as standard benchmark artifacts."""
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from aiogym._internal.serialization import jsonable as _jsonable, write_json as _write_json
-from aiogym.evaluation import build_evaluation_report, plot_results, render_benchmark_report
-from aiogym.evaluation.artifacts import write_benchmark_artifacts
+from aiogym._internal.serialization import jsonable as _jsonable
+from aiogym.evaluation import build_evaluation_report
+from aiogym.evaluation.artifacts import finalize_benchmark_artifacts
 from aiogym.evaluation.rows import compact_result_row
 
 
@@ -48,7 +47,7 @@ def learning_curve_point(step: int, result: Mapping[str, Any], phase: str = "eva
         "runtime_total_seconds": result.get("runtime_total_seconds"),
     }
     for key in (
-        "kpi",
+        "normalized_score",
         "profit",
         "return",
         "track",
@@ -56,6 +55,7 @@ def learning_curve_point(step: int, result: Mapping[str, Any], phase: str = "eva
         "tracking_return",
         "tracking_error_cost",
         "tracking_move_cost",
+        "tracking_steady_cost",
         "tracking_mse",
         "tracking_iae",
         "constraint_violation_count",
@@ -101,19 +101,11 @@ def rl_payload(kind: str, scenario: str, objective: str, action_mode: str,
 def write_rl_artifacts(artifact_dir: str | Path, payload: Mapping[str, Any]) -> dict[str, Any]:
     """Write benchmark.json, standard children, figures, and Markdown report."""
 
-    root = Path(artifact_dir)
-    root.mkdir(parents=True, exist_ok=True)
     payload = dict(_jsonable(payload))
-    payload["artifact_dir"] = str(root)
-    payload["artifacts"] = write_benchmark_artifacts(root, payload)
-    benchmark_path = root / "benchmark.json"
-    _write_json(benchmark_path, payload)
-    plot_results(root)
-    with benchmark_path.open() as f:
-        payload = json.load(f)
-    report_path = root / "report.md"
-    render_benchmark_report(root, out_path=report_path)
-    payload.setdefault("artifacts", {})
-    payload["artifacts"]["markdown_report"] = str(report_path)
-    _write_json(benchmark_path, payload)
-    return payload
+    payload["artifact_dir"] = str(artifact_dir)
+    return finalize_benchmark_artifacts(
+        artifact_dir,
+        payload,
+        create_plots=True,
+        markdown_report=True,
+    )

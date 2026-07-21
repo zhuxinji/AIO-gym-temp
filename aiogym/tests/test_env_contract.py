@@ -1,9 +1,5 @@
 """Environment, disturbance, seeding, registration, and vectorization tests."""
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from interface_support import *  # noqa: F403
+from aiogym.tests.interface_support import *  # noqa: F403
 
 def test_disturbance_schedule_config():
     """Dynamic disturbances are scheduled from the model disturbance schema."""
@@ -62,7 +58,7 @@ def test_process_disturbance_semantics():
     c_low_pump = cascade.dynamics(cx, cact, {**tank_env, "pump_flow_factor": 0.7})
     c_high_pump = cascade.dynamics(cx, cact, {**tank_env, "pump_flow_factor": 1.3})
     c_low_heat = cascade.dynamics(cx, cact, {**tank_env, "heater_efficiency": 0.6})
-    c_high_heat = cascade.dynamics(cx, cact, {**tank_env, "heater_efficiency": 1.2})
+    c_high_heat = cascade.dynamics(cx, cact, {**tank_env, "heater_efficiency": 1.0})
     c_low_loss = cascade.dynamics(cx, cact, {**tank_env, "heat_loss_factor": 0.5})
     c_high_loss = cascade.dynamics(cx, cact, {**tank_env, "heat_loss_factor": 2.0})
     check("Cascade pump factor raises inlet-level derivative", c_high_pump[0] > c_low_pump[0])
@@ -172,17 +168,3 @@ def test_vectorized():
         obs, r, term, trunc, info = venv.step(np.stack([venv.single_action_space.sample() for _ in range(n)]))
     check(f"vectorized {n} envs step, obs {obs.shape}", obs.shape[0] == n and np.all(np.isfinite(r)))
     venv.close()
-
-def run_all():
-    print("disturbance schedule config:"); test_disturbance_schedule_config()
-    print("CSTR disturbance semantics:"); test_cstr_disturbance_semantics()
-    print("process disturbance semantics:"); test_process_disturbance_semantics()
-    print("plant drift semantics:"); test_plant_drift_semantics()
-    print("env API (built-in scenarios):"); test_env_api()
-    print("reproducibility:"); test_seeding()
-    print("registered gym ids:"); test_registered_ids()
-    print("vectorized parallel rollout:"); test_vectorized()
-
-
-if __name__ == "__main__":
-    run_all()

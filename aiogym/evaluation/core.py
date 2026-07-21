@@ -23,22 +23,21 @@ from .protocols import (
     EVALUATION_SCHEMA_VERSION,
     METRIC_DEFINITIONS,
     METRIC_DIRECTIONS,
-    PRIMARY_METRICS,
     PROTOCOL_METRICS,
-    PUBLIC_BENCHMARK_SCHEMA_VERSION,
     ROLLOUT_SCHEMA,
-    BenchmarkConfig,
     BenchmarkProtocol,
+    ObjectiveSpec,
     _empty_episode_totals,
     metric_definitions,
     metric_direction,
-    metric_for_reward_mode,
+    objective_spec,
     primary_metric_for_objective,
 )
 
 def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
                         include_episodes: bool = False, protocol: BenchmarkProtocol | None = None,
-                        seed_list: Sequence[int] | None = None):
+                        seed_list: Sequence[int] | None = None,
+                        objective_specification: ObjectiveSpec | str | None = None):
     """Evaluate any supported controller/policy on an AIOGymNativeEnv.
 
     Returns aggregate metrics plus the protocol/controller metadata needed to
@@ -54,7 +53,25 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         if not seeds:
             raise ValueError("seed_list must contain at least one seed")
     controller = as_controller(agent, action_mode=getattr(env, "action_mode", "actuator"))
-    objective = protocol.objective if protocol is not None else _env_objective(env)
+    if protocol is not None:
+        resolved_objective = protocol.resolved_objective()
+        if (
+            objective_specification is not None
+            and getattr(objective_specification, "name", objective_specification)
+            != resolved_objective.name
+        ):
+            raise ValueError("objective specification does not match protocol objective")
+    elif isinstance(objective_specification, ObjectiveSpec):
+        resolved_objective = objective_specification
+    elif objective_specification is not None:
+        resolved_objective = objective_spec(
+            str(objective_specification), source="explicit"
+        )
+    else:
+        resolved_objective = objective_spec(
+            _env_objective(env), source="environment-reward-mode"
+        )
+    objective = resolved_objective.name
     per_episode = []
     episode_schedules = []
     eval_start = perf_counter()
@@ -77,7 +94,12 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
             bound_metrics = _action_bound_metrics(action, env)
             obs, reward, term, trunc, info = env.step(action)
             time_sec = steps * float(env.control_dt)
-            active_setpoint = {"y_sp": list(getattr(env, "y_sp", []))}
+            # ``env.y_sp`` may already contain the reference staged for the next
+            # control step. Metrics for this completed transition must use the
+            # reference recorded by its stage objective.
+            active_setpoint = {
+                "y_sp": list(info.get("y_sp", getattr(env, "y_sp", [])))
+            }
             tracking = _tracking_step_metrics(info, active_setpoint, time_sec, float(env.control_dt), env)
             safety = _safety_step_metrics(info, bound_metrics, float(env.control_dt))
             totals["return"] += float(reward)
@@ -88,6 +110,7 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
                 totals[key] += value
             for key in (
                 "tracking_cost", "tracking_return", "tracking_error_cost", "tracking_move_cost",
+                "tracking_steady_cost",
                 "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae",
             ):
                 totals[key] += tracking[key]
@@ -103,7 +126,6 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
             steps += 1
         rep = env.scorer.report()
         runtime_seconds = perf_counter() - episode_start
-        totals["kpi"] = float(rep["score"])
         totals["normalized_score"] = float(rep["score"])
         totals["steps"] = steps
         totals["runtime_seconds"] = float(runtime_seconds)
@@ -123,27 +145,28 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
     def std(key):
         return float(np.std([row[key] for row in per_episode]))
 
-    task_meta = (
-        protocol.metadata()["task_identity"]
-        if protocol is not None
-        else {"name": "default", "status": "implicit-default", "profile_hash": None}
-    )
+    if protocol is not None:
+        task_meta = protocol.metadata()["task_identity"]
+    else:
+        from .task_profiles import task_identity
+
+        task_meta = task_identity(getattr(env, "task_profile", None))
     primary_metric = primary_metric_for_objective(objective)
     aggregate_keys = _aggregate_metric_keys(per_episode)
     result = {
         "schema_version": EVALUATION_SCHEMA_VERSION,
-        "name": controller.name,
+        "controller_name": controller.name,
         "metric": primary_metric,
         "metric_direction": metric_direction(primary_metric),
         "objective": objective,
+        "objective_source": resolved_objective.source,
+        "objective_spec": resolved_objective.metadata(),
         "task": task_meta["name"],
         "task_status": task_meta["status"],
         "task_profile_hash": task_meta["profile_hash"],
         "episodes": len(seeds),
         "seed": int(seeds[0]) if seeds else int(seed),
         "seed_list": [int(s) for s in seeds],
-        "kpi": mean("kpi"),
-        "kpi_std": std("kpi"),
         "normalized_score": mean("normalized_score"),
         "normalized_score_std": std("normalized_score"),
         "profit": mean("profit"),
@@ -154,12 +177,17 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         "track_std": std("track"),
         "constraint": mean("constraint"),
         "constraint_std": std("constraint"),
-        "prod": mean("prod"),
-        "prod_std": std("prod"),
         "production": mean("production"),
         "production_std": std("production"),
         "runtime_total_seconds": float(runtime_total_seconds),
-        "protocol": protocol.metadata() if protocol is not None else _env_metadata(env),
+        "protocol": (
+            protocol.metadata()
+            if protocol is not None
+            else {
+                "environment": _env_metadata(env),
+                "objective_spec": resolved_objective.metadata(),
+            }
+        ),
         "controller": controller.metadata(),
         "model": _model_metadata(env),
         "disturbance": {
@@ -169,19 +197,33 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
         "controller_diagnostics": _aggregate_controller_diagnostics(per_episode),
         "metric_definitions": metric_definitions(objective),
         "result_schema": result_schema(),
-        "reproducibility": _reproducibility_metadata(env, seeds, protocol),
+        "reproducibility": _reproducibility_metadata(
+            env, seeds, protocol, resolved_objective
+        ),
     }
     result["controller_status"] = "degraded" if result["controller_diagnostics"].get("degraded") else "ok"
     for key in aggregate_keys:
         result.setdefault(key, mean(key))
         result.setdefault(f"{key}_std", std(key))
+    result["execution_status"] = (
+        "degraded" if result["controller_status"] == "degraded" else "passed"
+    )
+    from .task_profiles import evaluate_task_acceptance
+
+    acceptance = evaluate_task_acceptance(
+        protocol.task if protocol is not None else getattr(env, "task_profile", None),
+        result,
+    )
+    result["objective_status"] = acceptance["status"]
+    result["objective_acceptance"] = acceptance
     if include_episodes:
         result["episode_metrics"] = per_episode
     return result
 
 
 def rollout_controller(agent, env, seed: int = 0, max_steps: int | None = None,
-                       protocol: BenchmarkProtocol | None = None):
+                       protocol: BenchmarkProtocol | None = None,
+                       objective_specification: ObjectiveSpec | None = None):
     """Run one episode and return a generic per-step rollout artifact.
 
     The recorder is scenario-neutral. Common fields are always present, and
@@ -225,10 +267,31 @@ def rollout_controller(agent, env, seed: int = 0, max_steps: int | None = None,
         step += 1
 
     return {
-        "name": controller.name,
+        "controller_name": controller.name,
         "seed": int(seed),
         "steps": len(rows),
-        "protocol": protocol.metadata() if protocol is not None else _env_metadata(env),
+        "objective": (
+            protocol.objective
+            if protocol is not None
+            else getattr(objective_specification, "name", _env_objective(env))
+        ),
+        "objective_source": (
+            protocol.objective_source
+            if protocol is not None
+            else getattr(objective_specification, "source", "environment-reward-mode")
+        ),
+        "protocol": (
+            protocol.metadata()
+            if protocol is not None
+            else {
+                "environment": _env_metadata(env),
+                "objective_spec": (
+                    objective_specification.metadata()
+                    if objective_specification is not None
+                    else objective_spec(_env_objective(env), source="environment-reward-mode").metadata()
+                ),
+            }
+        ),
         "controller": controller.metadata(),
         "scorer": _jsonable(env.scorer.report()),
         "rollout_schema": result_schema()["rollout"],
@@ -365,7 +428,7 @@ def _env_disturbances(env):
     return {}
 
 
-def _reproducibility_metadata(env, seeds, protocol):
+def _reproducibility_metadata(env, seeds, protocol, resolved_objective=None):
     return {
         "git_commit": _git_commit(),
         "seed_list": [int(seed) for seed in seeds],
@@ -373,7 +436,18 @@ def _reproducibility_metadata(env, seeds, protocol):
         "episode_length": int(getattr(env, "episode_steps", 0)),
         "disturbance_schedule": "task_and_model_schema",
         "metric_definition_version": EVALUATION_SCHEMA_VERSION,
-        "protocol": protocol.metadata() if protocol is not None else _env_metadata(env),
+        "protocol": (
+            protocol.metadata()
+            if protocol is not None
+            else {
+                "environment": _env_metadata(env),
+                "objective_spec": (
+                    resolved_objective.metadata()
+                    if resolved_objective is not None
+                    else None
+                ),
+            }
+        ),
     }
 
 
@@ -395,7 +469,7 @@ def _git_commit():
 
 def _table_row(result: Mapping[str, Any], keys: Sequence[str]):
     row = {
-        "name": result.get("name"),
+        "controller": result.get("controller_name"),
         "objective": result.get("objective"),
         "task": result.get("task", "default"),
         "task_status": result.get("task_status", "implicit-default"),

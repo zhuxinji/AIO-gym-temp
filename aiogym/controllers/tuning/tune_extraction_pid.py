@@ -48,7 +48,7 @@ def compact_result(params: dict, result: dict):
         "tracking_itae": result["tracking_itae"],
         "tracking_overshoot": result["tracking_overshoot"],
         "track": result["track"],
-        "kpi": result["kpi"],
+        "normalized_score": result["normalized_score"],
         "profit": result["profit"],
         "energy_kwh": result["energy_kwh"],
         "constraint_violation_count": result["constraint_violation_count"],
@@ -137,7 +137,7 @@ def main():
         print(
             f"kp={params['kp']:7.1f} ki={params['ki']:6.1f} kd={params['kd']:4.1f} "
             f"gas={params['gas_hold']:4.2f} iae={row['tracking_iae']:.6f} "
-            f"itae={row['tracking_itae']:.6f} kpi={row['kpi']:.2f} "
+            f"itae={row['tracking_itae']:.6f} score={row['normalized_score']:.2f} "
             f"energy={row['energy_kwh']:.6f} safety={row['constraint_violation_count']:.1f}"
         )
 
@@ -175,13 +175,13 @@ def main():
     for row in rows[:args.top]:
         print(
             f"iae={row['tracking_iae']:.6f} itae={row['tracking_itae']:.6f} "
-            f"kpi={row['kpi']:.2f} energy={row['energy_kwh']:.6f} "
+            f"score={row['normalized_score']:.2f} energy={row['energy_kwh']:.6f} "
             f"kp={row['kp']:.1f} ki={row['ki']:.1f} kd={row['kd']:.1f} gas={row['gas_hold']:.2f}"
         )
     print(
         "\nRECOMMENDED "
         f"iae={recommended['tracking_iae']:.6f} itae={recommended['tracking_itae']:.6f} "
-        f"kpi={recommended['kpi']:.2f} energy={recommended['energy_kwh']:.6f} "
+        f"score={recommended['normalized_score']:.2f} energy={recommended['energy_kwh']:.6f} "
         f"kp={recommended['kp']:.1f} ki={recommended['ki']:.2f} "
         f"kd={recommended['kd']:.1f} gas={recommended['gas_hold']:.2f}"
     )

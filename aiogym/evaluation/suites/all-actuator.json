@@ -9,11 +9,32 @@
   "cases": [
     {
       "scenarios": "ALL_SCENARIOS",
-      "objective": "tracking"
+      "objective": "tracking",
+      "environment": {
+        "dynamic": false,
+        "randomize": false,
+        "randomize_setpoints": false,
+        "randomize_plant": false,
+        "plant_drift": false,
+        "noise": false
+      }
     },
     {
-      "scenarios": "ECONOMIC_SCENARIOS",
-      "objective": "economic"
+      "scenarios": ["cascade"],
+      "objective": "economic",
+      "task": "continuous-benchmark"
+    },
+    {
+      "scenarios": ["cstr", "hvac", "heater"],
+      "objective": "economic",
+      "environment": {
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "noise": false
+      }
     }
   ]
 }

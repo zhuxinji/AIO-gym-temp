@@ -444,7 +444,7 @@ def main():
             f"({args.n_envs} envs x {args.steps / train_seconds / args.n_envs:.1f}/env/s)"
         )
     print(
-        f"eval {metric}={result[metric]:.3f} kpi={result['kpi']:.3f} "
+        f"eval {metric}={result[metric]:.3f} score={result['normalized_score']:.3f} "
         f"profit={result['profit']:.3f} track={result['track']:.3f} "
         f"safety={result['constraint_violation_count']:.1f}"
     )

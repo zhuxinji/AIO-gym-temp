@@ -3,5 +3,26 @@
   "scenarios": "ECONOMIC_SCENARIOS",
   "objectives": ["economic"],
   "controllers": ["sb3"],
-  "action_mode": "setpoint"
+  "action_mode": "setpoint",
+  "episode_steps": 80,
+  "control_dt": 0.5,
+  "cases": [
+    {
+      "scenarios": ["cascade"],
+      "objective": "economic",
+      "task": "continuous-benchmark"
+    },
+    {
+      "scenarios": ["cstr", "hvac", "heater"],
+      "objective": "economic",
+      "environment": {
+        "dynamic": true,
+        "randomize": true,
+        "randomize_setpoints": false,
+        "randomize_plant": true,
+        "plant_drift": true,
+        "noise": false
+      }
+    }
+  ]
 }

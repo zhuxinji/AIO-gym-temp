@@ -3,6 +3,7 @@
 Human-readable summaries generated from the registered process-model metadata.
 
 - [Heated-tank cascade (`cascade`)](cascade.md)
+- [Recirculating heated-tank cascade (`cascade_recirculating`)](cascade_recirculating.md)
 - [Johansson quadruple-tank process (`quadruple`)](quadruple.md)
 - [Exothermic CSTR (`cstr`)](cstr.md)
 - [Two-zone HVAC (`hvac`)](hvac.md)

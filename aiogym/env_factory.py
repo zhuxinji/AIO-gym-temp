@@ -11,38 +11,62 @@ from ._internal.config import (
     protocol_env_overrides,
 )
 from .env import AIOGymNativeEnv
-from .evaluation.protocols import resolve_protocol
+from .evaluation.protocols import BenchmarkProtocol, resolve_protocol
 
 
-def make_env(model: str = "cascade", objective: str | Mapping[str, Any] | None = None,
+def make_env(scenario: Any = "cascade", objective: str | Mapping[str, Any] | None = None,
              seed: int | None = None, config: str | Path | Mapping[str, Any] | None = None,
-             *, protocol: str | Mapping[str, Any] | None = None,
+             *, protocol: BenchmarkProtocol | Mapping[str, Any] | None = None,
              **overrides) -> AIOGymNativeEnv:
     """Create an AIO-Gym environment from direct arguments or a config mapping."""
 
     data = load_config(config)
-    nested_env = data.pop("env", {})
-    if not isinstance(nested_env, Mapping):
-        raise TypeError("config['env'] must be a mapping of environment options")
-    data.update(nested_env)
+    removed = sorted(set(data) & {"model", "env"})
+    if removed:
+        raise ValueError(
+            f"unsupported environment config field(s): {', '.join(removed)}; "
+            "use 'scenario' and 'environment'"
+        )
+    nested_environment = data.pop("environment", {})
+    if not isinstance(nested_environment, Mapping):
+        raise TypeError("config['environment'] must be a mapping of environment options")
+    data.update(nested_environment)
     data.update(overrides)
     config_objective = data.pop("objective", None)
-    if objective is None:
-        objective = config_objective
     config_protocol = data.pop("protocol", None)
     if protocol is None:
         protocol = config_protocol
-    scenario = data.pop("scenario", data.pop("model", model))
-    objective_spec = objective if objective is not None else protocol
-    if objective_spec is not None:
-        if isinstance(objective_spec, Mapping):
-            objective_data = dict(objective_spec)
-            objective_spec = objective_data.pop("objective", "tracking")
-            data.update(objective_data)
-        protocol_options = protocol_data(data)
+    scenario = data.pop("scenario", scenario)
+    protocol_options = protocol_data(data)
+    configured_objective = config_objective
+    if isinstance(protocol, Mapping):
+        protocol_options.update(dict(protocol))
+        configured_objective = protocol_options.pop(
+            "objective", configured_objective
+        )
+    elif protocol is not None and not isinstance(protocol, BenchmarkProtocol):
+        raise TypeError("protocol must be a BenchmarkProtocol or mapping")
+
+    task_has_default = False
+    if data.get("task") is not None:
+        from .evaluation.task_profiles import load_task_profile
+
+        task_profile = load_task_profile(data["task"], scenario=scenario)
+        task_has_default = task_profile.get("default_objective") is not None
+
+    use_protocol = (
+        objective is not None
+        or configured_objective is not None
+        or task_has_default
+        or isinstance(protocol, BenchmarkProtocol)
+    )
+    if use_protocol:
+        protocol_options = protocol_data({**data, **protocol_options})
+        if configured_objective is not None:
+            protocol_options["objective"] = configured_objective
         benchmark_protocol = resolve_protocol(
             scenario,
-            objective=objective_spec,
+            objective=protocol if isinstance(protocol, BenchmarkProtocol) else objective,
             data=protocol_options,
         )
         env_kwargs = benchmark_protocol.env_kwargs()

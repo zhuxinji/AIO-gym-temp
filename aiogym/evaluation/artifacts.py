@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from aiogym._internal.serialization import jsonable as _jsonable, write_json as _write_json
+from aiogym._internal.serialization import write_json as _write_json
 from aiogym.evaluation.plots import (
     plot_constraint_timeline,
     plot_grouped_leaderboard,
@@ -26,6 +26,36 @@ def write_benchmark_artifacts(out_dir: str | Path, payload: Mapping[str, Any]) -
     return _write_benchmark_artifacts(Path(out_dir), payload)
 
 
+def finalize_benchmark_artifacts(
+    out_dir: str | Path,
+    payload: Mapping[str, Any],
+    *,
+    create_plots: bool = False,
+    markdown_report: bool = False,
+) -> dict[str, Any]:
+    """Write one canonical benchmark payload and its optional derived outputs."""
+
+    root = Path(out_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    data = dict(payload)
+    data["artifacts"] = write_benchmark_artifacts(root, data)
+    benchmark_path = root / "benchmark.json"
+    _write_json(benchmark_path, data)
+    if create_plots:
+        plot_results(root)
+        with benchmark_path.open() as stream:
+            data = json.load(stream)
+    if markdown_report:
+        from .reports import render_benchmark_report
+
+        report_path = root / "report.md"
+        render_benchmark_report(root, out_path=report_path)
+        data.setdefault("artifacts", {})
+        data["artifacts"]["markdown_report"] = str(report_path)
+        _write_json(benchmark_path, data)
+    return data
+
+
 def plot_results(run_dir: str | Path) -> dict[str, str]:
     """Generate summary and rollout SVGs from a benchmark artifact directory."""
 
@@ -40,7 +70,7 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
     rows = [
         _plot_row(row)
         for row in payload.get("rows", [])
-        if row.get("status") in {"passed", "degraded"}
+        if row.get("execution_status") in {"passed", "degraded"}
     ]
     figures = {}
     artifact_figures = {}
@@ -275,27 +305,30 @@ def _artifact_scenarios(payload: Mapping[str, Any]) -> list[str]:
 def _leaderboard(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for row in rows:
-        if row.get("status") == "failed":
+        if row.get("execution_status") == "failed":
             continue
         metric = row.get("metric")
         value = row.get(metric) if metric else None
         item = {
             "rank": 0,
-            "controller": row.get("controller") or row.get("name"),
+            "controller": row.get("controller"),
             "scenario": row.get("scenario"),
             "task": row.get("task", "default"),
             "task_status": row.get("task_status", "implicit-default"),
             "task_profile_hash": row.get("task_profile_hash"),
             "objective": row.get("objective"),
-            "status": row.get("status"),
+            "objective_source": row.get("objective_source"),
+            "objective_status": row.get("objective_status", "not-defined"),
+            "execution_status": row.get("execution_status"),
             "metric": metric,
             "metric_value": value,
-            "kpi": row.get("kpi"),
+            "normalized_score": row.get("normalized_score"),
             "profit": row.get("profit"),
             "tracking_cost": row.get("tracking_cost"),
             "tracking_return": row.get("tracking_return"),
             "tracking_error_cost": row.get("tracking_error_cost"),
             "tracking_move_cost": row.get("tracking_move_cost"),
+            "tracking_steady_cost": row.get("tracking_steady_cost"),
             "tracking_mse": row.get("tracking_mse"),
             "tracking_iae": row.get("tracking_iae"),
             "constraint_violation_count": row.get("constraint_violation_count"),
@@ -310,7 +343,7 @@ def _leaderboard(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for group in groups.values():
         group.sort(key=lambda item: (
-            item["status"] not in {"passed", "degraded"},
+            item["execution_status"] not in {"passed", "degraded"},
             _sort_value(item["metric"], item["metric_value"]),
         ))
         for i, item in enumerate(group, 1):
@@ -323,7 +356,7 @@ def _sort_value(metric: str | None, value):
     if value is None:
         return float("inf")
     if metric in {
-        "tracking_cost", "tracking_error_cost", "tracking_move_cost",
+        "tracking_cost", "tracking_error_cost", "tracking_move_cost", "tracking_steady_cost",
         "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae", "tracking_overshoot",
         "tracking_settling_time", "constraint_violation_count",
         "constraint_violation_severity", "action_violation_count",
@@ -377,7 +410,7 @@ def _tracking_rollout_groups(rollouts: Sequence[Mapping[str, Any]]):
 def _tracking_comparison_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     tracking_rows = [
         row for row in rows
-        if row.get("objective") == "tracking" and row.get("status") in {"passed", "degraded"}
+        if row.get("objective") == "tracking" and row.get("execution_status") in {"passed", "degraded"}
     ]
     if not tracking_rows:
         return []
@@ -387,11 +420,11 @@ def _tracking_comparison_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[st
     for scenario, task in benchmark_cases:
         scenario_rows = [row for row in tracking_rows if _benchmark_case_key(row) == (scenario, task)]
         values = {
-            str(row.get("controller") or "controller"): _float_or_none(row.get("tracking_cost"))
+            str(row.get("controller") or "controller"): _float_or_none(row.get("tracking_error_cost"))
             for row in scenario_rows
         }
-        runtime_ms = {
-            str(row.get("controller") or "controller"): _runtime_step_ms(row)
+        runtime_seconds = {
+            str(row.get("controller") or "controller"): _runtime_total_seconds(row)
             for row in scenario_rows
         }
         ranked = [(controller, value) for controller, value in values.items() if value is not None]
@@ -402,33 +435,32 @@ def _tracking_comparison_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[st
             "scenario": scenario,
             "task": task,
             "best_controller": best_controller,
-            "best_tracking_cost": best_value,
-            "best_step_ms": runtime_ms.get(best_controller),
+            "best_tracking_error_cost": best_value,
+            "best_runtime_total_seconds": runtime_seconds.get(best_controller),
         }
         oracle_value = values.get("NMPC-oracle")
         row["oracle_gap_vs_best"] = None if oracle_value is None else oracle_value - best_value
         for controller in controllers:
-            row[f"{controller}_tracking_cost"] = values.get(controller)
-            row[f"{controller}_step_ms"] = runtime_ms.get(controller)
+            row[f"{controller}_tracking_error_cost"] = values.get(controller)
+            row[f"{controller}_runtime_total_seconds"] = runtime_seconds.get(controller)
         out.append(row)
     return out
 
 
 def _write_tracking_comparison_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
-    base = ["scenario", "task", "best_controller", "best_tracking_cost", "best_step_ms", "oracle_gap_vs_best"]
+    base = ["scenario", "task", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
     controllers = []
     for row in rows:
         for key in row:
-            if key.endswith("_tracking_cost") and key not in {"best_tracking_cost"}:
-                controllers.append(key[: -len("_tracking_cost")])
+            if key.endswith("_tracking_error_cost") and key not in {"best_tracking_error_cost"}:
+                controllers.append(key[: -len("_tracking_error_cost")])
     controllers = list(dict.fromkeys(controllers))
-    columns = base + [column for controller in controllers for column in (f"{controller}_tracking_cost", f"{controller}_step_ms")]
+    columns = base + [column for controller in controllers for column in (f"{controller}_tracking_error_cost", f"{controller}_runtime_total_seconds")]
     _write_summary_csv(path, rows, columns)
 
 
-def _runtime_step_ms(row: Mapping[str, Any]):
-    value = _float_or_none(row.get("runtime_seconds_per_step"))
-    return None if value is None else value * 1000.0
+def _runtime_total_seconds(row: Mapping[str, Any]):
+    return _float_or_none(row.get("runtime_total_seconds"))
 
 
 def _float_or_none(value):
@@ -461,10 +493,10 @@ def _write_summary_index_csv(path: Path, groups: Mapping[str, Sequence[Mapping[s
 
 FULL_SUMMARY_COLUMNS = [
     "suite_case", "scenario", "task", "task_status", "task_profile_hash",
-    "objective", "action_mode", "controller",
-    "control_structure", "status", "metric", "kpi", "profit", "production",
+    "objective", "objective_source", "objective_status", "action_mode", "controller",
+    "control_structure", "execution_status", "metric", "normalized_score", "profit", "production",
     "return", "track", "tracking_cost", "tracking_return", "tracking_error_cost",
-    "tracking_move_cost", "tracking_mse", "tracking_iae", "energy_kwh", "constraint",
+    "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "energy_kwh", "constraint",
     "constraint_violation_count", "constraint_violation_severity",
     "safety_margin_min",
     "runtime_seconds_per_step", "episodes", "seed_list",
@@ -474,22 +506,25 @@ FULL_SUMMARY_COLUMNS = [
 OBJECTIVE_SUMMARY_COLUMNS = {
     "tracking": [
         "suite_case", "scenario", "task", "task_status", "task_profile_hash",
-        "controller", "control_structure", "status",
+        "objective_source", "objective_status", "controller", "control_structure",
+        "execution_status",
         "metric", "tracking_cost", "tracking_return", "tracking_error_cost",
-        "tracking_move_cost", "tracking_mse", "tracking_iae", "track", "kpi", "energy_kwh",
+        "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "track", "normalized_score", "energy_kwh",
         "constraint_violation_count", "constraint_violation_severity",
         "runtime_seconds_per_step", "episodes", "seed_list",
     ],
     "economic": [
         "suite_case", "scenario", "task", "task_status", "task_profile_hash",
-        "controller", "control_structure", "status",
-        "metric", "profit", "production", "energy_kwh", "kpi",
+        "objective_source", "objective_status", "controller", "control_structure",
+        "execution_status",
+        "metric", "profit", "production", "energy_kwh", "normalized_score",
         "constraint", "constraint_violation_count", "constraint_violation_severity",
         "safety_margin_min", "runtime_seconds_per_step", "episodes", "seed_list",
     ],
     "safety": [
         "suite_case", "scenario", "task", "task_status", "task_profile_hash",
-        "controller", "control_structure", "status",
+        "objective_source", "objective_status", "controller", "control_structure",
+        "execution_status",
         "metric", "constraint_violation_count", "constraint_violation_duration",
         "constraint_violation_severity", "action_violation_count",
         "action_violation_severity", "runaway_count", "safety_margin_min",
@@ -512,9 +547,9 @@ def _write_summary_csv(path: Path, rows: Sequence[Mapping[str, Any]],
 
 def _write_learning_curve_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     preferred = [
-        "step", "timesteps", "phase", "metric", "metric_value", "kpi", "profit",
+        "step", "timesteps", "phase", "metric", "metric_value", "normalized_score", "profit",
         "return", "track", "tracking_cost", "tracking_return", "tracking_error_cost",
-        "tracking_move_cost", "tracking_mse", "tracking_iae", "constraint_violation_count",
+        "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "constraint_violation_count",
         "constraint_violation_severity", "runtime_total_seconds",
     ]
     keys = list(dict.fromkeys(
@@ -538,7 +573,6 @@ def _csv_cell(value) -> str:
 
 def _plot_row(row: Mapping[str, Any]) -> dict[str, Any]:
     out = dict(row)
-    out.setdefault("name", out.get("controller", out.get("suite_case", "case")))
-    for key in ("profit", "kpi", "track", "constraint"):
+    for key in ("profit", "normalized_score", "track", "constraint"):
         out.setdefault(key, 0.0)
     return out
