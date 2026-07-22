@@ -8,33 +8,13 @@
   "control_dt": 0.5,
   "cases": [
     {
-      "scenarios": ["cascade", "quadruple", "cstr", "hvac"],
-      "objective": "tracking",
-      "environment": {
-        "dynamic": false,
-        "randomize": false,
-        "randomize_setpoints": false,
-        "randomize_plant": false,
-        "plant_drift": false,
-        "noise": false
-      }
+      "case_ref": "tracking/deterministic",
+      "scenarios": ["cascade", "quadruple", "cstr", "hvac"]
     },
+    {"case_ref": "economic/cascade-continuous"},
     {
-      "scenarios": ["cascade"],
-      "objective": "economic",
-      "task": "continuous-benchmark"
-    },
-    {
-      "scenarios": ["cstr", "hvac"],
-      "objective": "economic",
-      "environment": {
-        "dynamic": true,
-        "randomize": true,
-        "randomize_setpoints": false,
-        "randomize_plant": true,
-        "plant_drift": true,
-        "noise": false
-      }
+      "case_ref": "economic/randomized",
+      "scenarios": ["cstr", "hvac"]
     }
   ]
 }

@@ -5,71 +5,11 @@
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
   "cases": [
-    {
-      "scenario": "quadruple",
-      "task": "minimum-phase-classic",
-      "objective": "tracking",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-minimum-phase"},
-        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "nonminimum-phase-classic",
-      "objective": "tracking",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-nonminimum-phase"},
-        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "pminus-reference-step",
-      "objective": "tracking",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-minimum-phase"},
-        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "pplus-reference-step",
-      "objective": "tracking",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-nonminimum-phase"},
-        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "zero-boundary-stress",
-      "objective": "tracking",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-zero-boundary"},
-        "mpc": {"profile": "quadruple-zero-boundary"},
-        "oracle": {"profile": "quadruple-zero-boundary", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "disturbance-rejection",
-      "objective": "robustness",
-      "controllers": ["pid", "mpc", "oracle"],
-      "controller_configs": {
-        "pid": {"profile": "quadruple-disturbance-rejection"},
-        "mpc": {"profile": "quadruple-disturbance-rejection"},
-        "oracle": {"profile": "quadruple-disturbance-rejection", "mode": "tracking"}
-      }
-    }
+    {"case_ref": "quadruple/minimum-phase"},
+    {"case_ref": "quadruple/nonminimum-phase"},
+    {"case_ref": "quadruple/pminus-reference"},
+    {"case_ref": "quadruple/pplus-reference"},
+    {"case_ref": "quadruple/zero-boundary"},
+    {"case_ref": "quadruple/disturbance-rejection"}
   ]
 }

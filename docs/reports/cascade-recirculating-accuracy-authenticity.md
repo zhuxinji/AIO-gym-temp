@@ -1,10 +1,16 @@
 # PDF三级循环加热水箱模型准确性与真实性评估报告
 
 > 对象：AIO-Gym `cascade_recirculating` / Recirculating heated-tank cascade
-> 设计输入：[《三级水箱加热系统》](../../../三级水箱加热系统.pdf)
+> 设计输入：外部方案文档《三级水箱加热系统》（未随仓库发布；审计副本
+> SHA-256：`f1776548667b0175d9ed69fd6e7adb2f6eece9fa789141473293ccc2f87cb91e`）
 > 报告日期：2026-07-20
-> 状态：阶段1-5实施后的内部审计
+> 状态：历史审计快照（阶段 1–5 实施后）
+> 适用基线：`3fc9412`（`main`，审计时工作区另含未提交修改）
 > 机器可读证据：[`cascade-recirculating-validation-results.json`](cascade-recirculating-validation-results.json)
+
+> Snapshot 提示：本文冻结的是 2026-07-20 的审计现场，不是当前配置说明。
+> 文中的 `legacy-default` 是当时的兼容任务；整理本文档时的仓库版本
+> `7bf0b08` 已不再注册该任务。当前可用任务应以实际任务目录和注册 API 为准。
 
 ## 1. 结论摘要
 

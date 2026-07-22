@@ -11,15 +11,14 @@ from __future__ import annotations
 import copy
 import math
 
+from .backends import _NUMERIC_OPS, _NumericOps, _casadi_ops, _maxv
+from .integration import Integrator
+
 RHO = 1000.0
 CP = 4186.0
 G = 9.81
 # Volumetric heat capacity of liquid water, J/(m3*K).
 RHO_CP = RHO * CP
-
-
-def _maxv(a, b):
-    return a if a > b else b
 
 
 def _copy_value(v):
@@ -28,116 +27,6 @@ def _copy_value(v):
 
 def _is_model_instance(obj):
     return hasattr(obj, "dynamics") and hasattr(obj, "initial_state") and not isinstance(obj, (str, type))
-
-
-class _NumericOps:
-    symbolic = False
-
-    @staticmethod
-    def sqrt(v):
-        return math.sqrt(v)
-
-    @staticmethod
-    def exp(v):
-        return math.exp(v)
-
-    @staticmethod
-    def sin(v):
-        return math.sin(v)
-
-    @staticmethod
-    def cos(v):
-        return math.cos(v)
-
-    @staticmethod
-    def tan(v):
-        return math.tan(v)
-
-    @staticmethod
-    def log(v):
-        return math.log(v)
-
-    @staticmethod
-    def max(a, b):
-        return _maxv(a, b)
-
-    @staticmethod
-    def smooth_max(a, b, eps=1e-6):
-        return _maxv(a, b)
-
-    @staticmethod
-    def min(a, b):
-        return a if a < b else b
-
-    @staticmethod
-    def if_else(condition, when_true, when_false):
-        return when_true if condition else when_false
-
-    @staticmethod
-    def abs(v):
-        return abs(v)
-
-    @staticmethod
-    def vector(values):
-        return list(values)
-
-
-def _casadi_ops(ca):
-    class _CasadiOps:
-        symbolic = True
-
-        @staticmethod
-        def sqrt(v):
-            return ca.sqrt(v)
-
-        @staticmethod
-        def exp(v):
-            return ca.exp(v)
-
-        @staticmethod
-        def sin(v):
-            return ca.sin(v)
-
-        @staticmethod
-        def cos(v):
-            return ca.cos(v)
-
-        @staticmethod
-        def tan(v):
-            return ca.tan(v)
-
-        @staticmethod
-        def log(v):
-            return ca.log(v)
-
-        @staticmethod
-        def max(a, b):
-            return ca.fmax(a, b)
-
-        @staticmethod
-        def smooth_max(a, b, eps=1e-6):
-            return 0.5 * (a + b + ca.sqrt((a - b) ** 2 + eps ** 2))
-
-        @staticmethod
-        def min(a, b):
-            return ca.fmin(a, b)
-
-        @staticmethod
-        def if_else(condition, when_true, when_false):
-            return ca.if_else(condition, when_true, when_false)
-
-        @staticmethod
-        def abs(v):
-            return ca.fabs(v)
-
-        @staticmethod
-        def vector(values):
-            return ca.vertcat(*values)
-
-    return _CasadiOps
-
-
-_NUMERIC_OPS = _NumericOps()
 
 
 class ProcessModelContract:
@@ -631,37 +520,3 @@ class ProcessModelContract:
 
     def ideal_energy_kw(self, x, y_sp, env, act):
         return 0.0
-
-class Integrator:
-    """Fixed-step RK4 integrator for process models."""
-
-    def __init__(self, model, *, max_step=None):
-        self.model = model
-        settings = model.solver_settings()
-        self.method = settings["method"]
-        self.dt_micro = float(settings["max_step"] if max_step is None else max_step)
-        if not math.isfinite(self.dt_micro) or self.dt_micro <= 0:
-            raise ValueError("integrator max_step must be finite and positive")
-        self.reset()
-
-    def reset(self, state=None):
-        self.x = list(state) if state is not None else list(self.model.initial_state())
-        self.t = 0.0
-
-    def step(self, dt, act, env):
-        m = self.model
-        u = m.action_vector(act)
-        f = lambda x: m.dynamics(x, u, env)
-        nsub = max(1, math.ceil(dt / self.dt_micro - 1e-9))
-        h = dt / nsub
-        for _ in range(nsub):
-            x = self.x
-            k1 = f(x)
-            k2 = f([v + 0.5 * h * k1[i] for i, v in enumerate(x)])
-            k3 = f([v + 0.5 * h * k2[i] for i, v in enumerate(x)])
-            k4 = f([v + h * k3[i] for i, v in enumerate(x)])
-            self.x = [v + (h / 6.0) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) for i, v in enumerate(x)]
-            if hasattr(m, "clamp_state"):
-                self.x = m.clamp_state(self.x)
-            self.t += h
-        return self.x

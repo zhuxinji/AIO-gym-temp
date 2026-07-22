@@ -13,10 +13,16 @@ import importlib.util
 import os
 import time
 
-from aiogym._internal.config import parse_seed_list
+from aiogym._internal.config import parse_seed_list, resolve_auto_events
+from aiogym._internal.paths import run_path
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
-from aiogym.evaluation import evaluate_controller, resolve_protocol, rollout_controller
+from aiogym.evaluation import (
+    evaluate_controller,
+    resolve_objective_reward_mode,
+    resolve_protocol,
+    rollout_controller,
+)
 from aiogym.rl.artifacts import (
     learning_curve_point,
     result_row,
@@ -30,11 +36,14 @@ def make_training_env(args, rank: int = 0):
     def _init():
         env = AIOGymNativeEnv(
             args.scenario,
-            reward_mode=args.reward_mode,
+            reward_mode=(
+                getattr(args, "resolved_reward_mode", None)
+                or getattr(args, "reward_mode", "kpi")
+            ),
             action_mode=args.action_mode,
             control_dt=args.control_dt,
             episode_steps=args.train_episode_steps,
-            dynamic=args.dynamic,
+            auto_events=args.auto_events,
             randomize=args.randomize,
             randomize_setpoints=args.randomize_setpoints,
             randomize_plant=args.randomize_plant,
@@ -201,7 +210,8 @@ def training_metadata(args, checkpoint_path: str):
         "algo": args.algo,
         "scenario": args.scenario,
         "action_mode": args.action_mode,
-        "reward_mode": args.reward_mode,
+        "objective": args.objective,
+        "resolved_reward_mode": args.resolved_reward_mode,
         "total_timesteps": args.steps,
         "seed": args.seed,
         "n_envs": args.n_envs,
@@ -211,7 +221,9 @@ def training_metadata(args, checkpoint_path: str):
         "torch_threads": args.torch_threads,
         "train_episode_steps": args.train_episode_steps,
         "env_kwargs": {
-            "dynamic": args.dynamic,
+            "auto_events": getattr(
+                args, "auto_events", getattr(args, "dynamic", False)
+            ),
             "randomize": args.randomize,
             "randomize_setpoints": args.randomize_setpoints,
             "randomize_plant": args.randomize_plant,
@@ -233,8 +245,42 @@ def artifact_dir_for(args, run_name: str) -> str:
 def run_name_for(args, run_id: str | None = None) -> str:
     if args.name:
         return args.name
-    stem = f"{args.algo}_{args.scenario}_{args.action_mode}_{args.reward_mode}_seed{args.seed}"
+    objective = getattr(args, "objective", None) or getattr(args, "reward_mode", "kpi")
+    stem = f"{args.algo}_{args.scenario}_{args.action_mode}_{objective}_seed{args.seed}"
     return f"{stem}_{run_id or utc_run_id()}"
+
+
+def configure_training_objective(args, *, warn_legacy: bool = True):
+    """Resolve the public training objective and its internal environment reward."""
+
+    objective, reward_mode = resolve_objective_reward_mode(
+        getattr(args, "objective", None),
+        getattr(args, "reward_mode", None),
+        default_objective="kpi",
+        warn_legacy=warn_legacy,
+    )
+    args.objective = objective
+    args.resolved_reward_mode = reward_mode
+    # Keep this internal attribute for existing helper calls; generated metadata
+    # uses objective + resolved_reward_mode instead.
+    args.reward_mode = reward_mode
+    if hasattr(args, "eval_objective") and args.eval_objective is None:
+        args.eval_objective = objective
+    return args
+
+
+def configure_training_auto_events(args, *, warn_legacy: bool = True):
+    """Resolve the automatic-event flag and deprecated CLI alias."""
+
+    auto_events = resolve_auto_events(
+        getattr(args, "auto_events", None),
+        getattr(args, "dynamic", None),
+        default=False,
+        warn_legacy=warn_legacy and getattr(args, "dynamic", None) is not None,
+    )
+    args.auto_events = auto_events
+    args.dynamic = auto_events
+    return args
 
 
 def make_learning_curve_callback(args):
@@ -299,12 +345,23 @@ def require_onnx_export_dependencies():
         )
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def main(argv=None, prog=None):
+    ap = argparse.ArgumentParser(prog=prog)
     ap.add_argument("--scenario", default="cstr")
     ap.add_argument("--algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--action-mode", default="actuator", choices=["actuator", "setpoint"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking"])
+    ap.add_argument(
+        "--objective",
+        default=None,
+        choices=["economic", "tracking", "robustness", "safety", "kpi"],
+        help="training objective; defaults to kpi",
+    )
+    ap.add_argument(
+        "--reward-mode",
+        default=None,
+        choices=["kpi", "economic", "tracking"],
+        help="deprecated compatibility alias for --objective",
+    )
     ap.add_argument("--steps", type=int, default=10000)
     ap.add_argument("--n-envs", type=int, default=default_n_envs())
     ap.add_argument("--vec-env", default="subproc", choices=["subproc", "dummy"],
@@ -314,7 +371,18 @@ def main():
     ap.add_argument("--train-episode-steps", type=int, default=400)
     ap.add_argument("--seed", type=int, default=1000)
     ap.add_argument("--control-dt", type=float, default=0.5)
-    ap.add_argument("--dynamic", action="store_true")
+    ap.add_argument(
+        "--auto-events",
+        action="store_true",
+        default=None,
+        help="enable generic automatically generated within-episode events",
+    )
+    ap.add_argument(
+        "--dynamic",
+        action="store_true",
+        default=None,
+        help="deprecated compatibility alias for --auto-events",
+    )
     ap.add_argument("--randomize", action="store_true")
     ap.add_argument("--randomize-setpoints", action="store_true")
     ap.add_argument("--randomize-plant", action="store_true")
@@ -336,11 +404,16 @@ def main():
                     help="torch intra-op threads; keep low so SubprocVecEnv workers get CPU time")
     ap.add_argument("--verbose", type=int, default=1)
     ap.add_argument("--tensorboard-log", default=None)
-    ap.add_argument("--out-dir", default="aiogym/runs/rl/sb3")
+    ap.add_argument("--out-dir", default=str(run_path("rl", "sb3")))
     ap.add_argument("--name", default=None, help="stable run name; defaults to a timestamped name")
     ap.add_argument("--artifact-dir", default=None,
                     help="standard benchmark artifact directory; defaults to <out-dir>/<name>_artifacts")
-    ap.add_argument("--eval-objective", default="kpi", choices=["economic", "tracking", "robustness", "safety", "kpi"])
+    ap.add_argument(
+        "--eval-objective",
+        default=None,
+        choices=["economic", "tracking", "robustness", "safety", "kpi"],
+        help="evaluation objective; defaults to the training objective",
+    )
     ap.add_argument("--eval-episodes", type=int, default=3)
     ap.add_argument("--eval-episode-steps", type=int, default=80)
     ap.add_argument("--eval-seed", type=int, default=9000)
@@ -352,7 +425,9 @@ def main():
     ap.add_argument("--rollout-steps", type=int, default=None)
     ap.add_argument("--onnx", action="store_true", help="export deterministic policy to ONNX after training")
     ap.add_argument("--onnx-path", default=None, help="optional ONNX export path; defaults to checkpoint basename + .onnx")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    configure_training_objective(args)
+    configure_training_auto_events(args)
     if args.onnx:
         require_onnx_export_dependencies()
 
@@ -384,7 +459,8 @@ def main():
     model = build_algo(args, env)
     print(
         f"training {args.algo.upper()} | {args.n_envs} {args.vec_env} envs | "
-        f"device={args.device} | action={args.action_mode} | reward={args.reward_mode}"
+        f"device={args.device} | action={args.action_mode} | "
+        f"objective={args.objective} | reward={args.resolved_reward_mode}"
     )
     t0 = time.time()
     curve_callback = make_learning_curve_callback(args)

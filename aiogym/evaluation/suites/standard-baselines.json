@@ -1,40 +1,5 @@
 {
+  "extends": "all-actuator",
   "description": "Standard fixed-actuator baseline matrix for all built-in scenarios.",
-  "scenarios": "ALL_SCENARIOS",
-  "objectives": ["tracking", "economic"],
-  "controllers": ["pid", "mpc", "oracle"],
-  "action_mode": "actuator",
-  "episode_steps": 80,
-  "control_dt": 0.5,
-  "cases": [
-    {
-      "scenarios": "ALL_SCENARIOS",
-      "objective": "tracking",
-      "environment": {
-        "dynamic": false,
-        "randomize": false,
-        "randomize_setpoints": false,
-        "randomize_plant": false,
-        "plant_drift": false,
-        "noise": false
-      }
-    },
-    {
-      "scenarios": ["cascade"],
-      "objective": "economic",
-      "task": "continuous-benchmark"
-    },
-    {
-      "scenarios": ["cstr", "hvac", "heater"],
-      "objective": "economic",
-      "environment": {
-        "dynamic": true,
-        "randomize": true,
-        "randomize_setpoints": false,
-        "randomize_plant": true,
-        "plant_drift": true,
-        "noise": false
-      }
-    }
-  ]
+  "controllers": ["pid", "mpc", "oracle"]
 }

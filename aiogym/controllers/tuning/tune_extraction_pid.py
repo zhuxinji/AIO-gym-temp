@@ -8,7 +8,8 @@ import json
 import os
 from datetime import datetime, timezone
 
-from aiogym._internal.config import parse_seed_list
+from aiogym._internal.config import parse_seed_list, resolve_auto_events
+from aiogym._internal.paths import run_path
 from aiogym.controllers import make_controller
 from aiogym.evaluation import BenchmarkProtocol, evaluate_controller
 
@@ -87,7 +88,13 @@ def main():
     ap.add_argument("--seed", type=int, default=9700)
     ap.add_argument("--seed-list", default=None)
     ap.add_argument("--control-dt", type=float, default=0.5)
-    ap.add_argument("--dynamic", action="store_true")
+    ap.add_argument("--auto-events", action="store_true", default=None)
+    ap.add_argument(
+        "--dynamic",
+        action="store_true",
+        default=None,
+        help="deprecated compatibility alias for --auto-events",
+    )
     ap.add_argument("--randomize", action="store_true")
     ap.add_argument("--randomize-plant", action="store_true")
     ap.add_argument("--plant-drift", action="store_true")
@@ -98,8 +105,14 @@ def main():
     ap.add_argument("--gas-hold", default="0,0.25,0.5,1.0")
     ap.add_argument("--recommendation-relative-iae-tolerance", type=float, default=0.0005)
     ap.add_argument("--top", type=int, default=12)
-    ap.add_argument("--out", default="aiogym/runs/tune_extraction_pid_tracking.json")
+    ap.add_argument("--out", default=str(run_path("tuning", "tune_extraction_pid_tracking.json")))
     args = ap.parse_args()
+    args.auto_events = resolve_auto_events(
+        args.auto_events,
+        args.dynamic,
+        default=False,
+        warn_legacy=args.dynamic is not None,
+    )
 
     seeds = parse_seed_list(args.seed_list, args.seed, args.episodes)
     protocol = BenchmarkProtocol.tracking(
@@ -107,7 +120,7 @@ def main():
         action_mode="actuator",
         episode_steps=args.episode_steps,
         control_dt=args.control_dt,
-        dynamic=args.dynamic,
+        auto_events=args.auto_events,
         randomize=args.randomize,
         randomize_plant=args.randomize_plant,
         plant_drift=args.plant_drift,

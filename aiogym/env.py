@@ -15,9 +15,9 @@ reward_mode:
   "tracking" setpoint tracking: reward = -(normalized squared SP error
              + input move penalty + nominal steady-input deviation penalty).
 
-``dynamic`` controls generic automatically generated within-episode events; it
+``auto_events`` controls generic automatically generated within-episode events; it
 does not enable or disable the process model's physical dynamics. The model is
-integrated on every step for both values. ``dynamic=True`` can inject setpoint
+integrated on every step for both values. ``auto_events=True`` can inject setpoint
 steps, cold-inlet steps, ambient drift, or demand surges on top of domain-
 randomised start points. Named tasks normally set it to ``False`` and declare
 their own deterministic event schedules. The policy observes changed conditions
@@ -30,50 +30,38 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+from ._internal.config import resolve_auto_events
 from .models import apply_model_params, make_model
-from .models import Integrator
+from .models.integration import Integrator
 from .evaluation.metrics.kpi import KPIScorer
-from .evaluation.objectives import stage_reward
 
-# Shared advisory/interlock limits for process safety scoring.
-T_HIGH, T_TRIP = 80.0, 92.0
-H_HIGH_FRAC, H_LOW_FRAC, H_OVERFLOW_FRAC = 0.90, 0.15, 0.97
-I_TEMP_MAX, I_LEVEL_MAX = 300.0, 8.0          # anti-windup clamp + obs normalizer for integral error
-
-_DIRECT_ENV_DEFAULTS = {
-    "dynamic": True,
-    "randomize": True,
-    "randomize_setpoints": True,
-    "randomize_plant": False,
-    "plant_drift": False,
-    "integral_obs": False,
-    "action_mode": "actuator",
-    "noise": False,
-    "noise_pct": 0.01,
-    "terminate_on_runaway": False,
-}
-
-
-def _validated_range(name, value):
-    try:
-        values = tuple(float(item) for item in value)
-    except (TypeError, ValueError) as ex:
-        raise ValueError(f"{name} must contain two numeric bounds") from ex
-    if len(values) != 2:
-        raise ValueError(f"{name} must contain exactly two bounds")
-    if not all(np.isfinite(item) for item in values):
-        raise ValueError(f"{name} bounds must be finite")
-    if values[0] > values[1]:
-        raise ValueError(f"{name} lower bound must not exceed its upper bound")
-    return values
-
+from ._environment.config import (
+    H_HIGH_FRAC,
+    H_LOW_FRAC,
+    H_OVERFLOW_FRAC,
+    I_LEVEL_MAX,
+    I_TEMP_MAX,
+    T_HIGH,
+    T_TRIP,
+    DIRECT_ENV_DEFAULTS as _DIRECT_ENV_DEFAULTS,
+    validated_range as _validated_range,
+)
+from ._environment.disturbances import DisturbanceRuntimeMixin
+from ._environment.observations import ObservationRuntimeMixin
+from ._environment.transitions import TransitionRuntimeMixin
 
 # ---- Environment wrapper ----
-class AIOGymNativeEnv(gym.Env):
+class AIOGymNativeEnv(
+    DisturbanceRuntimeMixin,
+    ObservationRuntimeMixin,
+    TransitionRuntimeMixin,
+    gym.Env,
+):
     metadata = {"render_modes": []}
 
     def __init__(self, scenario="cascade", control_dt=None, episode_steps=None, task=None,
-                 reward_mode="kpi", dynamic=None, randomize=None, randomize_setpoints=None,
+                 reward_mode="kpi", auto_events=None, dynamic=None, randomize=None,
+                 randomize_setpoints=None,
                  randomize_plant=None, plant_drift=None, integral_obs=None, action_mode=None,
                  noise=None, noise_pct=None, custom_stage_reward=None,
                  model_params=None,
@@ -84,7 +72,13 @@ class AIOGymNativeEnv(gym.Env):
         super().__init__()
         base_model = make_model(scenario)
         self.scenario = base_model.scenario
-        from .evaluation.task_profiles import resolve_environment_options
+        from .models.tasks import resolve_environment_options
+
+        auto_events = resolve_auto_events(
+            auto_events,
+            dynamic,
+            warn_legacy=dynamic is not None,
+        )
 
         self.task_profile, environment_options = resolve_environment_options(
             scenario=self.scenario,
@@ -93,7 +87,7 @@ class AIOGymNativeEnv(gym.Env):
                 "control_dt": control_dt,
                 "episode_steps": episode_steps,
                 "action_mode": action_mode,
-                "dynamic": dynamic,
+                "auto_events": auto_events,
                 "randomize": randomize,
                 "randomize_setpoints": randomize_setpoints,
                 "randomize_plant": randomize_plant,
@@ -110,7 +104,7 @@ class AIOGymNativeEnv(gym.Env):
         )
         self.model = apply_model_params(base_model, environment_options["model_params"])
         if self.task_profile is not None:
-            from .evaluation.task_profiles import configure_model_for_task
+            from .models.tasks import configure_model_for_task
 
             configure_model_for_task(self.model, self.task_profile)
         self._task_initial_state = copy.deepcopy(
@@ -128,7 +122,7 @@ class AIOGymNativeEnv(gym.Env):
                 "name": str(event["name"]),
                 "value": copy.deepcopy(event["value"]),
             })
-        dynamic = environment_options["dynamic"]
+        auto_events = environment_options["auto_events"]
         randomize = environment_options["randomize"]
         randomize_setpoints = environment_options["randomize_setpoints"]
         randomize_plant = environment_options["randomize_plant"]
@@ -149,7 +143,8 @@ class AIOGymNativeEnv(gym.Env):
         self.tracking_q_y = self._resolve_tracking_q_y(tracking_q_y)
         self.tracking_r_move = self._nonnegative("tracking_r_move", tracking_r_move)
         self.tracking_r_steady = self._nonnegative("tracking_r_steady", tracking_r_steady)
-        self.dynamic = dynamic
+        self.auto_events = auto_events
+        self.dynamic = auto_events  # deprecated read compatibility
         self.randomize_plant = randomize_plant    # per-episode operating-regime variation
         self.plant_drift = plant_drift            # slow within-episode parameter drift
         self.randomize = randomize
@@ -260,234 +255,6 @@ class AIOGymNativeEnv(gym.Env):
         return number
 
     # ---- helpers ----
-    def _copy_disturbance_value(self, value):
-        return copy.deepcopy(value)
-
-    def _reset_disturbance_values(self):
-        self._disturbance_values = {
-            name: self._copy_disturbance_value(value)
-            for name, value in self._disturbance_defaults.items()
-        }
-        for name, attr in self._disturbance_attrs.items():
-            if name in self._disturbance_values:
-                setattr(self, attr, self._copy_disturbance_value(self._disturbance_values[name]))
-
-    def _set_disturbance_value(self, name, value):
-        self._disturbance_values[name] = self._copy_disturbance_value(value)
-        attr = self._disturbance_attrs.get(name)
-        if attr:
-            setattr(self, attr, self._copy_disturbance_value(value))
-
-    def _validate_task_disturbance(self, name, value):
-        if name not in self._disturbance_defaults:
-            available = ", ".join(sorted(self._disturbance_defaults)) or "none"
-            raise ValueError(f"unknown task disturbance {name!r}; available: {available}")
-        row = self._disturbance_schema_by_name.get(name, {})
-        bounds = row.get("bounds")
-        values = value if isinstance(value, list) else [value]
-        if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
-            lo, hi = bounds
-            for item in values:
-                number = float(item)
-                if lo is not None and number < float(lo):
-                    raise ValueError(f"task disturbance {name!r} is below its lower bound {lo}")
-                if hi is not None and number > float(hi):
-                    raise ValueError(f"task disturbance {name!r} is above its upper bound {hi}")
-
-    def _sync_known_disturbances(self):
-        for name in self._disturbance_defaults:
-            attr = self._disturbance_attrs.get(name)
-            if attr and hasattr(self, attr):
-                self._disturbance_values[name] = self._copy_disturbance_value(getattr(self, attr))
-
-    def _env(self):
-        self._sync_known_disturbances()
-        return self.model.runtime_env(self._disturbance_values)
-
-    def _split(self, action):
-        a = np.clip(np.asarray(action, np.float64), 0.0, 1.0)
-        return self.model.action_vector(a)
-
-    def _obs(self):
-        state = self.model.state_vector(self.integ.x)
-        if self.noise:
-            noisy = []
-            for value, row in zip(state, self.model.state_schema()):
-                bounds = row.get("bounds")
-                scale = max(abs(float(value)), 1.0)
-                if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
-                    lo, hi = bounds
-                    if lo is not None and hi is not None and float(hi) > float(lo):
-                        scale = float(hi) - float(lo)
-                noisy.append(float(value) + float(self.np_random.normal(0, self.noise_pct * scale)))
-            state = noisy
-        o = state + list(self.y_sp) + list(self.model.disturbance_vector(self._env()))
-        if self.integral_obs:
-            o = o + [iy / I_TEMP_MAX for iy in self._iy]
-        return np.asarray(o, dtype=np.float32)
-
-    def _accumulate_integral(self):
-        if not self.model.supports_integral_observation:
-            return
-        out = self.model.outputs(self.integ.x)
-        y = list(out["y"])
-        errors = [self.y_sp[i] - y[i] if i < len(y) else 0.0 for i in range(len(self.y_sp))]
-        dt = self.control_dt
-        self._iy = [float(np.clip(self._iy[i] + errors[i] * dt, -I_TEMP_MAX, I_TEMP_MAX)) for i in range(len(errors))]
-
-    # ---- operating-regime variation ----
-    def _restore_nominal(self):
-        for k, v in self._p_nominal.items():
-            self.model.p[k] = (list(v) if isinstance(v, list) else v)
-
-    def _apply_regime(self):
-        """Scale plant params by per-episode multipliers (fouling / ageing / gain drift)."""
-        self._regime_mult = self._sample_regime_mult()
-        self._apply_mult(self._regime_mult)
-
-    def _sample_regime_mult(self):
-        rng = self.np_random
-        return {
-            k: float(rng.uniform(lo, hi))
-            for k, (lo, hi) in self._regime.items()
-            if k in self._p_nominal
-        }
-
-    def _init_regime_state(self):
-        self._regime_mult = {k: 1.0 for k in self._regime if k in self._p_nominal}
-        self._regime_target = dict(self._regime_mult)
-
-    def _apply_plant_drift(self):
-        if not self.plant_drift or not self._regime_mult:
-            return
-        if not self._regime_target:
-            self._regime_target = self._sample_regime_mult()
-        alpha = min(0.03, max(0.002, 4.0 / max(1, self.episode_steps)))
-        next_mult = {}
-        settled = True
-        for k, current in self._regime_mult.items():
-            target = self._regime_target.get(k, current)
-            value = current + alpha * (target - current)
-            lo, hi = self._regime[k]
-            value = float(np.clip(value, lo, hi))
-            next_mult[k] = value
-            settled = settled and abs(value - target) <= 0.01 * max(1.0, abs(target))
-        self._regime_mult = next_mult
-        if settled:
-            self._regime_target = self._sample_regime_mult()
-        self._apply_mult(self._regime_mult)
-
-    def _apply_mult(self, mult):
-        for k, m in mult.items():
-            nom = self._p_nominal[k]
-            self.model.p[k] = [x * m for x in nom] if isinstance(nom, list) else nom * m
-
-    # ---- disturbance scheduler (the "adaptation" dimension) ----
-    def _disturbance_names(self):
-        return [
-            row["event"]
-            for row in self.model.disturbance_schema()
-            if row.get("dynamic", False) and row.get("event")
-        ]
-
-    def _schedule_disturbances(self):
-        self._dist_events = []
-        if not self.dynamic:
-            return
-        rng = self.np_random
-        names = self._disturbance_names()
-        if not names:
-            return
-        for _ in range(int(rng.integers(1, 4))):
-            t = int(rng.integers(int(0.15 * self.episode_steps), max(2, self.episode_steps)))
-            self._dist_events.append((t, names[int(rng.integers(0, len(names)))]))
-
-    def _apply_disturbance(self, event):
-        rng = self.np_random
-        if event == "setpoint_move":
-            self._randomize_setpoints(rng)
-        else:
-            row = self._disturbance_by_event.get(event)
-            if row and row.get("kind") != "setpoint":
-                name = row.get("name")
-                default = self._disturbance_defaults.get(name, row.get("default", 0.0))
-                self._set_disturbance_value(name, self.model.sample_disturbance(event, default, rng))
-
-    def _setpoint_bounds(self):
-        bounds = []
-        for row in self.model.setpoint_schema():
-            raw = row.get("bounds")
-            if isinstance(raw, (tuple, list)) and len(raw) == 2 and raw[0] is not None and raw[1] is not None:
-                bounds.append((float(raw[0]), float(raw[1])))
-            else:
-                bounds.append((None, None))
-        return bounds
-
-    def _randomize_setpoints(self, rng):
-        bounds = self._setpoint_bounds()
-        next_sp = []
-        for i, value in enumerate(self.y_sp):
-            lo, hi = bounds[i] if i < len(bounds) else (None, None)
-            trial = float(value * (1 + 0.10 * rng.uniform(-1, 1)))
-            if lo is not None and hi is not None:
-                trial = float(np.clip(trial, lo, hi))
-            next_sp.append(trial)
-        self.y_sp = next_sp
-
-    def evaluate_transition(self, state, action, next_state, *, setpoint=None,
-                            disturbance=None, previous_action=None):
-        """Evaluate a predicted actuator transition without advancing the environment.
-
-        Omitted context values use the environment's current snapshot. During a
-        multi-step rollout, pass each candidate action as ``previous_action`` for
-        the following transition so the move penalty follows the candidate path.
-        """
-
-        if self.action_mode != "actuator":
-            raise ValueError(
-                "evaluate_transition requires action_mode='actuator'; setpoint actions "
-                "depend on the stateful inner PID"
-            )
-        action = self._validated_action(action)
-        return self._evaluate_model_transition(
-            state,
-            self._split(action),
-            next_state,
-            setpoint=setpoint,
-            disturbance=disturbance,
-            previous_action=previous_action,
-        )
-
-    def _evaluate_model_transition(self, state, action, next_state, *, setpoint=None,
-                                   disturbance=None, previous_action=None):
-        return stage_reward(
-            self.model,
-            state,
-            action,
-            next_state,
-            setpoint=self.y_sp if setpoint is None else setpoint,
-            disturbance=self._env() if disturbance is None else disturbance,
-            previous_action=self.previous_act if previous_action is None else previous_action,
-            reward_mode=self.reward_mode,
-            reward_scale=self.reward_scale,
-            tracking_q_y=self.tracking_q_y,
-            tracking_r_move=self.tracking_r_move,
-            tracking_r_steady=self.tracking_r_steady,
-            terminate_on_runaway=self.terminate_on_runaway,
-            dt=self.control_dt,
-            economic_config=self._econ,
-            reward_override=self.custom_stage_reward,
-        )
-
-    def _reward_done(self, state, act):
-        result = self._evaluate_model_transition(state, act, self.integ.x)
-        self.scorer.accumulate(result.kpi, self.control_dt)
-
-        info = dict(result.info)
-        if self.randomize_plant or self.plant_drift:
-            info["plant_mult"] = dict(getattr(self, "_regime_mult", {}))
-        return float(result.reward), result.terminated, info
-
     # ---- gym API ----
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -537,54 +304,6 @@ class AIOGymNativeEnv(gym.Env):
         for event in self._task_disturbance_events.get(0, []):
             self._set_disturbance_value(event["name"], event["value"])
         return self._obs(), {}
-
-    def default_sp_action(self):
-        """Normalized supervisory action that reproduces the default setpoints (= the
-        fixed-SP PID baseline), the offline prior to learn from."""
-        if self.layout is None:
-            return None
-        a = []
-        for spec in self.layout:
-            lo, hi = spec[-2], spec[-1]
-            if spec[0] == "y_sp":
-                v = self._ysp0[spec[1]]
-            else:
-                v = lo + 0.7 * (hi - lo)
-            a.append(float(np.clip((v - lo) / (hi - lo), 0.0, 1.0)))
-        return np.array(a, np.float32)
-
-    def _meas(self):
-        """buildState-like dict the inner PID reads (true state)."""
-        return self.model.measurement(self.integ.x, self._env())
-
-    def _supervise(self, action):
-        """Supervisory action = normalized setpoints -> set SPs, inner PID regulates
-        to them; unregulated economic MVs ('mv') are applied directly."""
-        a = np.clip(np.asarray(action, np.float64), 0.0, 1.0)
-        mv = {}
-        for i, spec in enumerate(self.layout):
-            lo, hi = spec[-2], spec[-1]
-            val = lo + float(a[i]) * (hi - lo)
-            if spec[0] == "y_sp":
-                self.y_sp[spec[1]] = val
-            else:                                   # ("mv", u_index, lo, hi)
-                mv[spec[1]] = val
-        act = self.pid.compute(self._meas(), {"y_sp": self.y_sp}, self.control_dt)
-        for u_index, value in mv.items():
-            act[u_index] = value
-        return act
-
-    def _validated_action(self, action):
-        try:
-            values = np.asarray(action, dtype=np.float64).reshape(-1)
-        except (TypeError, ValueError) as ex:
-            raise ValueError("action must be a numeric vector") from ex
-        expected = int(self.action_space.shape[0])
-        if values.size != expected:
-            raise ValueError(f"action must contain {expected} values, got {values.size}")
-        if not np.all(np.isfinite(values)):
-            raise ValueError("action values must be finite")
-        return values
 
     def step(self, action):
         action = self._validated_action(action)

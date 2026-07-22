@@ -7,6 +7,7 @@ from typing import Iterable, Mapping
 
 import numpy as np
 
+from .._internal.identifiers import internal_scenario_id
 from .._internal.serialization import jsonable as _jsonable
 from .registry import SCENARIOS, make_model
 
@@ -144,7 +145,11 @@ def validate_model_card(card: Mapping, expected_scenario: str | None = None) -> 
         raise ValueError(f"model card is missing required fields: {', '.join(missing)}")
     if card["schema_version"] != MODEL_CARD_SCHEMA_VERSION:
         raise ValueError(f"unsupported model card schema: {card['schema_version']!r}")
-    if expected_scenario is not None and card["scenario"] != expected_scenario:
+    if (
+        expected_scenario is not None
+        and internal_scenario_id(card["scenario"])
+        != internal_scenario_id(expected_scenario)
+    ):
         raise ValueError(f"expected scenario {expected_scenario!r}, got {card['scenario']!r}")
     if not isinstance(card["states"], list) or not card["states"]:
         raise ValueError(f"{card['scenario']} model card must include at least one state")

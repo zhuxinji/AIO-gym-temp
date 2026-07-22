@@ -10,6 +10,7 @@ offline-data generation, and RL training (SAC / RLPD / Cal-QL).
 from .models import (
     MODEL_CARD_SCHEMA_VERSION,
     PARAMETER_PROFILE_SCHEMA_VERSION,
+    TASK_PROFILE_SCHEMA_VERSION,
     SCENARIOS,
     Integrator,
     ProcessModelContract,
@@ -20,13 +21,17 @@ from .models import (
     export_model_cards,
     make_model,
     list_parameter_profiles,
+    list_task_profiles,
     load_parameter_profile,
+    load_task_profile,
     render_model_card_markdown,
     register_model,
     unregister_model,
+    task_operation,
     validate_model_card,
     validate_model_readiness,
     validate_parameter_profile,
+    validate_task_profile,
 )
 from .env import AIOGymNativeEnv
 from .env_factory import make_env
@@ -38,19 +43,16 @@ from .evaluation import (
     BenchmarkProtocol,
     EnvironmentSpec,
     ObjectiveSpec,
-    TASK_PROFILE_SCHEMA_VERSION,
     build_evaluation_report,
     check_benchmark_artifacts,
     evaluate_controller,
-    list_task_profiles,
-    load_task_profile,
     plot_results,
     render_benchmark_report,
+    reward_mode_for_objective,
     objective_spec,
     resolve_objective,
+    resolve_objective_reward_mode,
     run_benchmark,
-    task_operation,
-    validate_task_profile,
 )
 from .controllers import (
     load_controller_config,
@@ -59,6 +61,7 @@ from .controllers import (
     registered_controllers,
     unregister_controller,
 )
+from .catalog import list_controllers, list_scenarios, list_suites, list_tasks
 
 __all__ = ["AIOGymNativeEnv", "StageRewardContext", "StageRewardResult", "stage_reward",
            "make_model", "register_model", "unregister_model", "Integrator", "SCENARIOS",
@@ -67,10 +70,12 @@ __all__ = ["AIOGymNativeEnv", "StageRewardContext", "StageRewardResult", "stage_
            "validate_parameter_profile", "validate_model_readiness",
            "BenchmarkProtocol", "BenchmarkCase", "EnvironmentSpec",
            "ObjectiveSpec", "objective_spec", "resolve_objective",
+           "reward_mode_for_objective", "resolve_objective_reward_mode",
            "build_evaluation_report", "evaluate_controller",
            "TASK_PROFILE_SCHEMA_VERSION", "list_task_profiles", "load_task_profile", "task_operation", "validate_task_profile",
            "make_controller", "register_controller", "registered_controllers", "unregister_controller",
            "load_controller_config",
+           "list_controllers", "list_scenarios", "list_suites", "list_tasks",
            "MODEL_CARD_SCHEMA_VERSION", "collect_model_cards", "export_model_card_markdown", "export_model_cards",
            "render_model_card_markdown", "validate_model_card",
            "make_env", "plot_results", "run_benchmark",

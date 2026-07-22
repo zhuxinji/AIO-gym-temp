@@ -1,0 +1,133 @@
+{
+  "presets": {
+    "environment/deterministic": {
+      "auto_events": false,
+      "randomize": false,
+      "randomize_setpoints": false,
+      "randomize_plant": false,
+      "plant_drift": false,
+      "noise": false
+    },
+    "environment/economic-randomized": {
+      "auto_events": true,
+      "randomize": true,
+      "randomize_setpoints": false,
+      "randomize_plant": true,
+      "plant_drift": true,
+      "noise": false
+    },
+    "environment/rl-randomized": {
+      "auto_events": true,
+      "randomize": true,
+      "randomize_setpoints": true,
+      "randomize_plant": true,
+      "plant_drift": true,
+      "noise": false
+    },
+    "environment/robustness-randomized": {
+      "auto_events": true,
+      "randomize": true,
+      "randomize_setpoints": true,
+      "randomize_plant": true,
+      "plant_drift": true,
+      "noise": true
+    },
+    "controllers/quadruple-minimum-phase": {
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-minimum-phase"},
+        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
+      }
+    },
+    "controllers/quadruple-nonminimum-phase": {
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
+        "mpc": {"profile": "quadruple-nonminimum-phase"},
+        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
+      }
+    },
+    "controllers/quadruple-zero-boundary": {
+      "controller_configs": {
+        "pid": {"profile": "quadruple-zero-boundary"},
+        "mpc": {"profile": "quadruple-zero-boundary"},
+        "oracle": {"profile": "quadruple-zero-boundary", "mode": "tracking"}
+      }
+    },
+    "controllers/quadruple-disturbance-rejection": {
+      "controller_configs": {
+        "pid": {"profile": "quadruple-disturbance-rejection"},
+        "mpc": {"profile": "quadruple-disturbance-rejection"},
+        "oracle": {"profile": "quadruple-disturbance-rejection", "mode": "tracking"}
+      }
+    }
+  },
+  "cases": {
+    "tracking/deterministic": {
+      "scenarios": "ALL_SCENARIOS",
+      "objective": "tracking",
+      "environment": {"preset": "environment/deterministic"}
+    },
+    "economic/cascade-continuous": {
+      "scenarios": ["cascade"],
+      "objective": "economic",
+      "task": "continuous-benchmark"
+    },
+    "economic/randomized": {
+      "scenarios": ["cstr", "hvac", "heater"],
+      "objective": "economic",
+      "environment": {"preset": "environment/economic-randomized"}
+    },
+    "quadruple/minimum-phase": {
+      "scenario": "quadruple",
+      "task": "minimum-phase-classic",
+      "objective": "tracking",
+      "preset": "controllers/quadruple-minimum-phase"
+    },
+    "quadruple/nonminimum-phase": {
+      "scenario": "quadruple",
+      "task": "nonminimum-phase-classic",
+      "objective": "tracking",
+      "preset": "controllers/quadruple-nonminimum-phase"
+    },
+    "quadruple/pminus-reference": {
+      "scenario": "quadruple",
+      "task": "pminus-reference-step",
+      "objective": "tracking",
+      "preset": "controllers/quadruple-minimum-phase"
+    },
+    "quadruple/pplus-reference": {
+      "scenario": "quadruple",
+      "task": "pplus-reference-step",
+      "objective": "tracking",
+      "preset": "controllers/quadruple-nonminimum-phase"
+    },
+    "quadruple/zero-boundary": {
+      "scenario": "quadruple",
+      "task": "zero-boundary-stress",
+      "objective": "tracking",
+      "preset": "controllers/quadruple-zero-boundary"
+    },
+    "quadruple/disturbance-rejection": {
+      "scenario": "quadruple",
+      "task": "disturbance-rejection",
+      "objective": "robustness",
+      "preset": "controllers/quadruple-disturbance-rejection"
+    },
+    "quadruple/paper-pminus-reference": {
+      "scenario": "quadruple",
+      "task": "pminus-reference-step",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-minimum-phase"}
+      }
+    },
+    "quadruple/paper-pplus-reference": {
+      "scenario": "quadruple",
+      "task": "pplus-reference-step",
+      "objective": "tracking",
+      "controller_configs": {
+        "pid": {"profile": "quadruple-nonminimum-phase"}
+      }
+    }
+  }
+}

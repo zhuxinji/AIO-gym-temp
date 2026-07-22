@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from aiogym._internal.paths import run_path
 from aiogym.evaluation import check_benchmark_artifacts, render_benchmark_report
 from aiogym.models import (
     collect_model_cards,
@@ -25,11 +26,12 @@ def parse_scenarios(raw: str | None):
     return scenarios
 
 
-def model_cards_main():
+def model_cards_main(argv=None, prog=None):
     ap = argparse.ArgumentParser(
+        prog=prog,
         description="Export or validate model-card metadata for registered scenarios."
     )
-    ap.add_argument("--out-dir", default="aiogym/runs/model_cards",
+    ap.add_argument("--out-dir", default=str(run_path("model_cards")),
                     help="directory for exported model cards")
     ap.add_argument("--scenarios", default=None,
                     help="comma-separated scenario override; defaults to all registered scenarios")
@@ -39,7 +41,7 @@ def model_cards_main():
                     help="validate and print the manifest without writing files")
     ap.add_argument("--no-manifest", action="store_true",
                     help="skip writing manifest/index files")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     scenarios = parse_scenarios(args.scenarios)
     if args.check:
@@ -83,14 +85,15 @@ def model_cards_main():
     print(json.dumps(manifest, indent=2))
 
 
-def report_main():
+def report_main(argv=None, prog=None):
     ap = argparse.ArgumentParser(
+        prog=prog,
         description="Render report.md from a standard benchmark artifact directory."
     )
     ap.add_argument("artifact_dir", help="standard benchmark artifact directory")
     ap.add_argument("--out", default=None, help="report path; defaults to <artifact_dir>/report.md")
     ap.add_argument("--stdout", action="store_true", help="also print the report")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     artifact_dir = Path(args.artifact_dir)
     out_path = Path(args.out) if args.out else artifact_dir / "report.md"
@@ -100,13 +103,14 @@ def report_main():
     print(f"saved report {out_path}")
 
 
-def artifact_check_main():
+def artifact_check_main(argv=None, prog=None):
     ap = argparse.ArgumentParser(
+        prog=prog,
         description="Validate a standard benchmark artifact directory."
     )
     ap.add_argument("artifact_dir", help="standard benchmark artifact directory")
     ap.add_argument("--json", action="store_true", help="print structured JSON")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     result = check_benchmark_artifacts(args.artifact_dir)
     if args.json:
@@ -121,21 +125,21 @@ def artifact_check_main():
         raise SystemExit(1)
 
 
-def main():
+def main(argv=None):
     commands = {
         "model-cards": model_cards_main,
         "report": report_main,
         "check": artifact_check_main,
     }
-    if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args or args[0] in {"-h", "--help"}:
         print("usage: python -m aiogym.cli.artifact_tools {model-cards,report,check} ...")
         return
-    command = sys.argv[1]
+    command = args[0]
     if command not in commands:
         choices = ", ".join(commands)
         raise SystemExit(f"unknown artifacts command {command!r}; choose one of: {choices}")
-    sys.argv = [sys.argv[0]] + sys.argv[2:]
-    commands[command]()
+    commands[command](args[1:])
 
 
 if __name__ == "__main__":

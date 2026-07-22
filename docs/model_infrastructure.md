@@ -71,7 +71,7 @@ Therefore `minimum-phase-classic` and `nonminimum-phase-classic` are tasks, not
 objectives. A task may list several `supported_objectives`; changing the
 objective does not silently change its plant or disturbance conditions.
 
-Files under `aiogym/evaluation/tasks/<scenario>/` are the versioned task
+Files under `aiogym/models/tasks/builtin/<scenario>/` are the versioned task
 declarations. Benchmark rows record `scenario`, `task`, `objective`, the task
 status, and a SHA-256 task-profile hash. Leaderboard ranks restart for every
 `(scenario, task, objective)` tuple, so scores from different experiments are

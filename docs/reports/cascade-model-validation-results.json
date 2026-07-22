@@ -4,6 +4,7 @@
   "scenario": "cascade",
   "model_name": "Heated-tank cascade",
   "report_date": "2026-07-17",
+  "document_status": "historical-snapshot",
   "audit_status": "post-modification-final-internal-audit",
   "snapshot": {
     "git_baseline": "3fc9412",
@@ -27,6 +28,8 @@
     "summary": "Internally verified benchmark implementation with executable safety and continuous-operation semantics; real-device parameters and predictive accuracy remain unvalidated."
   },
   "interpretation_rules": [
+    "this file is a historical snapshot of the stated baseline and does not enumerate the current task registry",
+    "legacy-default entries describe audit-time compatibility behavior; repository version 7bf0b08 no longer registers that task",
     "readiness.passed means software and numerical readiness only",
     "do not infer empirical accuracy without real validation data",
     "hard boundary violations terminate without silently clamping state",

@@ -5,9 +5,5 @@
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
   "task": "disturbance-rejection",
-  "controller_configs": {
-    "pid": {"profile": "quadruple-disturbance-rejection"},
-    "mpc": {"profile": "quadruple-disturbance-rejection"},
-    "oracle": {"profile": "quadruple-disturbance-rejection", "mode": "tracking"}
-  }
+  "preset": "controllers/quadruple-disturbance-rejection"
 }

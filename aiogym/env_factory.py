@@ -49,7 +49,7 @@ def make_env(scenario: Any = "cascade", objective: str | Mapping[str, Any] | Non
 
     task_has_default = False
     if data.get("task") is not None:
-        from .evaluation.task_profiles import load_task_profile
+        from .models.tasks import load_task_profile
 
         task_profile = load_task_profile(data["task"], scenario=scenario)
         task_has_default = task_profile.get("default_objective") is not None
@@ -59,6 +59,8 @@ def make_env(scenario: Any = "cascade", objective: str | Mapping[str, Any] | Non
         or configured_objective is not None
         or task_has_default
         or isinstance(protocol, BenchmarkProtocol)
+        or data.get("reward_mode") is not None
+        or data.get("env_reward_mode") is not None
     )
     if use_protocol:
         protocol_options = protocol_data({**data, **protocol_options})

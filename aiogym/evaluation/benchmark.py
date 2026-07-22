@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .._internal.config import as_list, load_config, protocol_data
+from .._internal.paths import run_path
 from .._internal.serialization import jsonable
-from .protocols import (
-    PUBLIC_BENCHMARK_SCHEMA_VERSION,
-    BenchmarkCase,
-    resolve_protocol,
-)
-from .core import build_evaluation_report
+from .cases import BenchmarkCase
+from .metric_catalog import PUBLIC_BENCHMARK_SCHEMA_VERSION
+from .protocols import resolve_protocol
+from .aggregation import build_evaluation_report
 from .runner import execute_benchmark_case
 
 
@@ -49,6 +48,7 @@ def run_benchmark(
         objective=objective,
         data=protocol_options,
     )
+    scenario = protocol.scenario
     objective_name = protocol.objective
     task_meta = protocol.metadata()["task_identity"]
     controller_names = as_list(cfg.get("controllers", ["pid"]))
@@ -64,7 +64,7 @@ def run_benchmark(
     rollout_steps = cfg.get("rollout_steps")
     out_dir = Path(cfg.get(
         "output_dir",
-        f"aiogym/runs/benchmark_{scenario}_{task_meta['name']}_{objective_name}",
+        run_path(f"benchmark_{scenario}_{task_meta['name']}_{objective_name}"),
     ))
     out_dir.mkdir(parents=True, exist_ok=True)
 

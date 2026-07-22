@@ -2,8 +2,13 @@
 
 > 对象：AIO-Gym `cascade` / Heated-tank cascade
 > 报告日期：2026-07-17
-> 状态：阶段 1–4 修改后的最终内部审计
+> 状态：历史审计快照（阶段 1–4 修改后）
+> 适用基线：`3fc9412`（`main`，审计时工作区另含未提交修改）
 > 配套机器可读证据：[`cascade-model-validation-results.json`](cascade-model-validation-results.json)
+
+> Snapshot 提示：本文冻结的是 2026-07-17 的审计现场，不是当前配置说明。
+> 文中的 `legacy-default` 是当时的兼容任务；整理本文档时的仓库版本
+> `7bf0b08` 已不再注册该任务。当前可用任务应以实际任务目录和注册 API 为准。
 
 ## 1. 结论摘要
 

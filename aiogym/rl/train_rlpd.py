@@ -20,8 +20,17 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from aiogym._internal.paths import run_path
 from aiogym.controllers import build_context, make_controller, validate_action
-from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, metric_for_reward_mode, rollout_controller
+from aiogym.evaluation import (
+    evaluate_controller,
+    metric_direction,
+    metric_for_reward_mode,
+    primary_metric_for_objective,
+    resolve_objective_reward_mode,
+    resolve_protocol,
+    rollout_controller,
+)
 from aiogym.rl.artifacts import (
     learning_curve_point,
     result_row,
@@ -62,13 +71,39 @@ def artifact_dir_for(args, base: str) -> str:
 def output_base_for(args, run_id: str | None = None) -> str:
     if args.out:
         return args.out
-    return f"aiogym/runs/rl/rlpd/{args.scenario}_{run_id or utc_run_id()}"
+    return str(run_path("rl", "rlpd", f"{args.scenario}_{run_id or utc_run_id()}"))
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def configure_training_objective(args, *, warn_legacy: bool = True):
+    """Resolve the public training objective and its internal environment reward."""
+
+    objective, reward_mode = resolve_objective_reward_mode(
+        getattr(args, "objective", None),
+        getattr(args, "reward_mode", None),
+        default_objective="kpi",
+        warn_legacy=warn_legacy,
+    )
+    args.objective = objective
+    args.resolved_reward_mode = reward_mode
+    args.reward_mode = reward_mode
+    return args
+
+
+def main(argv=None, prog=None):
+    ap = argparse.ArgumentParser(prog=prog)
     ap.add_argument("--scenario", default="cascade", choices=["cascade", "quadruple", "cstr", "hvac"])
-    ap.add_argument("--reward-mode", default="kpi", choices=["kpi", "economic", "tracking"])
+    ap.add_argument(
+        "--objective",
+        default=None,
+        choices=["economic", "tracking", "robustness", "safety", "kpi"],
+        help="training and evaluation objective; defaults to kpi",
+    )
+    ap.add_argument(
+        "--reward-mode",
+        default=None,
+        choices=["kpi", "economic", "tracking"],
+        help="deprecated compatibility alias for --objective",
+    )
     ap.add_argument("--control-dt", type=float, default=0.5)
     ap.add_argument("--episode-steps", type=int, default=400)
     ap.add_argument("--offline-episodes", type=int, default=40)
@@ -87,7 +122,8 @@ def main():
                     help="standard benchmark artifact directory; defaults to <out>_artifacts")
     ap.add_argument("--save-rollout", action="store_true")
     ap.add_argument("--rollout-steps", type=int, default=None)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    configure_training_objective(args)
 
     import torch
     from aiogym.rl import RLPD
@@ -95,18 +131,23 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    protocol_cls = {"economic": BenchmarkProtocol.economic,
-                    "tracking": BenchmarkProtocol.tracking,
-                    "kpi": BenchmarkProtocol.kpi}[args.reward_mode]
-
     def protocol(mode=None):
         # RL uses the requested action_mode (setpoint = supervisory RL-on-PID); baselines
         # run on an actuator-mode env (they ARE fixed-SP controllers).
-        return protocol_cls(args.scenario, control_dt=args.control_dt,
-                            episode_steps=args.episode_steps, action_mode=mode or args.action_mode,
-                            randomize=True, randomize_plant=args.randomize_plant,
-                            plant_drift=args.randomize_plant, integral_obs=False,
-                            terminate_on_runaway=False)
+        return resolve_protocol(
+            args.scenario,
+            args.objective,
+            {
+                "control_dt": args.control_dt,
+                "episode_steps": args.episode_steps,
+                "action_mode": mode or args.action_mode,
+                "randomize": True,
+                "randomize_plant": args.randomize_plant,
+                "plant_drift": args.randomize_plant,
+                "integral_obs": False,
+                "terminate_on_runaway": False,
+            },
+        )
 
     def mkenv(mode=None):
         return protocol(mode).make_env()
@@ -128,7 +169,18 @@ def main():
 
     # baselines (the bar to beat) — FIXED-SP PID / fixed-model MPC on an actuator env,
     # the static operating point the supervisory RL must beat by adapting its setpoints.
-    metric = metric_for_reward_mode(args.reward_mode)
+    metric = (
+        metric_for_reward_mode(args.resolved_reward_mode)
+        if args.objective in {"economic", "tracking", "kpi"}
+        else primary_metric_for_objective(args.objective)
+    )
+    direction = metric_direction(metric)
+
+    def improvement(candidate, baseline):
+        return candidate - baseline if direction == "maximize" else baseline - candidate
+
+    def is_better(candidate, baseline):
+        return improvement(candidate, baseline) > 0
     baseline_protocol = protocol("actuator")
     pid_controller = make_controller("pid", scenario=args.scenario)
     mpc_controller = make_controller("mpc", scenario=args.scenario)
@@ -171,7 +223,8 @@ def main():
     # 2b) online learning (symmetric offline+online sampling), best-checkpoint by KPI
     base = output_base_for(args)
     os.makedirs(os.path.dirname(base) or ".", exist_ok=True)
-    best, best_path = -1e18, base + "_best.pt"
+    best = -1e18 if direction == "maximize" else 1e18
+    best_path = base + "_best.pt"
     obs, _ = env.reset(seed=args.seed)
     hist = []
     if args.bc_steps > 0:
@@ -187,7 +240,7 @@ def main():
         if step % args.eval_every == 0:
             online_result = eval_result(rlpd)
             ret, std = online_result[metric], online_result.get(f"{metric}_std", 0.0)
-            if ret > best:                              # keep the peak — off-policy RL can collapse late
+            if is_better(ret, best):                    # keep the peak — off-policy RL can collapse late
                 best = ret
                 torch.save(rlpd.state_dict(), best_path)
             hist.append(learning_curve_point(step, online_result, phase="online"))
@@ -211,12 +264,17 @@ def main():
     if not hist or hist[-1].get("phase") != "final":
         hist.append(final_point)
     result = {
-        "scenario": args.scenario, "reward_mode": args.reward_mode, "metric": metric,
+        "scenario": args.scenario,
+        "objective": args.objective,
+        "resolved_reward_mode": args.resolved_reward_mode,
+        "metric": metric,
         "PID": {metric: pid[metric]}, "MPC": {metric: mpc[metric]},
         "RLPD": {metric: final, "std": final_std, "best": best},
         "history": hist,
-        "beats_pid": final > pid[metric], "beats_mpc": final > mpc[metric],
-        "margin_vs_mpc": final - mpc[metric], "margin_vs_pid": final - pid[metric],
+        "beats_pid": is_better(final, pid[metric]),
+        "beats_mpc": is_better(final, mpc[metric]),
+        "margin_vs_mpc": improvement(final, mpc[metric]),
+        "margin_vs_pid": improvement(final, pid[metric]),
     }
     print(json.dumps({k: result[k] for k in ("scenario", "metric", "beats_pid", "beats_mpc",
                                              "margin_vs_mpc", "margin_vs_pid")}, indent=2))
@@ -236,7 +294,8 @@ def main():
         "algo": "rlpd",
         "scenario": args.scenario,
         "action_mode": args.action_mode,
-        "reward_mode": args.reward_mode,
+        "objective": args.objective,
+        "resolved_reward_mode": args.resolved_reward_mode,
         "seed": args.seed,
         "offline_episodes": args.offline_episodes,
         "bc_steps": args.bc_steps,

@@ -5,21 +5,7 @@
   "controllers": ["pid"],
   "action_mode": "actuator",
   "cases": [
-    {
-      "scenario": "quadruple",
-      "task": "pminus-reference-step",
-      "objective": "tracking",
-      "controller_configs": {
-        "pid": {"profile": "quadruple-minimum-phase"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "pplus-reference-step",
-      "objective": "tracking",
-      "controller_configs": {
-        "pid": {"profile": "quadruple-nonminimum-phase"}
-      }
-    }
+    {"case_ref": "quadruple/paper-pminus-reference"},
+    {"case_ref": "quadruple/paper-pplus-reference"}
   ]
 }

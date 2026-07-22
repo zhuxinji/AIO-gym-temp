@@ -194,13 +194,13 @@ def _call_func(name, args, ops, label):
 
 
 def _numeric_ops_proxy():
-    from .core import _NUMERIC_OPS
+    from .backends import _NUMERIC_OPS
 
     return _NUMERIC_OPS
 
 
 def _casadi_ops_proxy(ca):
-    from .core import _casadi_ops
+    from .backends import _casadi_ops
 
     if ca is None:
         raise ValueError("backend='casadi' requires ca=...")

@@ -4,15 +4,21 @@ This page is the user-facing entry point for selecting a process model, creating
 an environment, choosing a reproducible task, and running controller benchmarks.
 Import these APIs from the top-level `aiogym` package unless noted otherwise.
 
+For terminology and current built-in coverage, see [Concepts](concepts.md) and
+the [Capability matrix](capabilities.md). The [Documentation index](index.md)
+links model cards, selected scenario case studies, validation records, and
+internal historical material.
+
 ## Choose the right layer
 
 | Goal | Public entry point | What it selects |
 | --- | --- | --- |
+| Discover canonical IDs | `list_scenarios()`, `list_tasks()`, `list_suites()`, `list_controllers()` | Current registered and bundled resources |
 | Inspect or simulate process equations | `aiogym.make_model(...)` | Scenario/model only |
 | Train or interact through Gymnasium | `aiogym.make_env(...)` | Scenario plus optional task and objective |
-| Inspect bundled experiments | `aiogym.list_task_profiles(...)`, `aiogym.load_task_profile(...)` | Task declarations |
-| Compare controllers on one experiment | `aiogym.run_benchmark(...)` or `aiogym-single-benchmark` | One scenario/task/objective protocol |
-| Run a published matrix of experiments | `aiogym-suite-benchmark` | Multiple resolved benchmark cases |
+| Inspect bundled experiments | `aiogym.list_tasks(...)`, `aiogym.load_task_profile(...)` | Task declarations |
+| Compare controllers on one experiment | `aiogym.run_benchmark(...)` or `aiogym benchmark run` | One scenario/task/objective protocol |
+| Run a published matrix of experiments | `aiogym benchmark suite` | Multiple resolved benchmark cases |
 
 The concepts are intentionally separate:
 
@@ -22,6 +28,42 @@ The concepts are intentionally separate:
   disturbances, constraints, timing, noise, and optional `model_params`;
 - **objective** selects the reward/reporting semantics and primary ranking metric;
 - **controller** selects the policy evaluated against that resolved experiment.
+
+## Resource discovery
+
+```python
+import aiogym
+
+scenarios = aiogym.list_scenarios()
+tasks = aiogym.list_tasks()
+cascade_tasks = aiogym.list_tasks("cascade")
+suites = aiogym.list_suites()
+controllers = aiogym.list_controllers()
+```
+
+These functions return sorted tuples of canonical IDs. Scenario and controller
+results include runtime custom registrations. Task IDs use the complete
+`scenario/name` form; suite IDs are the built-in JSON names without `.json`.
+
+The older `SCENARIOS`, `list_task_profiles()`, `registered_controllers()`, and
+suite CLI `builtin_suites()` surfaces remain available for compatibility. New
+user code should prefer the four consistently named discovery functions.
+
+The unified CLI exposes the same catalog and groups the remaining workflows:
+
+```bash
+aiogym list scenarios
+aiogym list tasks --scenario cascade
+aiogym list suites
+aiogym list controllers
+aiogym benchmark --help
+aiogym train --help
+aiogym artifacts --help
+aiogym model-cards --help
+```
+
+Legacy console scripts remain compatibility aliases, so existing automation
+does not need to migrate immediately.
 
 ## Models
 
@@ -35,12 +77,12 @@ model factory. A model is independent of task and objective selection.
 ```python
 import aiogym
 
-model = aiogym.make_model("cascade_recirculating")
+model = aiogym.make_model("cascade-recirculating")
 equilibrium = model.nominal_steady_state()
 ```
 
-Use `aiogym.SCENARIOS` to inspect registered scenario names. Custom models can be
-managed with `register_model()` and `unregister_model()`.
+Use `aiogym.list_scenarios()` to inspect registered scenario names. Custom
+models can be managed with `register_model()` and `unregister_model()`.
 
 ## Environments
 
@@ -63,7 +105,7 @@ For reproducible work, select a named task. If `objective` is omitted, the task'
 import aiogym
 
 env = aiogym.make_env(
-    "cascade_recirculating",
+    "cascade-recirculating",
     task="temperature-step",
     seed=7,
 )
@@ -73,13 +115,17 @@ obs, info = env.reset(seed=7)
 A no-task `make_env()` call preserves the direct interactive environment defaults.
 It does not acquire a benchmark task identity or task acceptance criteria.
 
-### What `dynamic` means
+### Automatic events
 
-`dynamic=False` does **not** turn the physical process into a static model. The
+`auto_events=False` does **not** turn the physical process into a static model. The
 model still advances through `model.dynamics(...)` on every integration step.
-The environment's `dynamic` option only controls generic automatically generated
+The environment's `auto_events` option only controls generic automatically generated
 within-episode events. A named task can set it to `false` and still apply its own
 deterministic setpoint and disturbance schedule.
+
+The former `dynamic` input remains a deprecated compatibility alias. Supplying
+both names with different values fails instead of silently choosing one; new
+configuration and artifact metadata use only `auto_events`.
 
 Use `model_params={...}` when the numerical plant parameters should differ from
 the scenario defaults. Initial state, setpoints, disturbance schedules, and
@@ -88,9 +134,9 @@ the scenario defaults. Initial state, setpoints, disturbance schedules, and
 ## Tasks
 
 ```python
-tasks = aiogym.list_task_profiles("cascade_recirculating")
+tasks = aiogym.list_tasks("cascade-recirculating")
 task = aiogym.load_task_profile(
-    "cascade_recirculating/temperature-step"
+    "cascade-recirculating/temperature-step"
 )
 ```
 
@@ -98,13 +144,15 @@ The short form is accepted when the scenario is supplied by the caller:
 
 ```python
 env = aiogym.make_env(
-    "cascade_recirculating",
+    "cascade-recirculating",
     task="temperature-step",
 )
 ```
 
-Task files live under `aiogym/evaluation/tasks/<scenario>/`. They are validated,
-versioned declarations rather than executable model implementations.
+Task files live under `aiogym/models/tasks/builtin/<scenario>/`. They are
+validated, versioned experiment declarations bound to model scenarios rather
+than executable model implementations. The former
+`aiogym.evaluation.task_profiles` import path remains a compatibility facade.
 
 ## Objective resolution
 
@@ -145,34 +193,57 @@ Removed aliases are rejected instead of being interpreted silently.
 import aiogym
 
 payload = aiogym.run_benchmark({
-    "scenario": "cascade_recirculating",
+    "scenario": "cascade-recirculating",
     "task": "temperature-step",
     "controllers": ["pid", "mpc"],
     "seeds": [9000, 9001, 9002],
-    "output_dir": "aiogym/runs/recirculating-temperature-step",
+    "output_dir": "runs/recirculating-temperature-step",
 })
 ```
 
 The equivalent command-line workflow is:
 
 ```bash
-aiogym-single-benchmark \
-  --scenario cascade_recirculating \
+aiogym benchmark run \
+  --scenario cascade-recirculating \
   --task temperature-step \
   --controllers pid,mpc \
-  --episodes 3
+  --episodes 3 \
+  --artifact-dir runs/recirculating-temperature-step
 ```
 
-Use `aiogym-single-benchmark --help` for all runtime overrides.
+Use `aiogym benchmark run --help` for all runtime overrides.
+
+The command writes the same standard artifact directory as `run_benchmark()` and
+the suite runner, including `benchmark.json`, structured config, metadata,
+summary, results, figures, and `report.md`. Generated outputs default to a
+timestamped directory under `runs/` relative to the current working directory.
+Set `AIOGYM_RUNS_DIR` to change that shared default root. Explicit API and CLI
+paths such as `output_dir` and `--artifact-dir` always take precedence.
+
+For compatibility, `--out FILE.json` retains the former single-JSON contract and
+implies `--format legacy-json`. It can also be selected explicitly:
+
+```bash
+aiogym benchmark run \
+  --scenario cstr \
+  --controllers pid,mpc \
+  --format legacy-json \
+  --out runs/cstr_controllers.json
+```
+
+New automation should consume the standard artifact directory so it can use
+`aiogym artifacts check` and `aiogym artifacts report` directly.
 
 ## Benchmark suites
 
-A suite is a JSON declaration containing multiple cases. Each case resolves to a
-`BenchmarkCase` with an `EnvironmentSpec`, `ObjectiveSpec`, controller
-configuration, and seed list.
+A suite is a JSON source declaration that expands to one or more canonical
+benchmark cases. The loader currently accepts two source shapes: a Cartesian
+matrix and an explicit `cases` list. Both shapes resolve to the same
+`BenchmarkCase` contract before execution.
 
 ```bash
-aiogym-suite-benchmark \
+aiogym benchmark suite \
   --suite cascade-recirculating \
   --episodes 3
 ```
@@ -180,7 +251,177 @@ aiogym-suite-benchmark \
 The suite runner supports per-case tasks, objectives, controller profiles, and
 environment settings. It writes a standard artifact directory and keeps rankings
 separate for every `(scenario, task, objective)` identity. Use
-`aiogym-suite-benchmark --help` to list built-in suites and filtering options.
+`aiogym benchmark suite --help` to list built-in suites and filtering options.
+
+### Matrix source schema
+
+When `cases` is absent, the top-level `scenarios`, `objectives`, and
+`controllers` fields are Cartesian axes:
+
+```json
+{
+  "name": "tracking-demo",
+  "description": "Two-scenario controller comparison.",
+  "scenarios": ["cstr", "hvac"],
+  "objectives": ["tracking"],
+  "controllers": ["pid", "mpc"],
+  "action_mode": "actuator",
+  "episode_steps": 80,
+  "control_dt": 0.5,
+  "environment": {
+    "auto_events": false,
+    "randomize": false
+  }
+}
+```
+
+This declaration expands to `2 scenarios × 1 objective × 2 controllers = 4`
+resolved cases. `scenarios` may also be one built-in group string such as
+`ALL_SCENARIOS`. A top-level `task` applies to every expanded combination and
+must therefore be valid for every selected scenario.
+
+### Explicit-cases source schema
+
+When a non-empty `cases` list is present, the runner expands only those
+declarations. The top-level axes become defaults; they do not produce an
+additional matrix:
+
+```json
+{
+  "name": "quadruple-demo",
+  "controllers": ["pid", "mpc"],
+  "action_mode": "actuator",
+  "episode_steps": 600,
+  "cases": [
+    {
+      "scenario": "quadruple",
+      "task": "minimum-phase-classic",
+      "objective": "tracking"
+    },
+    {
+      "scenario": "quadruple",
+      "task": "disturbance-rejection",
+      "objective": "robustness",
+      "controllers": ["pid", "mpc", "oracle"],
+      "controller_configs": {
+        "oracle": {"profile": "quadruple-disturbance-rejection"}
+      }
+    }
+  ]
+}
+```
+
+The first declaration inherits two controllers and expands to two resolved
+cases. The second overrides the controller list and expands to three. The suite
+therefore contains five resolved cases, not a top-level matrix plus five cases.
+
+`cases` must be a non-empty list, and every item must be a JSON object. Inside a
+case, singular fields select one value while plural fields create a local axis:
+
+| Concept | Suite or matrix field | Explicit-case fields |
+| --- | --- | --- |
+| Scenario | `scenarios` | `scenario` or `scenarios` |
+| Objective | `objectives` | `objective` or `objectives` |
+| Controller | `controllers` | `controller` or `controllers` |
+| Task | `task` | `task` |
+| Action mode | `action_mode` | `action_mode` |
+| Environment | direct environment keys or `environment` | direct environment keys or `environment` |
+| Controller tuning | `controller_configs` | `controller_configs` |
+| Timing | `episode_steps`, `control_dt` | `episode_steps`, `control_dt` |
+
+The source format accepts both singular and plural case fields for compatibility.
+After expansion, each canonical case always has one `scenario`, one task
+identity, one `objective`, one `controller`, one environment specification, and
+one seed list.
+
+### Source reuse
+
+Suite source files can remove repeated declarations with three validated
+reference fields:
+
+```json
+{
+  "extends": "economic-actuator",
+  "description": "Economic benchmark for supervisory policies.",
+  "controllers": ["sb3"],
+  "action_mode": "setpoint"
+}
+```
+
+- `extends` accepts a suite ID, a relative JSON path, or an ordered list of
+  either. Parent mappings are merged first and the child wins. Nested mappings
+  merge recursively; lists and scalar values are replaced.
+- `preset` accepts a reusable preset ID or ordered list of IDs. It is valid on
+  the suite, an explicit case, or its `environment` mapping.
+- `case_ref` is valid on an explicit case and imports one reusable canonical
+  case declaration. Fields beside `case_ref` override the imported declaration.
+
+Bundled preset and case IDs are declared under
+`aiogym/evaluation/suites/presets/`. Missing IDs, duplicate IDs, invalid types,
+and cycles fail during loading. References are fully expanded before suite
+validation and execution, so `suite_source_config` artifacts remain
+self-contained and contain no `extends`, `preset`, or `case_ref` fields.
+
+### Inheritance and overrides
+
+For fields that can appear at more than one level, resolution follows these
+rules:
+
+- objective: CLI `--objectives` override, then case `objective`/`objectives`,
+  then suite `objectives`, then `task.default_objective`;
+- task: case `task`, then suite `task`;
+- action mode: case `action_mode`, then suite `action_mode`, then `actuator`;
+- environment keys: case direct field, case `environment`, suite direct field,
+  suite `environment`, then protocol/environment default;
+- timing: CLI `--episode-steps` or `--control-dt`, then case, then suite, then
+  task/environment default;
+- controller configuration: runner/controller base, then suite
+  `controller_configs`, then case `controller_configs`, with later nested
+  `parameters` values taking precedence.
+
+Objective resolution records its winning source as `explicit`, `case-config`,
+`suite-config`, or `task-default` in the resolved protocol and artifacts.
+
+### CLI selection behavior
+
+The same CLI flags intentionally operate differently on the two source shapes:
+
+- matrix suite: `--scenarios`, `--objectives`, and `--controllers` replace the
+  corresponding top-level axis;
+- explicit-cases suite: `--scenarios` and `--controllers` filter declared
+  expansions; they do not create undeclared cases;
+- explicit-cases suite: `--objectives` overrides the objective candidate for
+  each selected declaration rather than acting as a filter;
+- both shapes: `--episode-steps` and `--control-dt` are global overrides.
+
+An objective override that is not allowed by a selected task fails during
+protocol resolution; it is not silently replaced. If filters select no cases,
+the runner raises `suite filters selected no benchmark cases`.
+
+See `aiogym/evaluation/suites/robustness-actuator.json` for matrix form and
+`aiogym/evaluation/suites/quadruple.json` for explicit-cases form. Hybrid files
+such as `standard-baselines.json` use top-level defaults plus explicit cases;
+the presence of `cases` still selects explicit-cases mode.
+
+## Training objectives
+
+Training commands use the same five public objective names as benchmarks:
+
+```bash
+aiogym train sb3 --scenario cstr --objective tracking
+aiogym train rlpd --scenario cstr --objective robustness
+```
+
+`economic` and `tracking` select their matching environment rewards. `kpi`,
+`robustness`, and `safety` use the KPI environment reward; artifacts retain the
+selected objective and record the internal choice as `resolved_reward_mode`.
+SB3 evaluation defaults to the training objective unless `--eval-objective` is
+provided explicitly.
+
+`--reward-mode economic|tracking|kpi` remains a deprecated compatibility alias.
+Supplying it together with a conflicting `--objective` fails instead of silently
+overriding either value. The low-level `AIOGymNativeEnv(reward_mode=...)`
+constructor remains available for framework integrations.
 
 ## Advanced resolved specifications
 

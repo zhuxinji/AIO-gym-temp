@@ -8,9 +8,9 @@ from .core import (
     G,
     RHO,
     RHO_CP,
-    Integrator,
     ProcessModelContract,
 )
+from .integration import Integrator
 from .declarative import DeclarativeProcessModel, define_model
 from .scenarios import (
     CascadeModel,
@@ -50,6 +50,17 @@ from .parameter_profiles import (
     validate_parameter_profile,
 )
 from .validation import validate_model_readiness
+from .tasks import (
+    TASK_PROFILE_SCHEMA_VERSION,
+    configure_model_for_task,
+    list_task_profiles,
+    load_task_profile,
+    resolve_environment_options,
+    task_environment,
+    task_identity,
+    task_operation,
+    validate_task_profile,
+)
 
 __all__ = [
     "CP",
@@ -72,6 +83,7 @@ __all__ = [
     "BUILTIN_MODELS",
     "MODEL_CARD_SCHEMA_VERSION",
     "PARAMETER_PROFILE_SCHEMA_VERSION",
+    "TASK_PROFILE_SCHEMA_VERSION",
     "SCENARIOS",
     "apply_model_params",
     "builtin_gym_ids",
@@ -83,6 +95,8 @@ __all__ = [
     "make_model",
     "list_parameter_profiles",
     "load_parameter_profile",
+    "list_task_profiles",
+    "load_task_profile",
     "render_model_card_markdown",
     "register_model",
     "unregister_model",
@@ -90,4 +104,10 @@ __all__ = [
     "validate_model_contract",
     "validate_model_readiness",
     "validate_parameter_profile",
+    "configure_model_for_task",
+    "resolve_environment_options",
+    "task_environment",
+    "task_identity",
+    "task_operation",
+    "validate_task_profile",
 ]

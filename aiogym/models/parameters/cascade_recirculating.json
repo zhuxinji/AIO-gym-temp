@@ -1,6 +1,6 @@
 {
   "schema_version": "aiogym.parameter_profile.v1",
-  "scenario": "cascade_recirculating",
+  "scenario": "cascade-recirculating",
   "status": "design-provisional",
   "fidelity": "first-principles-closed-loop-structure-with-partial-design-source",
   "time_unit": "s",

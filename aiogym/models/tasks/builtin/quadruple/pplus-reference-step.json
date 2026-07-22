@@ -1,0 +1,71 @@
+{
+  "schema_version": "aiogym.task_profile.v1",
+  "name": "pplus-reference-step",
+  "scenario": "quadruple",
+  "status": "reference-reproduced",
+  "description": "Johansson Fig. 11 nonminimum-phase P+ single-reference step experiment.",
+  "default_objective": "tracking",
+  "supported_objectives": ["tracking", "kpi", "safety"],
+  "environment": {
+    "control_dt": 1.0,
+    "episode_steps": 3600,
+    "action_mode": "actuator",
+    "auto_events": false,
+    "randomize": false,
+    "randomize_setpoints": false,
+    "randomize_plant": false,
+    "plant_drift": false,
+    "integral_obs": false,
+    "terminate_on_runaway": false,
+    "noise": false,
+    "noise_pct": 0.01
+  },
+  "model_params": {
+    "tank_area": [28.0, 32.0, 28.0, 32.0],
+    "outlet_area": [0.071, 0.057, 0.071, 0.057],
+    "pump_gain": [3.14, 3.29],
+    "gamma": [0.43, 0.34],
+    "gravity": 981.0,
+    "max_voltage": 10.0,
+    "max_level": 20.0,
+    "nominal_voltage": [3.15, 3.15]
+  },
+  "initialization": {
+    "state": [12.441864220183483, 13.166812925360238, 4.730260670665678, 4.986334403669725],
+    "reported_operating_point": [12.6, 13.0, 4.8, 4.9],
+    "basis": "exact nonlinear equilibrium corresponding to the paper's P+ 3.15 V operating point"
+  },
+  "setpoints": {
+    "initial": [12.441864220183483, 13.166812925360238],
+    "schedule": [
+      {
+        "at_step": 0,
+        "values": [14.441864220183483, 13.166812925360238],
+        "description": "1 V step in paper output r1, converted with kc=0.5 V/cm to a 2 cm h1 step"
+      }
+    ]
+  },
+  "disturbances": [],
+  "constraints": [
+    {"name": "all_tank_levels", "bounds": [0.0, 20.0], "unit": "cm"},
+    {"name": "pump_voltage", "bounds": [0.0, 10.0], "unit": "V"}
+  ],
+  "acceptance": {
+    "required_checks": [
+      "reference_parameters",
+      "nonlinear_equilibrium",
+      "right_half_plane_zero",
+      "paper_r1_step",
+      "paper_pi_tuning",
+      "long_horizon"
+    ]
+  },
+  "references": [
+    {
+      "id": "johansson-2000",
+      "doi": "10.1109/87.845876",
+      "url": "https://doi.org/10.1109/87.845876",
+      "locator": "Table of P+ operating data, Section VI, and Fig. 11"
+    }
+  ]
+}

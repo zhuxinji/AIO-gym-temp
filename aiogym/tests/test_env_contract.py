@@ -4,7 +4,7 @@ from aiogym.tests.interface_support import *  # noqa: F403
 def test_disturbance_schedule_config():
     """Dynamic disturbances are scheduled from the model disturbance schema."""
     for scn in SCENARIOS:
-        env = AIOGymNativeEnv(scn, dynamic=True, randomize=False, randomize_setpoints=False)
+        env = AIOGymNativeEnv(scn, auto_events=True, randomize=False, randomize_setpoints=False)
         env.reset(seed=0)
         configured = {
             row["event"]
@@ -36,7 +36,7 @@ def test_cstr_disturbance_semantics():
     check("CSTR colder coolant lowers temperature derivative", d_cold[1] < d_warm[1])
     check("CSTR production uses feed concentration", model.production(x, act, rich) > model.production(x, act, base) > model.production(x, act, lean))
 
-    env = AIOGymNativeEnv("cstr", reward_mode="economic", action_mode="actuator", dynamic=False,
+    env = AIOGymNativeEnv("cstr", reward_mode="economic", action_mode="actuator", auto_events=False,
                           randomize=False, randomize_setpoints=False)
     env.reset(seed=0)
     env.caf = 1.25
@@ -86,7 +86,7 @@ def test_process_disturbance_semantics():
     check("HVAC efficiency raises heating derivative", h_high_eff[0] > h_low_eff[0])
     check("HVAC heat load raises room-temperature derivative", h_load[0] > h_no_load[0])
 
-    env = AIOGymNativeEnv("cascade", dynamic=False, randomize=False, randomize_setpoints=False)
+    env = AIOGymNativeEnv("cascade", auto_events=False, randomize=False, randomize_setpoints=False)
     env.reset(seed=0)
     env.pump_flow_factor = 1.2
     env.heater_efficiency = 0.8
@@ -95,7 +95,7 @@ def test_process_disturbance_semantics():
     tank_info_ok = info["pump_flow_factor"] == 1.2 and info["heater_efficiency"] == 0.8 and info["heat_loss_factor"] == 1.7
     check("Tank env reports process factors", tank_info_ok)
 
-    env = AIOGymNativeEnv("hvac", dynamic=False, randomize=False, randomize_setpoints=False)
+    env = AIOGymNativeEnv("hvac", auto_events=False, randomize=False, randomize_setpoints=False)
     env.reset(seed=0)
     env.heat_load = [500.0, -100.0]
     env.hvac_efficiency = 0.9
@@ -107,7 +107,7 @@ def test_process_disturbance_semantics():
 
 def test_plant_drift_semantics():
     """plant_drift should slowly move physical plant parameters within the regime bounds."""
-    env = AIOGymNativeEnv("cascade", dynamic=False, randomize=False, randomize_setpoints=False,
+    env = AIOGymNativeEnv("cascade", auto_events=False, randomize=False, randomize_setpoints=False,
                           randomize_plant=False, plant_drift=True, episode_steps=80)
     env.reset(seed=0)
     nominal_ua = env._p_nominal["ua_loss"]
@@ -127,7 +127,7 @@ def test_env_api():
         if make_model(scn).supervisory_layout:
             modes.append("setpoint")
         for mode in modes:
-            e = AIOGymNativeEnv(scn, reward_mode="economic", action_mode=mode, dynamic=True, randomize_plant=True)
+            e = AIOGymNativeEnv(scn, reward_mode="economic", action_mode=mode, auto_events=True, randomize_plant=True)
             obs, info = e.reset(seed=0)
             assert e.observation_space.contains(obs), f"{scn}/{mode} obs not in space"
             a = e.action_space.sample()
@@ -139,7 +139,7 @@ def test_env_api():
 def test_seeding():
     """Same seed -> identical rollout (reproducibility)."""
     def roll(seed):
-        e = AIOGymNativeEnv("cstr", reward_mode="economic", dynamic=True, randomize_plant=True)
+        e = AIOGymNativeEnv("cstr", reward_mode="economic", auto_events=True, randomize_plant=True)
         o, _ = e.reset(seed=seed); xs = [o]
         for _ in range(30):
             o, *_ = e.step(np.full(e.action_space.shape[0], 0.5, np.float32)); xs.append(o)
@@ -162,7 +162,7 @@ def test_vectorized():
     from gymnasium.vector import SyncVectorEnv
     n = 8
     venv = SyncVectorEnv([lambda: AIOGymNativeEnv("cstr", reward_mode="economic", action_mode="setpoint",
-                                                  dynamic=True, randomize_plant=True) for _ in range(n)])
+                                                  auto_events=True, randomize_plant=True) for _ in range(n)])
     obs, _ = venv.reset(seed=0)
     for _ in range(20):
         obs, r, term, trunc, info = venv.step(np.stack([venv.single_action_space.sample() for _ in range(n)]))

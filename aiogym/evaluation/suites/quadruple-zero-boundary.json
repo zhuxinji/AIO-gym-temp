@@ -5,9 +5,5 @@
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
   "task": "zero-boundary-stress",
-  "controller_configs": {
-    "pid": {"profile": "quadruple-zero-boundary"},
-    "mpc": {"profile": "quadruple-zero-boundary"},
-    "oracle": {"profile": "quadruple-zero-boundary", "mode": "tracking"}
-  }
+  "preset": "controllers/quadruple-zero-boundary"
 }

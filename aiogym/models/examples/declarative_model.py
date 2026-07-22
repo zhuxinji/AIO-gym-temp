@@ -39,7 +39,7 @@ model = define_model({
 def main():
     register_model("simple_process", model, replace=True)
     try:
-        env = AIOGymNativeEnv("simple_process", dynamic=False, randomize=False,
+        env = AIOGymNativeEnv("simple_process", auto_events=False, randomize=False,
                               randomize_setpoints=False, episode_steps=5)
         obs, _ = env.reset(seed=0)
         total_reward = 0.0

@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from dataclasses import replace
 from datetime import datetime, timezone
 
 from aiogym._internal.config import parse_seed_list
+from aiogym._internal.identifiers import canonical_scenario_ids
+from aiogym._internal.paths import run_path
 from aiogym._internal.serialization import write_json
 from aiogym.evaluation import (
     BenchmarkProtocol,
+    PUBLIC_BENCHMARK_SCHEMA_VERSION,
     build_evaluation_report,
+    finalize_benchmark_artifacts,
     metric_direction,
     primary_metric_for_objective,
     resolve_protocol,
@@ -78,11 +83,92 @@ def figure_paths(out_path: str, scenario: str):
     }
 
 
-def main():
+def output_mode(args, parser: argparse.ArgumentParser) -> str:
+    """Resolve the standard or compatibility output contract."""
+
+    if args.out and args.artifact_dir:
+        parser.error("--out and --artifact-dir cannot be used together")
+    mode = args.output_format or ("legacy-json" if args.out else "artifacts")
+    if mode == "artifacts" and args.out:
+        parser.error("--out writes legacy JSON; use --artifact-dir with --format artifacts")
+    if mode == "legacy-json" and args.artifact_dir:
+        parser.error("--artifact-dir requires --format artifacts")
+    return mode
+
+
+def artifact_run_id(now: datetime | None = None) -> str:
+    stamp = now or datetime.now(timezone.utc)
+    return stamp.strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def artifact_dir_for(args, protocol: BenchmarkProtocol, run_id: str | None = None) -> str:
+    if args.artifact_dir:
+        return args.artifact_dir
+    task = protocol.metadata()["task_identity"]["name"]
+    identity = f"{protocol.scenario}_{task}_{protocol.objective}"
+    safe_identity = re.sub(r"[^A-Za-z0-9_.-]+", "-", identity).strip("-")
+    return str(run_path(f"benchmark_{safe_identity}_{run_id or artifact_run_id()}_artifacts"))
+
+
+def standard_artifact_payload(payload: dict, args, protocol: BenchmarkProtocol,
+                              artifact_dir: str) -> dict:
+    """Add the canonical directory-artifact envelope without changing results."""
+
+    task_identity = protocol.metadata()["task_identity"]
+    config = {
+        "scenario": protocol.scenario,
+        "task": args.task,
+        "objective": args.objective,
+        "controllers": parse_controllers(args.controllers),
+        "controller_profile": args.controller_profile,
+        "episodes": args.episodes,
+        "oracle_episodes": args.oracle_episodes,
+        "episode_steps": args.episode_steps,
+        "seed": args.seed,
+        "seed_list": args.seed_list,
+        "control_dt": args.control_dt,
+        "sb3_path": args.sb3_path,
+        "sb3_algo": args.sb3_algo,
+        "sb3_action_mode": args.sb3_action_mode,
+        "onnx_path": args.onnx_path,
+        "onnx_action_mode": args.onnx_action_mode,
+        "save_rollouts": args.save_rollouts,
+        "plot": args.plot,
+        "rollout_steps": args.rollout_steps,
+        "output_dir": artifact_dir,
+    }
+    benchmark_config = {
+        "schema_version": PUBLIC_BENCHMARK_SCHEMA_VERSION,
+        "scenario": protocol.scenario,
+        "task": task_identity["name"],
+        "task_status": task_identity["status"],
+        "task_profile_hash": task_identity["profile_hash"],
+        "objective": protocol.objective,
+        "objective_source": protocol.objective_source,
+        "controllers": list(payload["controllers"]),
+        "protocol": protocol.metadata(),
+        "cases": list(payload["configs"]),
+    }
+    return {
+        **payload,
+        "schema_version": PUBLIC_BENCHMARK_SCHEMA_VERSION,
+        "benchmark": "public_benchmark",
+        "run_dir": artifact_dir,
+        "artifact_dir": artifact_dir,
+        "task_status": task_identity["status"],
+        "task_profile_hash": task_identity["profile_hash"],
+        "config": config,
+        "benchmark_config": benchmark_config,
+    }
+
+
+def main(argv=None, prog=None):
     ap = argparse.ArgumentParser(
+        prog=prog,
         description="Run one scenario/objective/controller benchmark from the command line."
     )
-    ap.add_argument("--scenario", default="cstr", choices=SCENARIOS)
+    scenario_choices = tuple(sorted(set(SCENARIOS) | set(canonical_scenario_ids(SCENARIOS))))
+    ap.add_argument("--scenario", default="cstr", choices=scenario_choices)
     ap.add_argument(
         "--objective",
         default=None,
@@ -103,11 +189,28 @@ def main():
     ap.add_argument("--sb3-action-mode", default="setpoint", choices=["actuator", "setpoint"])
     ap.add_argument("--onnx-path", default=None)
     ap.add_argument("--onnx-action-mode", default="setpoint", choices=["actuator", "setpoint"])
-    ap.add_argument("--out", default=None)
+    ap.add_argument(
+        "--artifact-dir",
+        default=None,
+        help="standard artifact directory; defaults to a timestamped directory under runs/",
+    )
+    ap.add_argument(
+        "--format",
+        dest="output_format",
+        choices=["artifacts", "legacy-json"],
+        default=None,
+        help="output contract; defaults to artifacts, or legacy-json when --out is used",
+    )
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="legacy single-JSON path; retained for compatibility and implies --format legacy-json",
+    )
     ap.add_argument("--save-rollouts", action="store_true")
     ap.add_argument("--plot", action="store_true")
     ap.add_argument("--rollout-steps", type=int, default=None)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    mode = output_mode(args, ap)
 
     timing = {}
     if args.episode_steps is not None:
@@ -127,7 +230,6 @@ def main():
             **({"task": args.task} if args.task else {}),
         },
     )
-    out_path = args.out or f"aiogym/runs/bench_{args.scenario}_controllers.json"
     specs = controller_specs(args, baseline_protocol)
     case_artifacts = [
         run_evaluation_case(
@@ -149,7 +251,7 @@ def main():
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "benchmark": "controller_benchmark",
-        "scenario": args.scenario,
+        "scenario": baseline_protocol.scenario,
         "task": baseline_protocol.metadata()["task_identity"]["name"],
         "objective": baseline_protocol.objective,
         "objective_source": baseline_protocol.objective_source,
@@ -168,18 +270,28 @@ def main():
         rollouts = [case["rollout"] for case in case_artifacts]
         payload["rollouts"] = rollouts
 
-    if args.plot:
-        figures = figure_paths(out_path, args.scenario)
-        plot_summary(rows, figures["summary"], args.scenario)
-        plot_rollouts(rollouts, figures["rollout"], args.scenario)
-        payload["figures"] = figures
-
-    write_json(out_path, payload)
-
-    print(f"saved {out_path}")
-    if args.plot:
-        for kind, path in payload["figures"].items():
-            print(f"saved {kind} figure {path}")
+    if mode == "legacy-json":
+        out_path = args.out or str(run_path(f"bench_{args.scenario}_controllers.json"))
+        if args.plot:
+            figures = figure_paths(out_path, args.scenario)
+            plot_summary(rows, figures["summary"], args.scenario)
+            plot_rollouts(rollouts, figures["rollout"], args.scenario)
+            payload["figures"] = figures
+        write_json(out_path, payload)
+        print(f"saved {out_path}")
+        if args.plot:
+            for kind, path in payload["figures"].items():
+                print(f"saved {kind} figure {path}")
+    else:
+        artifact_dir = artifact_dir_for(args, baseline_protocol)
+        payload = standard_artifact_payload(payload, args, baseline_protocol, artifact_dir)
+        finalize_benchmark_artifacts(
+            artifact_dir,
+            payload,
+            create_plots=True,
+            markdown_report=True,
+        )
+        print(f"saved artifacts {artifact_dir}")
     for row in payload["rows"]:
         metric = row["metric"]
         print(

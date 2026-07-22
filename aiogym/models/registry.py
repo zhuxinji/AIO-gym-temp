@@ -3,6 +3,7 @@ import math
 from numbers import Real
 from typing import Mapping
 
+from .._internal.identifiers import internal_scenario_id, scenario_catalog_text
 from .core import ProcessModelContract, _is_model_instance
 from .scenarios import (
     CascadeModel,
@@ -85,6 +86,12 @@ def validate_model_contract(model):
 def register_model(name, model_factory, *, replace=False):
     if not isinstance(name, str) or not name:
         raise ValueError("model name must be a non-empty string")
+    reserved = internal_scenario_id(name)
+    if reserved != name and reserved in MODELS:
+        raise ValueError(
+            f"model name {name!r} is the canonical alias of registered scenario "
+            f"{reserved!r}; register custom models with a distinct ID"
+        )
     if name in MODELS and not replace:
         raise ValueError(f"model '{name}' is already registered")
     if _is_model_instance(model_factory):
@@ -179,9 +186,10 @@ def _validated_scalar_parameter(name, value, bounds, index=None):
 
 
 def unregister_model(name):
-    if name in BUILTIN_MODELS:
+    resolved = internal_scenario_id(name)
+    if resolved in BUILTIN_MODELS:
         raise ValueError(f"built-in model '{name}' cannot be unregistered")
-    MODELS.pop(name, None)
+    MODELS.pop(resolved, None)
     _refresh_scenarios()
 
 
@@ -190,8 +198,13 @@ def make_model(scenario="cascade"):
         return validate_model_contract(copy.deepcopy(scenario))
     if isinstance(scenario, type) or (callable(scenario) and not isinstance(scenario, str)):
         return validate_model_contract(scenario())
+    requested = scenario
+    scenario = internal_scenario_id(scenario)
     if scenario not in MODELS:
-        raise ValueError(f"unknown process model '{scenario}'. Registered models: {', '.join(SCENARIOS)}")
+        available = scenario_catalog_text(tuple(MODELS))
+        raise ValueError(
+            f"unknown scenario ID {requested!r}; available scenario IDs: {available}"
+        )
     factory = MODELS[scenario]
     model = factory if _is_model_instance(factory) else factory()
     return validate_model_contract(model)

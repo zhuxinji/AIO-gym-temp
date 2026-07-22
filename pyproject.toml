@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [
   { name = "AIO-Gym Contributors" }
 ]
+
 dependencies = [
   "gymnasium>=0.29",
   "numpy>=1.24",
@@ -22,12 +23,19 @@ dependencies = [
   "onnxruntime>=1.17",
 ]
 
+[project.urls]
+Homepage = "https://github.com/zhuxinji/AIO-gym-temp"
+Documentation = "https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/index.md"
+Repository = "https://github.com/zhuxinji/AIO-gym-temp"
+Issues = "https://github.com/zhuxinji/AIO-gym-temp/issues"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
 ]
 
 [project.scripts]
+aiogym = "aiogym.cli.main:main"
 aiogym-artifact-check = "aiogym.cli.artifact_tools:artifact_check_main"
 aiogym-model-cards = "aiogym.cli.artifact_tools:model_cards_main"
 aiogym-report = "aiogym.cli.artifact_tools:report_main"
@@ -39,6 +47,7 @@ aiogym-train-sb3 = "aiogym.rl.train_sb3:main"
 [tool.setuptools]
 packages = [
   "aiogym",
+  "aiogym._environment",
   "aiogym._internal",
   "aiogym.cli",
   "aiogym.controllers",
@@ -47,6 +56,7 @@ packages = [
   "aiogym.evaluation.metrics",
   "aiogym.models",
   "aiogym.models.scenarios",
+  "aiogym.models.tasks",
   "aiogym.rl",
 ]
 
@@ -57,5 +67,6 @@ aiogym = [
   "models/examples/*.md",
   "models/parameters/*.json",
   "evaluation/suites/*.json",
-  "evaluation/tasks/*/*.json",
+  "evaluation/suites/presets/*.json",
+  "models/tasks/builtin/*/*.json",
 ]

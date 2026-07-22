@@ -4,7 +4,7 @@ from aiogym.tests.interface_support import *  # noqa: F403
 def test_controller_evaluation_protocol():
     """PID/MPC/oracle-style controllers and learned policies share one evaluator."""
     fixed = BenchmarkProtocol.tracking("cstr", action_mode="actuator", episode_steps=8,
-                                       dynamic=False, randomize=False,
+                                       auto_events=False, randomize=False,
                                        randomize_setpoints=False, randomize_plant=False,
                                        plant_drift=False)
     names = set(registered_controllers())
@@ -73,7 +73,7 @@ def test_controller_evaluation_protocol():
     check("actuator controller evaluation includes reproducibility metadata", fixed_ok)
 
     extraction_protocol = BenchmarkProtocol.tracking("extraction", action_mode="actuator", episode_steps=5,
-                                                     dynamic=False, randomize=False,
+                                                     auto_events=False, randomize=False,
                                                      randomize_setpoints=False, randomize_plant=False,
                                                      plant_drift=False)
     extraction = evaluate_controller(
@@ -92,7 +92,7 @@ def test_controller_evaluation_protocol():
     check("extraction PID baseline evaluates through controller registry", extraction_ok)
 
     sup = BenchmarkProtocol.economic("cstr", action_mode="setpoint", episode_steps=8,
-                                     dynamic=False, randomize=False,
+                                     auto_events=False, randomize=False,
                                      randomize_setpoints=False, randomize_plant=False,
                                      plant_drift=False)
     env = sup.make_env()
@@ -156,7 +156,7 @@ def test_generic_controller_rollout():
             scn,
             action_mode="actuator",
             episode_steps=4,
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
             randomize_plant=False,
@@ -165,7 +165,7 @@ def test_generic_controller_rollout():
         env = protocol.make_env()
         artifact = rollout_controller(make_controller("pid", scenario=scn), env, seed=77, protocol=protocol)
         first = artifact["rollout"][0]
-        rollout_ok = rollout_ok and artifact["protocol"]["scenario"] == scn
+        rollout_ok = rollout_ok and artifact["protocol"]["scenario"] == protocol.scenario
         rollout_ok = rollout_ok and artifact["steps"] == 4
         rollout_ok = rollout_ok and artifact["rollout_schema"]["disturbance"]
         rollout_ok = rollout_ok and len(first["action"]) == env.action_space.shape[0]
@@ -176,10 +176,10 @@ def test_generic_controller_rollout():
 def test_benchmark_config_and_report_schema():
     """Roadmap phase-3 evaluation protocols stay separated and reproducible."""
     protocols = {
-        "tracking": BenchmarkProtocol.tracking("cstr", episode_steps=3, dynamic=False,
+        "tracking": BenchmarkProtocol.tracking("cstr", episode_steps=3, auto_events=False,
                                                randomize=False, randomize_setpoints=False,
                                                randomize_plant=False, plant_drift=False),
-        "economic": BenchmarkProtocol.economic("cstr", episode_steps=3, dynamic=False,
+        "economic": BenchmarkProtocol.economic("cstr", episode_steps=3, auto_events=False,
                                                randomize=False, randomize_setpoints=False,
                                                randomize_plant=False, plant_drift=False),
         "robustness": BenchmarkProtocol.robustness("cstr", episode_steps=3),
@@ -248,7 +248,7 @@ def test_kpi_tracking_setpoint_alignment():
     from aiogym.evaluation.metrics.kpi import W_TRACKING
 
     env = AIOGymNativeEnv("heater", reward_mode="tracking", action_mode="actuator",
-                          dynamic=False, randomize=False, randomize_setpoints=False,
+                          auto_events=False, randomize=False, randomize_setpoints=False,
                           episode_steps=1)
     env.reset(seed=0)
     _, reward, _, _, info = env.step(np.full(env.action_space.shape[0], 0.5, np.float32))
@@ -284,7 +284,7 @@ def test_kpi_tracking_setpoint_alignment():
             return np.array([1.0, 1.0], dtype=np.float32)
 
     protocol = BenchmarkProtocol.economic("heater", action_mode="setpoint", episode_steps=1,
-                                          dynamic=False, randomize=False,
+                                          auto_events=False, randomize=False,
                                           randomize_setpoints=False, randomize_plant=False,
                                           plant_drift=False)
     result = evaluate_controller(
@@ -323,7 +323,7 @@ def test_pure_tracking_reward_mode():
     from aiogym.evaluation import metric_for_reward_mode, primary_metric_for_objective
 
     env = AIOGymNativeEnv("hvac", reward_mode="tracking", action_mode="actuator",
-                          dynamic=False, randomize=False, randomize_setpoints=False,
+                          auto_events=False, randomize=False, randomize_setpoints=False,
                           episode_steps=1)
     env.reset(seed=0)
     _, reward, _, _, info = env.step(np.zeros(env.action_space.shape[0], np.float32))
@@ -341,7 +341,7 @@ def test_pure_tracking_reward_mode():
 
 def test_setpoint_randomization_uses_model_bounds():
     """Setpoint moves should honor model-specific SP bounds such as heater O2."""
-    env = AIOGymNativeEnv("heater", dynamic=False, randomize=False,
+    env = AIOGymNativeEnv("heater", auto_events=False, randomize=False,
                           randomize_setpoints=True, episode_steps=1)
     reset_bounds_ok = True
     move_bounds_ok = True
@@ -354,7 +354,7 @@ def test_setpoint_randomization_uses_model_bounds():
         move_bounds_ok = move_bounds_ok and 364.0 <= env.y_sp[1] <= 372.0
 
     legacy_water_range_ok = True
-    tank = AIOGymNativeEnv("cascade", dynamic=False, randomize=False,
+    tank = AIOGymNativeEnv("cascade", auto_events=False, randomize=False,
                            randomize_setpoints=True, episode_steps=1)
     tank.reset(seed=3)
     for j in range(len(tank.model.economic_config.get("level_band", []))):
@@ -384,20 +384,16 @@ def test_benchmark_suite_configs():
     present = set(os.listdir(cfg_dir))
     configs_ok = required.issubset(present)
     for name in required:
-        with open(os.path.join(cfg_dir, name)) as f:
-            cfg = json.load(f)
+        cfg = load_suite(os.path.splitext(name)[0])
         configs_ok = configs_ok and {"description", "scenarios", "objectives", "controllers", "action_mode"}.issubset(cfg)
         configs_ok = configs_ok and cfg["action_mode"] in {"actuator", "setpoint"}
         configs_ok = configs_ok and bool(cfg["objectives"]) and bool(cfg["controllers"])
-    with open(os.path.join(cfg_dir, "economic-supervisory.json")) as f:
-        supervisory = json.load(f)
-    with open(os.path.join(cfg_dir, "rl-direct-actuator.json")) as f:
-        direct = json.load(f)
+    supervisory = load_suite("economic-supervisory")
+    direct = load_suite("rl-direct-actuator")
     configs_ok = configs_ok and supervisory["action_mode"] == "setpoint" and supervisory["controllers"] == ["sb3"]
     configs_ok = configs_ok and direct["action_mode"] == "actuator" and direct["controllers"] == ["sb3"]
-    with open(os.path.join(cfg_dir, "standard-baselines.json")) as f:
-        standard = json.load(f)
-    configs_ok = configs_ok and standard["scenarios"] == "ALL_SCENARIOS"
+    standard = load_suite("standard-baselines")
+    configs_ok = configs_ok and set(standard["scenarios"]) == set(aiogym.list_scenarios())
     configs_ok = configs_ok and standard["objectives"] == ["tracking", "economic"]
     configs_ok = configs_ok and standard["controllers"] == ["pid", "mpc", "oracle"]
     crystal = load_suite("crystallization-tracking")
@@ -446,7 +442,7 @@ def test_benchmark_suite_configs():
         and summary[0]["metric_std"] == 0.1
         and summary[0]["seed_list"] == [11, 12]
         and artifact_dir_for("example", run_id="20260708T120000000000Z")
-        == "aiogym/runs/bench_suite_example_20260708T120000000000Z_artifacts"
+        == "runs/bench_suite_example_20260708T120000000000Z_artifacts"
         and artifact_dir_for("example", artifact_dir="custom/out") == "custom/out"
     )
     effective = effective_suite_config(standard, [
@@ -649,7 +645,7 @@ def test_oracle():
     from aiogym.evaluation import evaluate_controller
     from aiogym.controllers.pid import PIDAgent
     from aiogym.models import make_model
-    mk = lambda: AIOGymNativeEnv("cstr", reward_mode="economic", episode_steps=120, dynamic=True, randomize_plant=True)
+    mk = lambda: AIOGymNativeEnv("cstr", reward_mode="economic", episode_steps=120, auto_events=True, randomize_plant=True)
     orc = evaluate_controller(OracleAgent("cstr", horizon=12, mode="economic"), mk(), episodes=2)["profit"]
     pid = evaluate_controller(PIDAgent(make_model("cstr")), mk(), episodes=2)["profit"]
     check(f"NMPC oracle {orc:.0f} > PID {pid:.0f}", orc > pid)

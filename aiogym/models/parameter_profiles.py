@@ -12,6 +12,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .._internal.identifiers import (
+    canonical_scenario_id,
+    internal_scenario_id,
+)
+
 
 PARAMETER_PROFILE_SCHEMA_VERSION = "aiogym.parameter_profile.v1"
 _PROFILE_DIR = Path(__file__).with_name("parameters")
@@ -20,7 +25,10 @@ _PROFILE_DIR = Path(__file__).with_name("parameters")
 def list_parameter_profiles() -> tuple[str, ...]:
     """Return scenarios with a bundled parameter metadata profile."""
 
-    return tuple(sorted(path.stem for path in _PROFILE_DIR.glob("*.json")))
+    return tuple(sorted(
+        canonical_scenario_id(path.stem)
+        for path in _PROFILE_DIR.glob("*.json")
+    ))
 
 
 def load_parameter_profile(
@@ -35,7 +43,7 @@ def load_parameter_profile(
     else:
         path = Path(source)
         if isinstance(source, str) and not path.exists() and path.parent == Path("."):
-            path = _PROFILE_DIR / f"{source}.json"
+            path = _PROFILE_DIR / f"{internal_scenario_id(source)}.json"
         if not path.is_file():
             raise FileNotFoundError(f"parameter profile not found: {source}")
         with path.open(encoding="utf-8") as stream:
@@ -63,7 +71,11 @@ def validate_parameter_profile(
         raise ValueError("parameter profile scenario must be a non-empty string")
     if not isinstance(profile["status"], str) or not profile["status"]:
         raise ValueError("parameter profile status must be a non-empty string")
-    if expected_scenario is not None and profile["scenario"] != expected_scenario:
+    if (
+        expected_scenario is not None
+        and internal_scenario_id(profile["scenario"])
+        != internal_scenario_id(expected_scenario)
+    ):
         raise ValueError(
             f"expected parameter profile for {expected_scenario!r}, got {profile['scenario']!r}"
         )

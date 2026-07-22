@@ -74,7 +74,7 @@ def test_foundational_model_card_and_environment_step_are_finite():
 
     env = aiogym.AIOGymNativeEnv(
         "cascade_recirculating",
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
     )
@@ -370,7 +370,7 @@ def test_environment_reports_passive_protection_separately_from_hard_stop():
         "cascade_recirculating",
         control_dt=0.01,
         episode_steps=3,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
     )
@@ -395,10 +395,10 @@ def test_environment_reports_passive_protection_separately_from_hard_stop():
 
 def test_device_tasks_are_explicit_and_exclude_production_economics():
     expected = {
-        "cascade_recirculating/commissioning",
-        "cascade_recirculating/disturbance-rejection",
-        "cascade_recirculating/safety-recovery",
-        "cascade_recirculating/temperature-step",
+        "cascade-recirculating/commissioning",
+        "cascade-recirculating/disturbance-rejection",
+        "cascade-recirculating/safety-recovery",
+        "cascade-recirculating/temperature-step",
     }
     assert set(aiogym.list_task_profiles("cascade_recirculating")) == expected
     for name in expected:

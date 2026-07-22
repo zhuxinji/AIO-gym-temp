@@ -10,13 +10,17 @@ import aiogym
 
 
 def test_all_builtins_have_non_mutating_parameter_profiles():
-    assert set(aiogym.list_parameter_profiles()) == set(aiogym.SCENARIOS)
+    assert set(aiogym.list_parameter_profiles()) == set(aiogym.list_scenarios())
     for scenario in aiogym.SCENARIOS:
         model = aiogym.make_model(scenario)
         before = dict(model.p)
         profile = aiogym.load_parameter_profile(scenario)
         card = model.model_card()
-        assert profile["scenario"] == scenario
+        expected_scenario_id = (
+            "cascade-recirculating"
+            if scenario == "cascade_recirculating" else scenario
+        )
+        assert profile["scenario"] == expected_scenario_id
         expected_status = {
             "quadruple": "reference-parameterized",
             "cascade_recirculating": "design-provisional",
@@ -136,6 +140,7 @@ def test_task_owns_conditions_while_objective_owns_scoring():
     metadata = protocol.metadata()
     assert protocol.objective == "kpi"
     assert protocol.env_reward_mode == "kpi"
+    assert protocol.auto_events is False
     assert protocol.dynamic is False
     assert protocol.randomize is False
     assert protocol.noise is False
@@ -145,6 +150,90 @@ def test_task_owns_conditions_while_objective_owns_scoring():
     assert len(metadata["task_identity"]["profile_hash"]) == 64
     with pytest.raises(ValueError, match="does not support objective"):
         aiogym.BenchmarkProtocol.economic("quadruple", task=task)
+
+
+def test_auto_events_is_canonical_and_dynamic_remains_compatible():
+    assert aiogym.AIOGymNativeEnv("cstr").auto_events is True
+    assert aiogym.BenchmarkProtocol.tracking("cstr").auto_events is False
+
+    canonical = aiogym.AIOGymNativeEnv(
+        "cstr",
+        episode_steps=20,
+        auto_events=True,
+        randomize=False,
+        randomize_setpoints=False,
+    )
+    with pytest.warns(FutureWarning, match="use auto_events"):
+        legacy = aiogym.AIOGymNativeEnv(
+            "cstr",
+            episode_steps=20,
+            dynamic=True,
+            randomize=False,
+            randomize_setpoints=False,
+        )
+    canonical.reset(seed=42)
+    legacy.reset(seed=42)
+    assert canonical._dist_events == legacy._dist_events
+    assert canonical.auto_events is True
+    assert legacy.auto_events is True
+    assert legacy.dynamic is True
+
+    with pytest.raises(ValueError, match="auto_events.*conflicts"):
+        aiogym.AIOGymNativeEnv(
+            "cstr", auto_events=False, dynamic=True
+        )
+
+
+def test_auto_events_is_the_only_canonical_protocol_and_case_field():
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "cstr", auto_events=True, episode_steps=1
+    )
+    protocol_metadata = protocol.metadata()
+    case_metadata = aiogym.BenchmarkCase.from_protocol(
+        protocol, controller="pid", seeds=[0]
+    ).metadata()
+
+    assert protocol.env_kwargs()["auto_events"] is True
+    assert protocol_metadata["auto_events"] is True
+    assert case_metadata["environment"]["auto_events"] is True
+    assert "dynamic" not in protocol.env_kwargs()
+    assert "dynamic" not in protocol_metadata
+    assert "dynamic" not in case_metadata["environment"]
+
+    with pytest.warns(FutureWarning, match="use auto_events"):
+        legacy = aiogym.BenchmarkProtocol.tracking("cstr", dynamic=True)
+    assert legacy.auto_events is True
+    with pytest.raises(ValueError, match="auto_events.*conflicts"):
+        aiogym.BenchmarkProtocol.tracking(
+            "cstr", auto_events=False, dynamic=True
+        )
+
+
+def test_legacy_task_and_suite_auto_event_fields_are_normalized(tmp_path):
+    task = aiogym.load_task_profile("quadruple/minimum-phase-classic")
+    legacy_task = dict(task)
+    legacy_task["environment"] = dict(task["environment"])
+    legacy_task["environment"]["dynamic"] = legacy_task["environment"].pop(
+        "auto_events"
+    )
+    with pytest.warns(FutureWarning, match="use auto_events"):
+        normalized_task = aiogym.load_task_profile(legacy_task)
+    assert normalized_task["environment"]["auto_events"] is False
+    assert "dynamic" not in normalized_task["environment"]
+
+    suite_path = tmp_path / "legacy-suite.json"
+    suite_path.write_text(json.dumps({
+        "scenarios": ["cstr"],
+        "objectives": ["tracking"],
+        "controllers": ["pid"],
+        "dynamic": True,
+    }))
+    from aiogym.cli.suite_benchmark import load_suite
+
+    with pytest.warns(FutureWarning, match="use auto_events"):
+        suite = load_suite(str(suite_path))
+    assert suite["auto_events"] is True
+    assert "dynamic" not in suite
 
 
 def test_benchmark_runner_aligns_oracle_with_primary_tracking_error_weights():
@@ -193,7 +282,7 @@ def test_scheduled_setpoint_is_visible_before_its_control_step():
         "environment": {
             "control_dt": 1.0,
             "episode_steps": 3,
-            "dynamic": False,
+            "auto_events": False,
             "randomize": False,
             "randomize_setpoints": False,
             "randomize_plant": False,
@@ -372,7 +461,7 @@ def test_cascade_recirculating_suite_uses_formal_tasks_and_task_objectives():
     by_task = {}
     for case in cases:
         by_task.setdefault(case["task"], set()).add(case["controller"])
-        assert case["scenario"] == "cascade_recirculating"
+        assert case["scenario"] == "cascade-recirculating"
         assert case["objective_source"] == "task-default"
         assert case["protocol"].model_params == {}
     assert by_task == {
@@ -612,7 +701,7 @@ def test_economic_suites_exclude_models_without_meaningful_economics():
     economic_scenarios = {
         case["scenario"] for case in cases if case["objective"] == "economic"
     }
-    assert tracking_scenarios == set(aiogym.SCENARIOS)
+    assert tracking_scenarios == set(aiogym.list_scenarios())
     assert economic_scenarios == valid_economic
     assert {case["protocol"].episode_steps for case in cases} == {80}
     assert {case["protocol"].control_dt for case in cases} == {0.5}
@@ -626,7 +715,7 @@ def test_economic_suites_exclude_models_without_meaningful_economics():
     _, all_cases = build_cases(args)
     assert {
         case["scenario"] for case in all_cases if case["objective"] == "tracking"
-    } == set(aiogym.SCENARIOS)
+    } == set(aiogym.list_scenarios())
     assert {
         case["scenario"] for case in all_cases if case["objective"] == "economic"
     } == valid_economic
@@ -745,7 +834,7 @@ def test_objective_resolution_has_one_documented_precedence_order():
 
 def test_objective_selection_does_not_change_implicit_environment_conditions():
     fields = (
-        "action_mode", "dynamic", "randomize", "randomize_setpoints",
+        "action_mode", "auto_events", "randomize", "randomize_setpoints",
         "randomize_plant", "plant_drift", "integral_obs",
         "terminate_on_runaway", "noise",
     )
@@ -761,6 +850,124 @@ def test_objective_selection_does_not_change_implicit_environment_conditions():
     assert {protocol.env_reward_mode for protocol in protocols} == {
         "tracking", "economic", "kpi"
     }
+
+
+@pytest.mark.parametrize(
+    ("objective", "reward_mode"),
+    [
+        ("economic", "economic"),
+        ("tracking", "tracking"),
+        ("kpi", "kpi"),
+        ("robustness", "kpi"),
+        ("safety", "kpi"),
+    ],
+)
+def test_public_objectives_resolve_one_internal_reward_mode(objective, reward_mode):
+    from aiogym.evaluation import resolve_protocol
+
+    selected, resolved = aiogym.resolve_objective_reward_mode(objective)
+    assert selected == objective
+    assert resolved == reward_mode
+    assert aiogym.reward_mode_for_objective(objective) == reward_mode
+
+    protocol = resolve_protocol(
+        "cstr", objective, {"episode_steps": 1}
+    )
+    assert protocol.objective == objective
+    assert protocol.env_reward_mode == reward_mode
+    assert protocol.metadata()["resolved_reward_mode"] == reward_mode
+    assert protocol.metadata()["objective_spec"]["resolved_reward_mode"] == reward_mode
+
+
+def test_high_level_reward_mode_alias_warns_and_conflicts_fail():
+    with pytest.warns(FutureWarning, match="use objective"):
+        selected, resolved = aiogym.resolve_objective_reward_mode(
+            reward_mode="tracking", warn_legacy=True
+        )
+    assert (selected, resolved) == ("tracking", "tracking")
+
+    with pytest.warns(FutureWarning, match="use objective"):
+        legacy_env = aiogym.make_env(
+            "cstr", reward_mode="tracking", episode_steps=1
+        )
+    assert legacy_env.reward_mode == "tracking"
+
+    safety_env = aiogym.make_env("cstr", objective="safety", episode_steps=1)
+    assert safety_env.reward_mode == "kpi"
+
+    with pytest.raises(ValueError, match="conflicts with reward_mode"):
+        aiogym.make_env(
+            "cstr",
+            objective="tracking",
+            reward_mode="economic",
+            episode_steps=1,
+        )
+
+
+def test_training_cli_objective_resolution_and_metadata():
+    from aiogym.rl.train_rlpd import configure_training_objective as configure_rlpd
+    from aiogym.rl.train_sb3 import (
+        configure_training_auto_events,
+        configure_training_objective as configure_sb3,
+        training_metadata,
+    )
+
+    sb3 = SimpleNamespace(objective="safety", reward_mode=None, eval_objective=None)
+    configure_sb3(sb3)
+    assert sb3.objective == "safety"
+    assert sb3.resolved_reward_mode == "kpi"
+    assert sb3.eval_objective == "safety"
+
+    legacy = SimpleNamespace(objective=None, reward_mode="economic")
+    with pytest.warns(FutureWarning, match="use objective"):
+        configure_rlpd(legacy)
+    assert legacy.objective == "economic"
+    assert legacy.resolved_reward_mode == "economic"
+
+    conflict = SimpleNamespace(objective="tracking", reward_mode="economic")
+    with pytest.raises(ValueError, match="conflicts with reward_mode"):
+        configure_rlpd(conflict, warn_legacy=False)
+
+    legacy_events = SimpleNamespace(auto_events=None, dynamic=True)
+    with pytest.warns(FutureWarning, match="use auto_events"):
+        configure_training_auto_events(legacy_events)
+    assert legacy_events.auto_events is True
+
+    conflicting_events = SimpleNamespace(auto_events=False, dynamic=True)
+    with pytest.raises(ValueError, match="auto_events.*conflicts"):
+        configure_training_auto_events(conflicting_events, warn_legacy=False)
+
+    metadata_args = SimpleNamespace(
+        algo="sac",
+        scenario="cstr",
+        action_mode="actuator",
+        objective="robustness",
+        resolved_reward_mode="kpi",
+        steps=10,
+        seed=3,
+        n_envs=1,
+        vec_env="dummy",
+        subproc_start_method="fork",
+        device="cpu",
+        torch_threads=1,
+        train_episode_steps=10,
+        auto_events=False,
+        randomize=False,
+        randomize_setpoints=False,
+        randomize_plant=False,
+        plant_drift=False,
+        integral_obs=False,
+        terminate_on_runaway=False,
+        noise=False,
+        noise_pct=0.01,
+        control_dt=0.5,
+    )
+    metadata = training_metadata(metadata_args, "checkpoint.zip")
+    assert metadata["objective"] == "robustness"
+    assert metadata["resolved_reward_mode"] == "kpi"
+    assert "reward_mode" not in metadata
+    assert metadata["env_kwargs"]["auto_events"] is False
+    assert "dynamic" not in metadata["env_kwargs"]
 
 
 def test_benchmark_case_supports_injected_environment_factory():

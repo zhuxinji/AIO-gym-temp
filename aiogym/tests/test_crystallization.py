@@ -13,7 +13,7 @@ def _make_env(**kwargs):
     return AIOGymNativeEnv(
         "crystallization",
         action_mode="actuator",
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         **kwargs,
@@ -97,7 +97,7 @@ def test_pid_tracking_rollout():
         action_mode="actuator",
         episode_steps=3,
         control_dt=1.0,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         randomize_plant=False,

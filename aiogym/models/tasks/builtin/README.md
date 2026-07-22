@@ -1,0 +1,50 @@
+# Task profiles
+
+Task profiles declare scenario-specific timing and reserve stable sections for
+initial conditions, setpoints, disturbances, constraints, operation, and acceptance rules.
+They are opt-in, versioned inputs rather than hidden environment defaults.
+Schema and discovery APIs are provided by `aiogym.models.tasks`; evaluation
+only consumes resolved tasks and evaluates declared acceptance thresholds.
+
+The environment field `auto_events` controls generic automatically generated
+within-episode events. It does not make the physical model static: state always
+advances through the scenario's differential equations. A reproducible task can
+therefore set `auto_events: false` while declaring deterministic changes under
+`setpoints.schedule` or `disturbances`.
+
+The former `dynamic` field is accepted as a deprecated compatibility alias.
+
+Tasks may declare `default_objective` and `supported_objectives`. Objective
+resolution uses runtime/API override, case config, suite config, then the task
+default. A selected objective outside `supported_objectives` is rejected rather
+than silently replaced.
+
+Direct environments keep their own documented interactive defaults. Named task
+profiles represent reproducible experiments and should record their benchmark
+source explicitly.
+
+`quadruple/minimum-phase-classic` is the first reference-derived task. It uses
+the minimum-phase Johansson configuration, an exact nonlinear equilibrium, and
+two deterministic lower-tank setpoint moves.
+
+The optional `operation` section declares task-level production semantics. Its
+`mode` is `batch` or `continuous`; continuous tasks must provide a positive
+`product_flow_sp` and may provide `min_product_flow`. These values configure the
+environment model and controller model through the same path and are not copied
+into physical model parameters.
+
+The optional `acceptance.metrics` mapping defines result thresholds separately
+from execution success. Each metric may provide `min`, `max`, or both. Results
+record `objective_status=met|not-met`; tasks without thresholds report
+`objective_status=not-defined`.
+
+For `cascade`, direct operation remains batch. The `continuous-benchmark` task
+uses an assumed `4.0e-4 m3/s` throughput target and
+minimum flow for economic benchmarking. This value is a reproducible benchmark
+assumption, not a device rating or plant-validated operating limit.
+
+`cascade_recirculating` is a separate closed-loop hardware-design scenario. Its
+`commissioning`, `temperature-step`, `disturbance-rejection`, and
+`safety-recovery` tasks support tracking/KPI/robustness/safety objectives only.
+They deliberately do not inherit `cascade` production economics because the PDF
+rig recirculates Tank 3 through P101 and declares no product stream.

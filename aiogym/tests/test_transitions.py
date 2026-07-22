@@ -18,7 +18,7 @@ def _environment(*, action_mode="actuator"):
         "cstr",
         reward_mode="tracking",
         action_mode=action_mode,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         randomize_plant=False,

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import math
 
-from ..core import RHO_CP, ProcessModelContract, _NUMERIC_OPS, _casadi_ops, _maxv
+from ..backends import _NUMERIC_OPS, _casadi_ops, _maxv
+from ..core import RHO_CP, ProcessModelContract
 
 
 class RecirculatingCascadeModel(ProcessModelContract):

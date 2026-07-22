@@ -123,7 +123,7 @@ class StageRewardContractTests(unittest.TestCase):
                     env = AIOGymNativeEnv(
                         scenario,
                         reward_mode=reward_mode,
-                        dynamic=False,
+                        auto_events=False,
                         randomize=False,
                         randomize_setpoints=False,
                         randomize_plant=False,
@@ -222,7 +222,7 @@ class StageRewardContractTests(unittest.TestCase):
         env = AIOGymNativeEnv(
             "cstr",
             reward_mode="tracking",
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
             randomize_plant=False,
@@ -259,7 +259,7 @@ class StageRewardContractTests(unittest.TestCase):
         env = AIOGymNativeEnv(
             "cstr",
             reward_mode="tracking",
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
             randomize_plant=False,
@@ -290,7 +290,7 @@ class StageRewardContractTests(unittest.TestCase):
         env = AIOGymNativeEnv(
             "cstr",
             action_mode="setpoint",
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
         )
@@ -313,7 +313,7 @@ class StageRewardContractTests(unittest.TestCase):
             "cstr",
             reward_mode="tracking",
             custom_stage_reward=custom_stage_reward,
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
             randomize_plant=False,
@@ -346,7 +346,7 @@ class StageRewardContractTests(unittest.TestCase):
             "cstr",
             custom_stage_reward=lambda *_: 7.0,
             terminate_on_runaway=True,
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
         )
@@ -365,7 +365,7 @@ class StageRewardContractTests(unittest.TestCase):
         env = AIOGymNativeEnv(
             "cstr",
             custom_stage_reward=lambda *_: float("nan"),
-            dynamic=False,
+            auto_events=False,
             randomize=False,
             randomize_setpoints=False,
         )

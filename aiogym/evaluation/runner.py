@@ -7,14 +7,13 @@ from typing import Any, Mapping, Sequence
 
 from ..controllers import make_controller
 from ..models import apply_model_params, make_model
-from .core import evaluate_controller, rollout_controller
-from .protocols import (
-    BenchmarkCase,
-    BenchmarkProtocol,
-    primary_metric_for_objective,
-)
+from .evaluator import evaluate_controller
+from .rollouts import rollout_controller
+from .cases import BenchmarkCase
+from .metric_catalog import primary_metric_for_objective
+from .protocols import BenchmarkProtocol
 from .rows import compact_result_row
-from .task_profiles import configure_model_for_task
+from ..models.tasks import configure_model_for_task
 
 
 def run_evaluation_case(
@@ -87,7 +86,7 @@ def run_evaluation_case(
         objective_specification=case.objective,
         include_episodes=include_episodes,
     )
-    from .task_profiles import task_identity
+    from ..models.tasks import task_identity
 
     task_meta = task_identity(case.environment.task)
     row = compact_result_row(
@@ -144,7 +143,7 @@ def execute_benchmark_case(
             suite_case=case_name,
         )
     except Exception as ex:
-        from .task_profiles import task_identity
+        from ..models.tasks import task_identity
 
         task_meta = task_identity(case.environment.task)
         error = {"type": ex.__class__.__name__, "message": str(ex)}
@@ -175,7 +174,7 @@ def execute_benchmark_case(
     row["suite_runtime_seconds"] = float(perf_counter() - started)
     rollout = artifact.get("rollout")
     if rollout is not None and suite_case is not None:
-        from .task_profiles import task_identity
+        from ..models.tasks import task_identity
 
         rollout.update({
             "scenario": case.environment.scenario,

@@ -108,7 +108,7 @@ class MiniHeatedTank(ProcessModelContract):
 def main():
     register_model("mini_heated_tank", MiniHeatedTank, replace=True)
     try:
-        env = AIOGymNativeEnv("mini_heated_tank", dynamic=True, randomize=False,
+        env = AIOGymNativeEnv("mini_heated_tank", auto_events=True, randomize=False,
                               randomize_setpoints=False, episode_steps=5)
         obs, _ = env.reset(seed=0)
         total_reward = 0.0

@@ -3,252 +3,34 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import math
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
-
-from .._internal.serialization import jsonable as _jsonable
-
-EVALUATION_SCHEMA_VERSION = "aiogym.evaluation.v3"
-PUBLIC_BENCHMARK_SCHEMA_VERSION = "aiogym.public_benchmark.v2"
-
-
-ROLLOUT_SCHEMA = {
-    "step": "integer control-step index",
-    "time": "seconds since episode start",
-    "obs": "observation before control action",
-    "state": "physical state before integration",
-    "action": "controller output passed to env.step",
-    "setpoint": "active setpoint context exposed to the controller",
-    "disturbance": "disturbance values applied by the process model",
-    "reward": "training reward returned by the environment",
-    "profit": "time-integrated economic contribution for the transition",
-    "constraint": "normalized process constraint penalty for the step",
-    "info": "environment-specific diagnostic fields",
-}
-
-
-METRIC_DEFINITIONS = {
-    "return": "sum of environment reward over the rollout; reward is the training signal",
-    "profit": "time-integrated economic profit over the rollout",
-    "normalized_score": "0-100 KPI score from KPIScorer; score is for reporting, not raw economics",
-    "production": "time-integrated process production over the rollout",
-    "energy_kwh": "total action energy over the rollout",
-    "runtime_seconds": "wall-clock seconds spent evaluating one episode",
-    "runtime_total_seconds": "total wall-clock seconds spent evaluating all episodes",
-    "runtime_seconds_per_step": "wall-clock seconds per environment control step",
-    "tracking_cost": "cumulative tracking cost: raw squared setpoint error plus physical-input move and nominal steady-input deviation penalties",
-    "tracking_return": "negative cumulative tracking_cost, matching the tracking reward returned by the environment",
-    "tracking_error_cost": "cumulative raw squared setpoint-tracking error over all control steps and tracked outputs",
-    "tracking_move_cost": "cumulative squared control move in physical actuator units",
-    "tracking_steady_cost": "cumulative squared deviation from the model-resolved nominal steady input in physical actuator units; zero when no resolver is available",
-    "tracking_mse": "mean squared raw tracking error over time and tracked outputs",
-    "tracking_iae": "integral absolute raw tracking error",
-    "tracking_ise": "integral squared raw tracking error",
-    "tracking_itae": "time-weighted integral absolute raw tracking error",
-    "tracking_overshoot": "largest positive raw excursion above the active setpoint",
-    "tracking_settling_time": "last time at which any tracked variable exceeded tolerance",
-    "constraint": "sum of normalized soft constraint penalty reported by the environment",
-    "constraint_violation_count": "number of steps with any process constraint violation",
-    "constraint_violation_duration": "seconds spent with any process constraint violation",
-    "constraint_violation_severity": "sum of positive per-constraint violation magnitudes",
-    "action_violation_count": "number of controller outputs outside action bounds before env clipping",
-    "action_violation_duration": "seconds with any action-bound violation",
-    "action_violation_severity": "sum of action-bound excess before env clipping",
-    "runaway_count": "number of runaway steps reported by the environment",
-    "runaway_duration": "seconds spent in runaway state",
-    "safety_margin_min": "minimum negative violation margin; 0 means no violation was observed",
-    "controller_solve_count": "number of optimization or policy solve calls reported by the controller",
-    "controller_solver_success_count": "number of successful controller solve calls",
-    "controller_solver_failure_count": "number of failed controller solve calls",
-    "controller_fallback_count": "number of times the controller fell back to a previous or safe action",
-    "controller_degraded_count": "number of episodes with any controller-side degradation",
-}
-
-
-PROTOCOL_METRICS = {
-    "tracking": (
-        "tracking_error_cost", "tracking_cost", "tracking_return", "tracking_move_cost",
-        "tracking_steady_cost",
-        "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae", "tracking_overshoot",
-        "tracking_settling_time",
-    ),
-    "economic": (
-        "profit", "normalized_score", "production", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity", "safety_margin_min",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "robustness": (
-        "return", "profit", "normalized_score", "tracking_cost", "tracking_mse", "tracking_iae", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "safety": (
-        "constraint_violation_count", "constraint_violation_duration",
-        "constraint_violation_severity", "action_violation_count",
-        "action_violation_duration", "action_violation_severity",
-        "runaway_count", "runaway_duration", "safety_margin_min",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-    "kpi": (
-        "normalized_score", "tracking_cost", "tracking_mse", "tracking_iae", "energy_kwh",
-        "constraint_violation_count", "constraint_violation_severity",
-        "controller_solver_failure_count", "controller_fallback_count",
-        "runtime_seconds", "runtime_seconds_per_step",
-    ),
-}
-
-
-PRIMARY_METRICS = {
-    "tracking": "tracking_error_cost",
-    "economic": "profit",
-    "kpi": "normalized_score",
-    "robustness": "normalized_score",
-    "safety": "constraint_violation_count",
-}
-
-
-OBJECTIVE_REWARD_MODES = {
-    "tracking": "tracking",
-    "economic": "economic",
-    "kpi": "kpi",
-    "robustness": "kpi",
-    "safety": "kpi",
-}
-
-
-METRIC_DIRECTIONS = {
-    "tracking_cost": "minimize",
-    "tracking_error_cost": "minimize",
-    "tracking_move_cost": "minimize",
-    "tracking_steady_cost": "minimize",
-    "tracking_return": "maximize",
-    "tracking_mse": "minimize",
-    "tracking_iae": "minimize",
-    "tracking_ise": "minimize",
-    "tracking_itae": "minimize",
-    "tracking_overshoot": "minimize",
-    "tracking_settling_time": "minimize",
-    "constraint_violation_count": "minimize",
-    "constraint_violation_duration": "minimize",
-    "constraint_violation_severity": "minimize",
-    "action_violation_count": "minimize",
-    "action_violation_duration": "minimize",
-    "action_violation_severity": "minimize",
-    "runaway_count": "minimize",
-    "runaway_duration": "minimize",
-    "energy_kwh": "minimize",
-    "runtime_seconds": "minimize",
-    "runtime_total_seconds": "minimize",
-    "runtime_seconds_per_step": "minimize",
-    "controller_solver_failure_count": "minimize",
-    "controller_fallback_count": "minimize",
-    "controller_degraded_count": "minimize",
-    "safety_margin_min": "maximize",
-    "profit": "maximize",
-    "normalized_score": "maximize",
-    "return": "maximize",
-    "production": "maximize",
-}
-
-
-def metric_for_reward_mode(reward_mode: str) -> str:
-    """Training/checkpoint metric implied by an environment reward mode.
-
-    Benchmark reports should use ``primary_metric_for_objective`` instead.
-    """
-
-    if reward_mode == "economic":
-        return "profit"
-    if reward_mode == "tracking":
-        return "return"
-    return "kpi"
-
-
-def primary_metric_for_objective(objective: str) -> str:
-    return PRIMARY_METRICS.get(objective, "return")
-
-
-def metric_direction(metric: str) -> str:
-    return METRIC_DIRECTIONS.get(metric, "maximize")
-
-
-def metric_definitions(objective: str | None = None):
-    if objective is None:
-        return dict(METRIC_DEFINITIONS)
-    return {key: METRIC_DEFINITIONS[key] for key in PROTOCOL_METRICS.get(objective, ()) if key in METRIC_DEFINITIONS}
-
-
-@dataclass(frozen=True)
-class ObjectiveSpec:
-    """Resolved evaluation semantics and the source that selected them."""
-
-    name: str
-    source: str
-    reward_mode: str
-    primary_metric: str
-    direction: str
-    metrics: tuple[str, ...]
-    reward_options: Mapping[str, Any] = field(default_factory=dict)
-
-    def metadata(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "source": self.source,
-            "reward_mode": self.reward_mode,
-            "primary_metric": self.primary_metric,
-            "direction": self.direction,
-            "metrics": list(self.metrics),
-            "reward_options": _jsonable(dict(self.reward_options)),
-        }
-
-
-def objective_spec(
-    name: str,
-    *,
-    source: str = "explicit",
-    reward_options: Mapping[str, Any] | None = None,
-) -> ObjectiveSpec:
-    """Build validated objective semantics without constructing an environment."""
-
-    if name not in PRIMARY_METRICS:
-        raise ValueError(f"objective must be one of: {', '.join(PRIMARY_METRICS)}")
-    primary_metric = primary_metric_for_objective(name)
-    return ObjectiveSpec(
-        name=name,
-        source=str(source),
-        reward_mode=OBJECTIVE_REWARD_MODES[name],
-        primary_metric=primary_metric,
-        direction=metric_direction(primary_metric),
-        metrics=tuple(PROTOCOL_METRICS.get(name, ())),
-        reward_options=dict(reward_options or {}),
-    )
-
-
-def resolve_objective(
-    *,
-    explicit: str | None = None,
-    case_config: str | None = None,
-    suite_config: str | None = None,
-    task_profile: Mapping[str, Any] | None = None,
-) -> ObjectiveSpec:
-    """Resolve one objective using a single, user-visible precedence order."""
-
-    candidates = (
-        ("explicit", explicit),
-        ("case-config", case_config),
-        ("suite-config", suite_config),
-        ("task-default", (task_profile or {}).get("default_objective")),
-    )
-    for source, value in candidates:
-        if value is not None:
-            return objective_spec(str(value), source=source)
-    raise ValueError(
-        "no objective was resolved; specify an objective explicitly or use a "
-        "task with default_objective"
-    )
+from .._internal.config import resolve_auto_events
+from .._internal.identifiers import canonical_scenario_id, internal_scenario_id
+from .cases import BenchmarkCase, EnvironmentSpec
+from .metric_catalog import (
+    EVALUATION_SCHEMA_VERSION,
+    METRIC_DEFINITIONS,
+    METRIC_DIRECTIONS,
+    PRIMARY_METRICS,
+    PROTOCOL_METRICS,
+    PUBLIC_BENCHMARK_SCHEMA_VERSION,
+    ROLLOUT_SCHEMA,
+    metric_definitions,
+    metric_direction,
+    primary_metric_for_objective,
+)
+from .objective_specs import (
+    OBJECTIVE_REWARD_MODES,
+    REWARD_MODES,
+    ObjectiveSpec,
+    metric_for_reward_mode,
+    objective_for_reward_mode,
+    objective_spec,
+    resolve_objective,
+    resolve_objective_reward_mode,
+    reward_mode_for_objective,
+)
 
 
 def _empty_episode_totals(ep: int, seed: int):
@@ -301,7 +83,7 @@ def _protocol_kwargs(defaults: Mapping[str, Any], overrides: Mapping[str, Any]):
 # explicit environment overrides own these neutral protocol defaults.
 _DEFAULT_ENVIRONMENT_CONDITIONS = {
     "action_mode": "actuator",
-    "dynamic": False,
+    "auto_events": False,
     "randomize": False,
     "randomize_setpoints": False,
     "randomize_plant": False,
@@ -332,6 +114,7 @@ class BenchmarkProtocol:
     control_dt: float | None = None
     episode_steps: int | None = None
     task: Any = None
+    auto_events: bool | None = None
     dynamic: bool | None = None
     randomize: bool | None = None
     randomize_setpoints: bool | None = None
@@ -349,6 +132,8 @@ class BenchmarkProtocol:
     def __post_init__(self):
         if not isinstance(self.scenario, str) or not self.scenario:
             raise ValueError("scenario must be a non-empty string")
+        canonical_scenario = canonical_scenario_id(internal_scenario_id(self.scenario))
+        object.__setattr__(self, "scenario", canonical_scenario)
         if self.objective not in PRIMARY_METRICS:
             raise ValueError(
                 f"objective must be one of: {', '.join(PRIMARY_METRICS)}"
@@ -365,13 +150,19 @@ class BenchmarkProtocol:
             )
         if self.env_reward_mode not in {"economic", "kpi", "tracking"}:
             raise ValueError("env_reward_mode must be one of: economic, kpi, tracking")
-        expected_reward_mode = OBJECTIVE_REWARD_MODES[self.objective]
+        expected_reward_mode = reward_mode_for_objective(self.objective)
         if self.env_reward_mode != expected_reward_mode:
             raise ValueError(
                 f"objective {self.objective!r} requires env_reward_mode "
                 f"{expected_reward_mode!r}, got {self.env_reward_mode!r}"
             )
-        from .task_profiles import resolve_environment_options
+        from ..models.tasks import resolve_environment_options
+
+        auto_events = resolve_auto_events(
+            self.auto_events,
+            self.dynamic,
+            warn_legacy=self.dynamic is not None,
+        )
 
         task, environment_options = resolve_environment_options(
             scenario=self.scenario,
@@ -380,7 +171,7 @@ class BenchmarkProtocol:
                 "control_dt": self.control_dt,
                 "episode_steps": self.episode_steps,
                 "action_mode": self.action_mode,
-                "dynamic": self.dynamic,
+                "auto_events": auto_events,
                 "randomize": self.randomize,
                 "randomize_setpoints": self.randomize_setpoints,
                 "randomize_plant": self.randomize_plant,
@@ -411,6 +202,7 @@ class BenchmarkProtocol:
         object.__setattr__(self, "task", task)
         for name, value in environment_options.items():
             object.__setattr__(self, name, value)
+        object.__setattr__(self, "dynamic", self.auto_events)
         object.__setattr__(self, "tracking_r_move", tracking_r_move)
         object.__setattr__(self, "tracking_r_steady", tracking_r_steady)
 
@@ -444,6 +236,7 @@ class BenchmarkProtocol:
         data.pop("scenario")
         data.pop("objective")
         data.pop("objective_source")
+        data.pop("dynamic")
         data["reward_mode"] = data.pop("env_reward_mode")
         if action_mode is not None:
             data["action_mode"] = action_mode
@@ -469,10 +262,12 @@ class BenchmarkProtocol:
         return EnvironmentSpec.from_protocol(self)
 
     def metadata(self):
-        from .task_profiles import task_identity
+        from ..models.tasks import task_identity
 
         primary_metric = primary_metric_for_objective(self.objective)
         data = asdict(self)
+        data.pop("dynamic")
+        data["resolved_reward_mode"] = self.env_reward_mode
         data["task_identity"] = task_identity(self.task)
         data["objective_spec"] = self.resolved_objective().metadata()
         data["metrics"] = list(PROTOCOL_METRICS.get(self.objective, ()))
@@ -480,135 +275,6 @@ class BenchmarkProtocol:
         data["primary_metric_direction"] = metric_direction(primary_metric)
         data["metric_definitions"] = metric_definitions(self.objective)
         return data
-
-
-@dataclass(frozen=True)
-class EnvironmentSpec:
-    """Task-owned environment construction data, independent of ranking."""
-
-    scenario: str
-    task: Any = None
-    action_mode: str = "actuator"
-    control_dt: float = 0.5
-    episode_steps: int = 400
-    dynamic: bool = False
-    randomize: bool = False
-    randomize_setpoints: bool = False
-    randomize_plant: bool = False
-    plant_drift: bool = False
-    integral_obs: bool = False
-    terminate_on_runaway: bool = False
-    noise: bool = False
-    noise_pct: float = 0.01
-    model_params: Mapping[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_protocol(cls, protocol: BenchmarkProtocol) -> "EnvironmentSpec":
-        return cls(
-            scenario=protocol.scenario,
-            task=protocol.task,
-            action_mode=str(protocol.action_mode),
-            control_dt=float(protocol.control_dt),
-            episode_steps=int(protocol.episode_steps),
-            dynamic=bool(protocol.dynamic),
-            randomize=bool(protocol.randomize),
-            randomize_setpoints=bool(protocol.randomize_setpoints),
-            randomize_plant=bool(protocol.randomize_plant),
-            plant_drift=bool(protocol.plant_drift),
-            integral_obs=bool(protocol.integral_obs),
-            terminate_on_runaway=bool(protocol.terminate_on_runaway),
-            noise=bool(protocol.noise),
-            noise_pct=float(protocol.noise_pct),
-            model_params=dict(protocol.model_params),
-        )
-
-    def env_kwargs(self, objective: ObjectiveSpec) -> dict[str, Any]:
-        data = asdict(self)
-        data.pop("scenario")
-        data["reward_mode"] = objective.reward_mode
-        data.update(dict(objective.reward_options))
-        return data
-
-    def make_env(self, objective: ObjectiveSpec):
-        from ..env import AIOGymNativeEnv
-
-        return AIOGymNativeEnv(
-            self.scenario,
-            **self.env_kwargs(objective),
-        )
-
-
-@dataclass(frozen=True)
-class BenchmarkCase:
-    """One resolved task/objective/controller/seed evaluation unit."""
-
-    case_id: str
-    environment: EnvironmentSpec
-    objective: ObjectiveSpec
-    controller: str
-    seeds: tuple[int, ...]
-    controller_config: Mapping[str, Any] = field(default_factory=dict)
-    protocol: BenchmarkProtocol | None = field(default=None, repr=False)
-
-    def __post_init__(self):
-        seeds = tuple(int(seed) for seed in self.seeds)
-        if not seeds:
-            raise ValueError("benchmark case seeds must not be empty")
-        if not isinstance(self.controller, str) or not self.controller.strip():
-            raise ValueError("benchmark case controller must be a non-empty string")
-        object.__setattr__(self, "seeds", seeds)
-
-    @classmethod
-    def from_protocol(
-        cls,
-        protocol: BenchmarkProtocol,
-        *,
-        controller: str,
-        seeds: Sequence[int],
-        controller_config: Mapping[str, Any] | None = None,
-        case_id: str | None = None,
-    ) -> "BenchmarkCase":
-        from .task_profiles import task_identity
-
-        task_name = task_identity(protocol.task)["name"]
-        return cls(
-            case_id=case_id
-            or f"{protocol.objective}:{protocol.scenario}:{task_name}:{controller}",
-            environment=protocol.environment_spec(),
-            objective=protocol.resolved_objective(),
-            controller=controller,
-            seeds=tuple(seeds),
-            controller_config=dict(controller_config or {}),
-            protocol=protocol,
-        )
-
-    def metadata(self) -> dict[str, Any]:
-        from .task_profiles import task_identity
-
-        task_meta = task_identity(self.environment.task)
-        metrics = PROTOCOL_METRICS.get(self.objective.name, ())
-        primary_metric = self.objective.primary_metric
-        return {
-            "schema_version": EVALUATION_SCHEMA_VERSION,
-            "case_id": self.case_id,
-            "scenario": self.environment.scenario,
-            "task": task_meta["name"],
-            "task_status": task_meta["status"],
-            "task_profile_hash": task_meta["profile_hash"],
-            "objective": self.objective.name,
-            "objective_source": self.objective.source,
-            "objective_spec": self.objective.metadata(),
-            "controller": self.controller,
-            "controller_config": _jsonable(dict(self.controller_config)),
-            "seed_list": list(self.seeds),
-            "environment": _jsonable(asdict(self.environment)),
-            "metrics": list(metrics),
-            "primary_metric": primary_metric,
-            "primary_metric_direction": metric_direction(primary_metric),
-            "episode_steps": self.environment.episode_steps,
-            "protocol": self.protocol.metadata() if self.protocol is not None else None,
-            "metric_definitions": {key: METRIC_DEFINITIONS[key] for key in metrics if key in METRIC_DEFINITIONS},
-        }
 
 
 def resolve_protocol(
@@ -632,21 +298,52 @@ def resolve_protocol(
     elif objective is not None:
         explicit = str(objective)
 
-    if "reward_mode" in cfg:
-        reward_mode = cfg.pop("reward_mode")
-        cfg.setdefault("env_reward_mode", reward_mode)
+    legacy_reward_mode = cfg.pop("reward_mode", None)
+    internal_reward_mode = cfg.pop("env_reward_mode", None)
+    if (
+        legacy_reward_mode is not None
+        and internal_reward_mode is not None
+        and legacy_reward_mode != internal_reward_mode
+    ):
+        raise ValueError(
+            f"reward_mode {legacy_reward_mode!r} conflicts with "
+            f"env_reward_mode {internal_reward_mode!r}"
+        )
+    requested_reward_mode = (
+        legacy_reward_mode
+        if legacy_reward_mode is not None else internal_reward_mode
+    )
 
     task = None
     if cfg.get("task") is not None:
-        from .task_profiles import load_task_profile
+        from ..models.tasks import load_task_profile
 
         task = load_task_profile(cfg["task"], scenario=scenario)
         cfg["task"] = task
-    resolved = resolve_objective(
-        explicit=explicit,
-        case_config=case_objective if case_objective is not None else configured,
-        suite_config=suite_objective,
-        task_profile=task,
+    case_value = case_objective if case_objective is not None else configured
+    task_default = (task or {}).get("default_objective")
+    if any(value is not None for value in (explicit, case_value, suite_objective, task_default)):
+        resolved = resolve_objective(
+            explicit=explicit,
+            case_config=case_value,
+            suite_config=suite_objective,
+            task_profile=task,
+        )
+    elif requested_reward_mode is not None:
+        alias_objective, _ = resolve_objective_reward_mode(
+            reward_mode=requested_reward_mode,
+            default_objective=None,
+            warn_legacy=legacy_reward_mode is not None,
+        )
+        resolved = objective_spec(alias_objective, source="reward-mode-alias")
+        legacy_reward_mode = None
+    else:
+        resolved = resolve_objective()
+    _, resolved_reward_mode = resolve_objective_reward_mode(
+        resolved.name,
+        requested_reward_mode,
+        default_objective=None,
+        warn_legacy=legacy_reward_mode is not None,
     )
     factories = {
         "economic": BenchmarkProtocol.economic,
@@ -657,4 +354,5 @@ def resolve_protocol(
     }
     factory = factories[resolved.name]
     cfg["objective_source"] = resolved.source
+    cfg["env_reward_mode"] = resolved_reward_mode
     return factory(scenario, **cfg)

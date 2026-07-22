@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-from .core import Integrator
+from .integration import Integrator
 from .registry import make_model, validate_model_contract
 
 

@@ -330,7 +330,7 @@ def test_overflow_is_an_unconditional_structured_termination():
     env = AIOGymNativeEnv(
         "cascade",
         control_dt=0.5,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         terminate_on_runaway=False,
@@ -348,7 +348,7 @@ def test_negative_level_is_an_unconditional_structured_termination():
     env = AIOGymNativeEnv(
         "cascade",
         control_dt=0.5,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         terminate_on_runaway=False,
@@ -365,7 +365,7 @@ def test_temperature_hard_limit_is_an_unconditional_structured_termination():
     env = AIOGymNativeEnv(
         "cascade",
         control_dt=0.5,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
         terminate_on_runaway=False,

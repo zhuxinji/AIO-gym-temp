@@ -5,11 +5,7 @@
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
   "task": "minimum-phase-classic",
-  "controller_configs": {
-    "pid": {"profile": "quadruple-minimum-phase-benchmark"},
-    "mpc": {"profile": "quadruple-minimum-phase"},
-    "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
-  },
+  "preset": "controllers/quadruple-minimum-phase",
   "control_dt": 1.0,
   "episode_steps": 600
 }

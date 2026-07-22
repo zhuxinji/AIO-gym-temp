@@ -1,23 +1,23 @@
 {
   "description": "Formal recirculating heated-tank tasks evaluated under each task's declared default objective.",
-  "scenarios": ["cascade_recirculating"],
+  "scenarios": ["cascade-recirculating"],
   "controllers": ["pid", "mpc"],
   "action_mode": "actuator",
   "cases": [
     {
-      "scenario": "cascade_recirculating",
+      "scenario": "cascade-recirculating",
       "task": "commissioning"
     },
     {
-      "scenario": "cascade_recirculating",
+      "scenario": "cascade-recirculating",
       "task": "temperature-step"
     },
     {
-      "scenario": "cascade_recirculating",
+      "scenario": "cascade-recirculating",
       "task": "disturbance-rejection"
     },
     {
-      "scenario": "cascade_recirculating",
+      "scenario": "cascade-recirculating",
       "task": "safety-recovery"
     }
   ]

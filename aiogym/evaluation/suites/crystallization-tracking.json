@@ -4,12 +4,7 @@
   "objectives": ["tracking"],
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
-  "dynamic": false,
-  "randomize": false,
-  "randomize_setpoints": false,
-  "randomize_plant": false,
-  "plant_drift": false,
-  "noise": false,
+  "preset": "environment/deterministic",
   "episode_steps": 30,
   "control_dt": 1.0
 }

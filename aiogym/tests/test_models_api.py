@@ -89,7 +89,11 @@ def test_model_card_export():
         with open(docs_path) as f:
             docs_text = f.read()
         for scenario in SCENARIOS:
-            docs_ok = docs_ok and f"`{scenario}`" in docs_text
+            public_id = (
+                "cascade-recirculating"
+                if scenario == "cascade_recirculating" else scenario
+            )
+            docs_ok = docs_ok and f"`{public_id}`" in docs_text
             card_path = os.path.join(root, "docs", "model_cards", f"{scenario}.md")
             docs_ok = docs_ok and os.path.exists(card_path)
             if os.path.exists(card_path):
@@ -129,13 +133,13 @@ def test_custom_model_entrypoints():
         contract_ok = card["scenario"] == "mini_tank" and card["disturbance_defaults"]["feed_bias"] == 0.0
         contract_ok = contract_ok and card["controlled_outputs"][0]["name"] == "tank_temperature"
         contract_ok = contract_ok and model.controlled_output_scales() == [60.0]
-        env = AIOGymNativeEnv("mini_tank", dynamic=False, randomize=False, randomize_setpoints=False)
+        env = AIOGymNativeEnv("mini_tank", auto_events=False, randomize=False, randomize_setpoints=False)
         obs, _ = env.reset(seed=0)
         obs2, reward, term, trunc, info = env.step(np.array([0.5, 0.5], np.float32))
         registered_ok = env.scenario == "mini_tank" and env._env()["feed_bias"] == 0.0
         registered_ok = registered_ok and env.observation_space.contains(obs) and np.isfinite(reward)
 
-        direct_env = AIOGymNativeEnv(MiniTankModel(), dynamic=False, randomize=False, randomize_setpoints=False)
+        direct_env = AIOGymNativeEnv(MiniTankModel(), auto_events=False, randomize=False, randomize_setpoints=False)
         direct_env.reset(seed=0)
         direct_env._apply_disturbance("feed_bias_step")
         sampled = direct_env._env()["feed_bias"]
@@ -146,7 +150,7 @@ def test_custom_model_entrypoints():
         generic_ok = generic.action_dim() == 2
         generic_ok = generic_ok and [row["name"] for row in generic_schema] == ["coolant_flow", "agitator_speed"]
         generic_ok = generic_ok and [row["kind"] for row in generic_schema] == ["flow", "rotation"]
-        generic_env = AIOGymNativeEnv("generic_vector", dynamic=False, randomize=False, randomize_setpoints=False, episode_steps=2)
+        generic_env = AIOGymNativeEnv("generic_vector", auto_events=False, randomize=False, randomize_setpoints=False, episode_steps=2)
         generic_obs, _ = generic_env.reset(seed=0)
         _, generic_reward, _, _, generic_info = generic_env.step(np.array([0.5, 0.1], np.float32))
         generic_ok = generic_ok and generic_env.action_space.shape == (2,)
@@ -157,7 +161,7 @@ def test_custom_model_entrypoints():
         decl_dx = declarative.dynamics([0.25], [0.5, 0.1], {})
         declarative_ok = np.allclose(decl_dx, [0.245])
         declarative_ok = declarative_ok and declarative.default_setpoint_vector() == [0.6]
-        declarative_env = AIOGymNativeEnv("declarative_vector", dynamic=False, randomize=False,
+        declarative_env = AIOGymNativeEnv("declarative_vector", auto_events=False, randomize=False,
                                           randomize_setpoints=False, episode_steps=2)
         decl_obs, _ = declarative_env.reset(seed=0)
         _, decl_reward, _, _, decl_info = declarative_env.step(np.array([0.5, 0.1], np.float32))
@@ -175,7 +179,7 @@ def test_custom_model_entrypoints():
             from aiogym.controllers.oracle import OracleAgent
             oracle_agent = OracleAgent("declarative_vector", horizon=2, mode="tracking", ipopt_max_iter=30)
             declarative_ok = declarative_ok and oracle_agent.metadata()["mode"] == "tracking"
-            oracle_env = AIOGymNativeEnv("declarative_vector", dynamic=False, randomize=False,
+            oracle_env = AIOGymNativeEnv("declarative_vector", auto_events=False, randomize=False,
                                          randomize_setpoints=False, episode_steps=1)
             oracle_env.reset(seed=0)
             oracle_act = oracle_agent.compute(

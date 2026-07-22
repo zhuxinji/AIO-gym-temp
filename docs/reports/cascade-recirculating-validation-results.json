@@ -4,6 +4,7 @@
   "scenario": "cascade_recirculating",
   "model_name": "Recirculating heated-tank cascade",
   "report_date": "2026-07-20",
+  "document_status": "historical-snapshot",
   "audit_status": "stage-5-final-internal-audit",
   "snapshot": {
     "git_baseline": "3fc9412",
@@ -48,6 +49,8 @@
     ]
   },
   "interpretation_rules": [
+    "this file is a historical snapshot of the stated baseline and does not enumerate the current task registry",
+    "legacy-default entries describe audit-time compatibility behavior; repository version 7bf0b08 no longer registers that task",
     "readiness passed means software and numerical readiness only",
     "only the 2000 W H1 value is treated as design-specified; area height and pump-power values are range-derived or range-informed rather than as-built",
     "do not treat the 1100 900 and 1000 mm layout bay widths as tank plan dimensions, or infer valve coefficients pump curves heat loss or interlock settings from drawing scale",

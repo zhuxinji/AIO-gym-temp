@@ -5,25 +5,7 @@
   "controllers": ["pid", "mpc", "oracle"],
   "action_mode": "actuator",
   "cases": [
-    {
-      "scenario": "quadruple",
-      "task": "minimum-phase-classic",
-      "objective": "tracking",
-      "controller_configs": {
-        "pid": {"profile": "quadruple-minimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-minimum-phase"},
-        "oracle": {"profile": "quadruple-minimum-phase", "mode": "tracking"}
-      }
-    },
-    {
-      "scenario": "quadruple",
-      "task": "nonminimum-phase-classic",
-      "objective": "tracking",
-      "controller_configs": {
-        "pid": {"profile": "quadruple-nonminimum-phase-benchmark"},
-        "mpc": {"profile": "quadruple-nonminimum-phase"},
-        "oracle": {"profile": "quadruple-nonminimum-phase", "mode": "tracking"}
-      }
-    }
+    {"case_ref": "quadruple/minimum-phase"},
+    {"case_ref": "quadruple/nonminimum-phase"}
   ]
 }

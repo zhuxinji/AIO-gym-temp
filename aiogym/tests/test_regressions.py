@@ -93,7 +93,7 @@ def test_make_env_preserves_non_protocol_overrides():
         objective="tracking",
         custom_stage_reward=lambda *_: 123.0,
         episode_steps=1,
-        dynamic=False,
+        auto_events=False,
         randomize=False,
         randomize_setpoints=False,
     )
@@ -418,6 +418,33 @@ def test_single_benchmark_accepts_basename_output():
     finally:
         sys.argv = previous_argv
         os.chdir(previous_cwd)
+
+
+def test_single_benchmark_writes_checkable_standard_artifacts(tmp_path):
+    artifact_dir = tmp_path / "single-artifacts"
+
+    single_benchmark_main([
+        "--scenario", "cstr",
+        "--objective", "tracking",
+        "--controllers", "pid",
+        "--episodes", "1",
+        "--episode-steps", "1",
+        "--artifact-dir", str(artifact_dir),
+    ])
+
+    benchmark = json.loads((artifact_dir / "benchmark.json").read_text())
+    assert benchmark["benchmark"] == "public_benchmark"
+    assert benchmark["scenario"] == "cstr"
+    assert benchmark["controllers"] == ["pid"]
+    assert benchmark["config"]["output_dir"] == str(artifact_dir)
+    assert (artifact_dir / "config" / "config.json").is_file()
+    assert (artifact_dir / "metadata" / "model_card.json").is_file()
+    assert (artifact_dir / "summary" / "summary.csv").is_file()
+    assert (artifact_dir / "results" / "results.json").is_file()
+    assert (artifact_dir / "figures" / "summary.svg").is_file()
+    assert (artifact_dir / "report.md").is_file()
+    check_result = check_benchmark_artifacts(artifact_dir)
+    assert check_result["ok"], check_result["failed"]
 
 
 def test_pid_json_is_the_single_default_config_source():

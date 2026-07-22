@@ -1,18 +1,18 @@
 """Evaluation protocols, metrics, and artifact reports."""
 
 from .objectives import StageRewardContext, StageRewardResult, stage_reward
-from .task_profiles import (
+from ..models.tasks import (
     TASK_PROFILE_SCHEMA_VERSION,
     configure_model_for_task,
-    evaluate_task_acceptance,
     list_task_profiles,
     load_task_profile,
     task_environment,
     task_operation,
     validate_task_profile,
 )
+from .task_acceptance import evaluate_task_acceptance
 
-from .protocols import (
+from .metric_catalog import (
     EVALUATION_SCHEMA_VERSION,
     METRIC_DEFINITIONS,
     METRIC_DIRECTIONS,
@@ -20,33 +20,32 @@ from .protocols import (
     PROTOCOL_METRICS,
     PUBLIC_BENCHMARK_SCHEMA_VERSION,
     ROLLOUT_SCHEMA,
-    BenchmarkCase,
-    BenchmarkProtocol,
-    EnvironmentSpec,
-    ObjectiveSpec,
     metric_definitions,
     metric_direction,
-    metric_for_reward_mode,
-    objective_spec,
     primary_metric_for_objective,
+)
+from .cases import BenchmarkCase, EnvironmentSpec
+from .objective_specs import (
+    ObjectiveSpec,
+    metric_for_reward_mode,
+    reward_mode_for_objective,
+    objective_spec,
     resolve_objective,
+    resolve_objective_reward_mode,
+)
+from .protocols import (
+    BenchmarkProtocol,
     resolve_protocol,
 )
-from .core import (
-    _tracking_step_metrics,
-    build_evaluation_report,
-    evaluate_controller,
-    result_schema,
-    rollout_controller,
-)
+from .aggregation import build_evaluation_report, result_schema
+from .evaluator import evaluate_controller
+from .metrics.tracking import tracking_step_metrics as _tracking_step_metrics
+from .rollouts import rollout_controller
 from .benchmark import run_benchmark
-from .reports import (
-    ARTIFACT_CHECK_SCHEMA_VERSION,
-    REPORT_SCHEMA_VERSION,
-    check_benchmark_artifacts,
-    render_benchmark_report,
-)
-from .artifacts import finalize_benchmark_artifacts, plot_results, write_benchmark_artifacts
+from .artifact_checks import ARTIFACT_CHECK_SCHEMA_VERSION, check_benchmark_artifacts
+from .report_rendering import REPORT_SCHEMA_VERSION, render_benchmark_report
+from .artifact_plotting import plot_results
+from .artifacts import finalize_benchmark_artifacts, write_benchmark_artifacts
 from .plots import plot_constraint_timeline, plot_leaderboard, plot_learning_curve, plot_rollouts, plot_summary
 
 __all__ = [
@@ -73,11 +72,13 @@ __all__ = [
     "EnvironmentSpec",
     "ObjectiveSpec",
     "metric_for_reward_mode",
+    "reward_mode_for_objective",
     "objective_spec",
     "primary_metric_for_objective",
     "metric_direction",
     "metric_definitions",
     "resolve_objective",
+    "resolve_objective_reward_mode",
     "resolve_protocol",
     "evaluate_controller",
     "rollout_controller",

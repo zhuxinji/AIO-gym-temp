@@ -34,7 +34,7 @@ or source-backed production-value model.
 The four formal tasks use the same `RecirculatingCascadeModel` equations and
 the same default numerical parameter set. They differ in initial state,
 setpoint/disturbance schedule, control period, and episode length. None of these
-task profiles declares `model_params`. Their `dynamic: false` setting disables
+task profiles declares `model_params`. Their `auto_events: false` setting disables
 generic automatically generated events; it does not disable the model's
 differential equations or a task's deterministic event schedule.
 
@@ -50,7 +50,7 @@ aiogym-single-benchmark \
   --controllers pid,mpc \
   --episodes 3 \
   --save-rollouts \
-  --out aiogym/runs/cascade-recirculating-temperature-step.json
+  --out runs/cascade-recirculating-temperature-step.json
 ```
 
 This command compares both controllers only on

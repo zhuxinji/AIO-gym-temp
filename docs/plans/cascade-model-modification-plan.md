@@ -1,9 +1,16 @@
 # CascadeModel 修改实施计划
 
-> 依据：`/Users/zhuxinji/Downloads/cascade_model_codex_modification_report.md`
+> 文档状态：历史实施计划快照；不作为当前配置或待办清单
 > 计划日期：2026-07-17
+> 适用基线：`3fc9412`（`main`，当时工作区另含未提交修改）
+> 依据：外部审查文档 `cascade_model_codex_modification_report.md`（未随仓库发布）
 > 范围：`cascade` 模型、必要的运行时/任务/KPI 接口、测试与文档
 > 本文件仅制定计划，不包含模型代码修改。
+
+> Snapshot 提示：本文保留 2026-07-17 的实施上下文，包括当时存在的
+> `legacy-default` 路径。它不描述当前任务注册表；查看当前可用任务时应以
+> `aiogym list`/公开注册 API（若当前版本提供）或 `aiogym/evaluation/tasks/`
+> 的实际内容为准。
 
 ## 1. 目标与不变项
 
@@ -261,7 +268,7 @@
 建议命令：
 
 ```bash
-cd /Users/zhuxinji/Desktop/SUPCON/AIO/AIO-Gym
+cd <repository-root>
 PYTHONPYCACHEPREFIX=/private/tmp/aiogym_pycache .venv/bin/python -m pytest aiogym/tests/test_cascade_physics.py -q
 PYTHONPYCACHEPREFIX=/private/tmp/aiogym_pycache .venv/bin/python -m pytest aiogym/tests/test_models_api.py aiogym/tests/test_env_contract.py aiogym/tests/test_objectives.py -q
 PYTHONPYCACHEPREFIX=/private/tmp/aiogym_pycache .venv/bin/python -m pytest aiogym/tests -q

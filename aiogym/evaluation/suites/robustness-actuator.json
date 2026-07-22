@@ -4,10 +4,5 @@
   "objectives": ["robustness"],
   "controllers": ["pid", "mpc"],
   "action_mode": "actuator",
-  "dynamic": true,
-  "randomize": true,
-  "randomize_setpoints": true,
-  "randomize_plant": true,
-  "plant_drift": true,
-  "noise": true
+  "preset": "environment/robustness-randomized"
 }
