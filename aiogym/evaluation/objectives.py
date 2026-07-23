@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from .metrics.kpi import KPIStep, kpi_step
-from .metrics.tracking import normalized_tracking_error_sum, raw_tracking_errors
+from .metrics.tracking import normalized_tracking_error_sum
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,6 @@ def stage_reward(
     tracking_q_y: Sequence[float],
     tracking_r_move: float,
     terminate_on_runaway: bool,
-    tracking_r_steady: float = 1.0,
     dt: float = 1.0,
     economic_config: Mapping[str, Any] | None = None,
     reward_override: Callable[[Sequence[float], Any, Sequence[float], StageRewardContext], float] | None = None,
@@ -78,7 +77,7 @@ def stage_reward(
     y = list(out["y"])
 
     track = normalized_tracking_error_sum(model, y, y_sp)
-    tracking_error_cost, tracking_move_cost, tracking_steady_cost, tracking_steady_action = _tracking_cost_terms(
+    tracking_error_cost, tracking_move_cost = _tracking_cost_terms(
         model,
         y,
         y_sp,
@@ -86,9 +85,8 @@ def stage_reward(
         previous_action,
         tracking_q_y,
         tracking_r_move,
-        tracking_r_steady,
     )
-    tracking_cost = tracking_error_cost + tracking_move_cost + tracking_steady_cost
+    tracking_cost = tracking_error_cost + tracking_move_cost
 
     cons_info = dict(model.common_constraint_info(levels, temps))
     cons_info.update(model.process_constraint_info(x_next, levels, temps, env))
@@ -148,8 +146,6 @@ def stage_reward(
         "tracking_return": -tracking_cost,
         "tracking_error_cost": tracking_error_cost,
         "tracking_move_cost": tracking_move_cost,
-        "tracking_steady_cost": tracking_steady_cost,
-        "tracking_steady_action": tracking_steady_action,
         "energy_kw": action_energy_kw,
         "runaway": runaway,
         "cons_info": cons_info,
@@ -197,34 +193,40 @@ def _model_action(model, action):
     return model.action_vector(action)
 
 
-def _tracking_cost_terms(model, y, y_sp, action, previous_action, q_y, r_move, r_steady):
-    errors = raw_tracking_errors(y, y_sp)
+def _tracking_cost_terms(model, y, y_sp, action, previous_action, q_y, r_move):
+    from .metrics.tracking import normalized_tracking_errors
+
+    errors = normalized_tracking_errors(model, y, y_sp)
     error_cost = 0.0
     for i, error in enumerate(errors):
         weight = float(q_y[i]) if i < len(q_y) else 1.0
         error_cost += weight * error * error
 
-    u = np.asarray(model.physical_action_vector(action), dtype=np.float64)
-    u_previous = np.asarray(model.physical_action_vector(previous_action), dtype=np.float64)
+    u = _normalized_action(model, action)
+    u_previous = _normalized_action(model, previous_action)
     move_cost = 0.0
     if u.shape == u_previous.shape:
         move_cost = float(r_move) * float(np.sum((u - u_previous) ** 2))
 
-    steady_cost = 0.0
-    steady_action = None
-    steady_resolver = getattr(model, "tracking_steady_state_action", None)
-    if callable(steady_resolver):
-        resolved = steady_resolver(y_sp)
-        if resolved is not None:
-            u_steady = np.asarray(model.physical_action_vector(resolved), dtype=np.float64)
-            if u_steady.shape != u.shape or not np.all(np.isfinite(u_steady)):
-                raise ValueError("tracking steady-state action must match the finite action vector")
-            squared_deviation = float(np.sum((u - u_steady) ** 2))
-            # Suppress roundoff such as 0.3 versus 0.30000000000000004 so an
-            # exact nominal equilibrium reports a true zero auxiliary cost.
-            steady_cost = 0.0 if squared_deviation <= 1e-24 else float(r_steady) * squared_deviation
-            steady_action = [float(value) for value in u_steady]
-    return float(error_cost), float(move_cost), float(steady_cost), steady_action
+    return float(error_cost), float(move_cost)
+
+
+def _normalized_action(model, action):
+    values = np.asarray(model.action_vector(action), dtype=np.float64)
+    normalized = []
+    for i, value in enumerate(values):
+        row = model.action_schema()[i]
+        bounds = row.get("bounds")
+        scale = 1.0
+        offset = 0.0
+        if isinstance(bounds, (tuple, list)) and len(bounds) == 2:
+            lo, hi = bounds
+            if lo is not None:
+                offset = float(lo)
+            if lo is not None and hi is not None and float(hi) > float(lo):
+                scale = float(hi) - float(lo)
+        normalized.append((float(value) - offset) / max(scale, 1e-12))
+    return np.asarray(normalized, dtype=np.float64)
 
 
 def _process_info(model, state, levels, temps, disturbance, action):

@@ -25,7 +25,7 @@ Abbreviations: T = tracking, E = economic, K = KPI, R = robustness, S = safety.
 | --- | --- | --- | --- | --- |
 | `cascade` | `continuous-benchmark` | E (default E) | T, E, K, R, S | actuator; setpoint (3) |
 | `cascade-recirculating` | `commissioning`; `temperature-step`; `disturbance-rejection`; `safety-recovery` | T, K, R, S; defaults vary by task | T, K, R, S; E intentionally unsupported | actuator; setpoint (1) |
-| `quadruple` | `minimum-phase-classic`; `nonminimum-phase-classic`; `pminus-reference-step`; `pplus-reference-step`; `zero-boundary-stress`; `disturbance-rejection` | T/K/S for four reference tasks; T/K/R/S for stress and disturbance tasks | T, E, K, R, S | actuator; setpoint (2) |
+| `quadruple` | `minimum-phase`; `nonminimum-phase`; `zero-boundary-stress`; `disturbance-rejection` | T/K/S for phase tasks; T/K/R/S for stress and disturbance tasks | T, E, K, R, S | actuator; setpoint (2) |
 | `cstr` | none; direct environment and suites only | — | T, E, K, R, S | actuator; setpoint (2) |
 | `hvac` | none; direct environment and suites only | — | T, E, K, R, S | actuator; setpoint (2) |
 | `extraction` | none; direct environment and suites only | — | T, E, K, R, S | actuator only |
@@ -44,10 +44,8 @@ underlying actuator dimension.
 | `cascade-recirculating/temperature-step` | benchmark designed | tracking | tracking, KPI, robustness, safety |
 | `cascade-recirculating/disturbance-rejection` | benchmark designed | robustness | tracking, KPI, robustness, safety |
 | `cascade-recirculating/safety-recovery` | benchmark designed | safety | tracking, KPI, robustness, safety |
-| `quadruple/minimum-phase-classic` | reference derived | tracking | tracking, KPI, safety |
-| `quadruple/nonminimum-phase-classic` | reference derived | tracking | tracking, KPI, safety |
-| `quadruple/pminus-reference-step` | reference reproduced | tracking | tracking, KPI, safety |
-| `quadruple/pplus-reference-step` | reference reproduced | tracking | tracking, KPI, safety |
+| `quadruple/minimum-phase` | reference derived | tracking | tracking, KPI, safety |
+| `quadruple/nonminimum-phase` | reference derived | tracking | tracking, KPI, safety |
 | `quadruple/zero-boundary-stress` | reference-inspired stress | tracking | tracking, KPI, robustness, safety |
 | `quadruple/disturbance-rejection` | benchmark designed | robustness | tracking, KPI, robustness, safety |
 
@@ -80,7 +78,7 @@ make performance comparisons.
 | Bundled specification | A versioned task or suite declaration exists | `aiogym/models/tasks/builtin/` and `aiogym/evaluation/suites/` |
 | Executed benchmark | A controller completed resolved cases for stated seeds | benchmark artifact metadata and result rows |
 | Objective met | Declared task acceptance thresholds passed | artifact `objective_status` and acceptance metrics |
-| Physical validation | Equations or predictions were checked against stated evidence | model cards and dated validation reports |
+| Physical validation | Equations or predictions were checked against stated evidence | scenario documentation and dated validation reports |
 
 Do not infer a higher evidence level from a lower one. In particular, model
 objective support and controller construction are not claims of tuned control
@@ -97,12 +95,11 @@ print(aiogym.list_suites())
 print(aiogym.list_controllers())
 
 task = aiogym.load_task_profile(
-    "quadruple/minimum-phase-classic"
+    "quadruple/minimum-phase"
 )
 print(task["supported_objectives"])
 ```
 
-The older `SCENARIOS`, `list_task_profiles()`, and `registered_controllers()`
-surfaces remain available for compatibility.
+The four `list_*` functions are the supported discovery API.
 See the [concepts page](concepts.md) for terminology and the
 [public API guide](public_api.md) for execution examples.

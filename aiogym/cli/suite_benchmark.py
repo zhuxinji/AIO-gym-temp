@@ -10,56 +10,27 @@ from time import perf_counter
 from aiogym._internal.config import parse_seed_list
 from aiogym.catalog import list_suites
 from aiogym.evaluation import build_evaluation_report
-from aiogym.evaluation.artifacts import finalize_benchmark_artifacts
-from aiogym.evaluation.runner import execute_benchmark_case
-from aiogym.evaluation import suite_cases, suite_loading, suite_results
+from aiogym.evaluation.artifact import finalize_benchmark_artifacts
+from aiogym.evaluation.execution import execute_benchmark_case
+from aiogym.evaluation import suite as suite_pipeline
 
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "evaluation" / "suites"
 PRESET_DIR = CONFIG_DIR / "presets"
 
 
-def builtin_suites():
-    """Compatibility alias for the public suite catalog."""
-
-    return list_suites()
-
-
 def _sync_suite_paths():
-    suite_loading.CONFIG_DIR = CONFIG_DIR
-    suite_loading.PRESET_DIR = PRESET_DIR
+    suite_pipeline.CONFIG_DIR = CONFIG_DIR
+    suite_pipeline.PRESET_DIR = PRESET_DIR
 
 
 def load_suite(name_or_path: str):
     _sync_suite_paths()
-    return suite_loading.load_suite(name_or_path)
-
-
-expand_scenarios = suite_loading.expand_scenarios
-_deep_merge = suite_loading._deep_merge
-_reference_list = suite_loading._reference_list
-_load_reuse_registry = suite_loading._load_reuse_registry
-_unknown_reference = suite_loading._unknown_reference
-_apply_preset = suite_loading._apply_preset
-_resolve_case_reference = suite_loading._resolve_case_reference
-_resolve_suite_path = suite_loading._resolve_suite_path
-_load_suite_declaration = suite_loading._load_suite_declaration
-
-
-parse_csv = suite_cases.parse_csv
-SUMMARY_COLUMNS = suite_results.SUMMARY_COLUMNS
-build_summary_table = suite_results.build_summary_table
-artifact_run_id = suite_results.artifact_run_id
-artifact_dir_for = suite_results.artifact_dir_for
-effective_suite_config = suite_results.effective_suite_config
+    return suite_pipeline.load_suite(name_or_path)
 
 
 def build_cases(args):
-    return suite_cases.build_cases(args, load_suite=load_suite)
-
-
-_merge_config = suite_cases._merge_config
-controller_config_for = suite_cases.controller_config_for
+    return suite_pipeline.build_cases(args, load_suite_fn=load_suite)
 
 
 def run_case(suite_case: dict, include_tracebacks: bool):
@@ -108,7 +79,7 @@ def main(argv=None, prog=None):
         prog=prog,
         description="Run a benchmark suite and write a standard artifact directory."
     )
-    ap.add_argument("--suite", default="core", help=f"built-in suite or JSON path; built-ins: {', '.join(builtin_suites())}")
+    ap.add_argument("--suite", default="core", help=f"built-in suite or JSON path; built-ins: {', '.join(list_suites())}")
     ap.add_argument("--scenarios", default=None, help="comma-separated override")
     ap.add_argument("--objectives", default=None, help="comma-separated override")
     ap.add_argument("--controllers", default=None, help="comma-separated override")
@@ -169,8 +140,10 @@ def main(argv=None, prog=None):
         "failed": sum(1 for row in rows if row["execution_status"] == "failed"),
         "total": len(rows),
     }
-    summary_table = build_summary_table(rows)
-    suite_config = effective_suite_config(suite, cases, episode_steps, control_dt)
+    summary_table = suite_pipeline.build_summary_table(rows)
+    suite_config = suite_pipeline.effective_suite_config(
+        suite, cases, episode_steps, control_dt
+    )
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "benchmark": "benchmark_suite",
@@ -197,7 +170,7 @@ def main(argv=None, prog=None):
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
-    artifact_dir = artifact_dir_for(suite["name"], args.artifact_dir)
+    artifact_dir = suite_pipeline.artifact_dir_for(suite["name"], args.artifact_dir)
     payload["artifact_dir"] = artifact_dir
     finalize_benchmark_artifacts(artifact_dir, payload, create_plots=True)
 

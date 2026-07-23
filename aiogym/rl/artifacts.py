@@ -7,8 +7,8 @@ from typing import Any, Mapping, Sequence
 
 from aiogym._internal.serialization import jsonable as _jsonable
 from aiogym.evaluation import build_evaluation_report
-from aiogym.evaluation.artifacts import finalize_benchmark_artifacts
-from aiogym.evaluation.rows import compact_result_row
+from aiogym.evaluation.artifact import finalize_benchmark_artifacts
+from aiogym.evaluation.results import compact_result_row
 
 
 RL_ARTIFACT_SCHEMA_VERSION = "aiogym.rl_training_artifact.v1"
@@ -21,7 +21,7 @@ def utc_run_id(now: datetime | None = None) -> str:
 
 def result_row(result: Mapping[str, Any], scenario: str, action_mode: str,
                controller: str | None = None, suite_case: str | None = None) -> dict[str, Any]:
-    """Return a summary row compatible with benchmark-suite artifacts."""
+    """Return a summary row following the benchmark-suite artifact schema."""
 
     return compact_result_row(
         result,
@@ -55,7 +55,6 @@ def learning_curve_point(step: int, result: Mapping[str, Any], phase: str = "eva
         "tracking_return",
         "tracking_error_cost",
         "tracking_move_cost",
-        "tracking_steady_cost",
         "tracking_mse",
         "tracking_iae",
         "constraint_violation_count",

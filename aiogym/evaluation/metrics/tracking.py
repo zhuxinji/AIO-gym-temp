@@ -9,9 +9,11 @@ def tracking_step_metrics(info, setpoint, time_sec: float, dt: float, env):
     overshoot = max(errors, default=0.0)
     abs_errors = [abs(err) for err in errors]
     error_cost = sum(err * err for err in errors)
+    normalized_error_cost = sum(
+        err * err for err in normalized_tracking_errors(env.model, y, y_sp)
+    )
     move_cost = float(info.get("tracking_move_cost", 0.0) or 0.0)
-    steady_cost = float(info.get("tracking_steady_cost", 0.0) or 0.0)
-    cost = float(info.get("tracking_cost", error_cost + move_cost + steady_cost) or 0.0)
+    cost = float(info.get("tracking_cost", normalized_error_cost + move_cost) or 0.0)
     iae = sum(abs_errors) * dt
     ise = error_cost * dt
     mse = error_cost / max(len(errors), 1)
@@ -24,9 +26,8 @@ def tracking_step_metrics(info, setpoint, time_sec: float, dt: float, env):
     return {
         "tracking_cost": float(cost),
         "tracking_return": float(-cost),
-        "tracking_error_cost": float(info.get("tracking_error_cost", error_cost) or 0.0),
+        "tracking_error_cost": float(info.get("tracking_error_cost", normalized_error_cost) or 0.0),
         "tracking_move_cost": float(move_cost),
-        "tracking_steady_cost": float(steady_cost),
         "tracking_iae": float(iae),
         "tracking_mse": float(mse * dt),
         "tracking_ise": float(ise),

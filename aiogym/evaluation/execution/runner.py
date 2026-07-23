@@ -5,15 +5,15 @@ import traceback
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
-from ..controllers import make_controller
-from ..models import apply_model_params, make_model
+from ...controllers import make_controller
+from ...models import apply_model_params, make_model
 from .evaluator import evaluate_controller
 from .rollouts import rollout_controller
-from .cases import BenchmarkCase
-from .metric_catalog import primary_metric_for_objective
-from .protocols import BenchmarkProtocol
-from .rows import compact_result_row
-from ..models.tasks import configure_model_for_task
+from ..cases import BenchmarkCase
+from ..metric_catalog import primary_metric_for_objective
+from ..protocols import BenchmarkProtocol
+from ..results import compact_result_row
+from ...models.tasks import configure_model_for_task
 
 
 def run_evaluation_case(
@@ -63,6 +63,15 @@ def run_evaluation_case(
             # small input regularizers and finite-horizon terms for numerical
             # behavior, but they do not change the reported primary metric.
             config["q_y"] = case.objective.reward_options.get("tracking_q_y", 1.0)
+            config["r_move"] = case.objective.reward_options.get("tracking_r_move", 1.0)
+    elif controller == "mpc" and case.objective.name == "tracking":
+        # Keep the baseline MPC's internal quadratic weights aligned with the
+        # benchmark objective. Otherwise the reported Q/R can differ from the
+        # weights optimized by the controller.
+        config["q_y"] = case.objective.reward_options.get("tracking_q_y", 1.0)
+        config["move_supp"] = case.objective.reward_options.get(
+            "tracking_r_move", 1.0
+        )
     controller_model = apply_model_params(
         make_model(scenario), case.environment.model_params
     )
@@ -86,7 +95,7 @@ def run_evaluation_case(
         objective_specification=case.objective,
         include_episodes=include_episodes,
     )
-    from ..models.tasks import task_identity
+    from ...models.tasks import task_identity
 
     task_meta = task_identity(case.environment.task)
     row = compact_result_row(
@@ -111,6 +120,11 @@ def run_evaluation_case(
             protocol=protocol,
             objective_specification=case.objective,
         )
+        rollout.update({
+            "scenario": scenario,
+            "task": task_meta["name"],
+            "objective": case.objective.name,
+        })
     return {
         "controller": agent,
         "result": result,
@@ -143,7 +157,7 @@ def execute_benchmark_case(
             suite_case=case_name,
         )
     except Exception as ex:
-        from ..models.tasks import task_identity
+        from ...models.tasks import task_identity
 
         task_meta = task_identity(case.environment.task)
         error = {"type": ex.__class__.__name__, "message": str(ex)}
@@ -174,15 +188,7 @@ def execute_benchmark_case(
     row["suite_runtime_seconds"] = float(perf_counter() - started)
     rollout = artifact.get("rollout")
     if rollout is not None and suite_case is not None:
-        from ..models.tasks import task_identity
-
-        rollout.update({
-            "scenario": case.environment.scenario,
-            "task": task_identity(case.environment.task)["name"],
-            "objective": case.objective.name,
-            "controller": case.controller,
-            "suite_case": case_name,
-        })
+        rollout["suite_case"] = case_name
     artifact["status"] = row["execution_status"]
     artifact["rollout"] = rollout
     return artifact

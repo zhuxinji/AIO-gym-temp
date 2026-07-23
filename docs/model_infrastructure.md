@@ -28,7 +28,7 @@ is an explicit warning that their numerical values have not yet been accepted as
 reference-quality physical parameters. `quadruple` is the first migrated model
 and is marked `reference-parameterized`.
 
-`cascade_recirculating` demonstrates the separate-scenario path for a partially
+`cascade-recirculating` demonstrates the separate-scenario path for a partially
 documented physical proposal: source-supported topology is retained, every
 unknown numerical parameter receives an explicit provisional status, and the
 original open `cascade` benchmark remains unchanged.
@@ -43,7 +43,7 @@ Files under `aiogym/models/parameters/` reserve one profile per scenario for:
 - fidelity status and references;
 - numerical solver method and maximum integration step.
 
-Profiles enrich model cards but do not change numerical values. Runtime parameter
+Profiles enrich structured model metadata but do not change numerical values. Runtime parameter
 changes still require the existing explicit `model_params` mechanism.
 
 ```python
@@ -67,21 +67,20 @@ another:
 - **objective** selects how the same task rollout is scored and reported, such
   as tracking, KPI, robustness, or safety.
 
-Therefore `minimum-phase-classic` and `nonminimum-phase-classic` are tasks, not
+Therefore `minimum-phase` and `nonminimum-phase` are tasks, not
 objectives. A task may list several `supported_objectives`; changing the
 objective does not silently change its plant or disturbance conditions.
 
 Files under `aiogym/models/tasks/builtin/<scenario>/` are the versioned task
 declarations. Benchmark rows record `scenario`, `task`, `objective`, the task
-status, and a SHA-256 task-profile hash. Leaderboard ranks restart for every
-`(scenario, task, objective)` tuple, so scores from different experiments are
-not mixed.
+status, and a task-profile hash. Leaderboard ranks restart for every
+`(scenario, task, objective)` tuple.
 
 ```python
-env = aiogym.make_env("quadruple", task="minimum-phase-classic")
+env = aiogym.make_env("quadruple", task="minimum-phase")
 protocol = aiogym.BenchmarkProtocol.tracking(
     "quadruple",
-    task="minimum-phase-classic",
+    task="minimum-phase",
 )
 ```
 
@@ -95,14 +94,14 @@ protocols remain at 0.5 s and 400 steps. No-task benchmark conditions are now
 neutral and deterministic rather than changing with the selected objective.
 Named suites declare any noise, randomization, or plant drift explicitly.
 
-Suites can retain the legacy Cartesian matrix or declare task-aware cases:
+Suites can use a Cartesian matrix or declare task-aware cases:
 
 ```json
 {
   "cases": [
     {
       "scenario": "quadruple",
-      "task": "minimum-phase-classic",
+      "task": "minimum-phase",
       "objective": "tracking",
       "controllers": ["pid", "mpc"]
     }

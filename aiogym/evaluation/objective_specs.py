@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Mapping
-import warnings
 
 from .._internal.serialization import jsonable as _jsonable
 from .metric_catalog import (
@@ -28,43 +27,6 @@ def reward_mode_for_objective(objective: str) -> str:
     if objective not in OBJECTIVE_REWARD_MODES:
         raise ValueError(f"objective must be one of: {', '.join(PRIMARY_METRICS)}")
     return OBJECTIVE_REWARD_MODES[objective]
-
-
-def objective_for_reward_mode(reward_mode: str) -> str:
-    if reward_mode not in REWARD_MODES:
-        raise ValueError("reward_mode must be one of: economic, kpi, tracking")
-    return reward_mode
-
-
-def resolve_objective_reward_mode(
-    objective: str | None = None,
-    reward_mode: str | None = None,
-    *,
-    default_objective: str | None = "kpi",
-    warn_legacy: bool = False,
-) -> tuple[str, str]:
-    if reward_mode is not None and reward_mode not in REWARD_MODES:
-        raise ValueError("reward_mode must be one of: economic, kpi, tracking")
-    selected = objective
-    if selected is None and reward_mode is not None:
-        selected = objective_for_reward_mode(reward_mode)
-    if selected is None:
-        selected = default_objective
-    if selected is None:
-        raise ValueError("no objective was resolved")
-    resolved_reward = reward_mode_for_objective(selected)
-    if reward_mode is not None and reward_mode != resolved_reward:
-        raise ValueError(
-            f"objective {selected!r} resolves to reward mode {resolved_reward!r}, "
-            f"which conflicts with reward_mode {reward_mode!r}"
-        )
-    if warn_legacy and reward_mode is not None:
-        warnings.warn(
-            "reward_mode is deprecated on high-level APIs and CLIs; use objective instead",
-            FutureWarning,
-            stacklevel=2,
-        )
-    return selected, resolved_reward
 
 
 def metric_for_reward_mode(reward_mode: str) -> str:

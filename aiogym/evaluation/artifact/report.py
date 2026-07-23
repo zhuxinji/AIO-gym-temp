@@ -32,7 +32,7 @@ def render_benchmark_report(artifact_dir: str | Path, out_path: str | Path | Non
         summary_path = _artifact_path(root, artifacts, "summary_csv", "summary/summary.csv")
     summary_rows = _read_csv(summary_path)
     tracking_comparison = _read_csv(_artifact_path(root, artifacts, "tracking_comparison", "summary/tracking_comparison.csv"))
-    model_manifest = _read_model_manifest(root, artifacts)
+    model_manifest = _read_model_metadata_manifest(root, artifacts)
 
     title = benchmark.get("suite") or benchmark.get("scenario") or benchmark.get("benchmark", "benchmark")
     lines = [
@@ -97,10 +97,15 @@ def _scenario_section(benchmark: Mapping[str, Any], model_manifest: Mapping[str,
     if not scenarios:
         return ["No scenario metadata was found."]
     rows = []
-    cards = dict((model_manifest or {}).get("cards") or {})
+    models = dict((model_manifest or {}).get("models") or {})
     for scenario in scenarios:
-        rows.append([scenario, _rel(cards.get(scenario, "")) if scenario in cards else "metadata/model_card.json"])
-    return _markdown_table(["Scenario", "Model Card"], rows)
+        rows.append([
+            scenario,
+            _rel(models.get(scenario, ""))
+            if scenario in models
+            else "metadata/model_metadata.json",
+        ])
+    return _markdown_table(["Scenario", "Model Metadata"], rows)
 
 
 def _leaderboard_sections(leaderboard) -> list[str]:
@@ -115,16 +120,16 @@ def _leaderboard_sections(leaderboard) -> list[str]:
 
 
 def _tracking_comparison_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    preferred = ["scenario", "task", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
+    preferred = ["scenario", "task", "best_controller", "best_tracking_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
     controller_columns = [
         key for key in rows[0].keys()
-        if key.endswith("_tracking_error_cost") or key.endswith("_runtime_total_seconds")
+        if key.endswith("_tracking_cost") or key.endswith("_runtime_total_seconds")
     ] if rows else []
     columns = preferred + [key for key in controller_columns if key not in preferred]
     table_rows = []
     for row in rows:
         table_rows.append([
-            _fmt(row.get(column)) if not column.endswith(("_tracking_error_cost", "_runtime_total_seconds")) and column != "oracle_gap_vs_best"
+            _fmt(row.get(column)) if not column.endswith(("_tracking_cost", "_runtime_total_seconds")) and column != "oracle_gap_vs_best"
             else _fmt_number(row.get(column))
             for column in columns
         ])
@@ -211,8 +216,8 @@ def _artifact_section(root: Path, benchmark: Mapping[str, Any], artifacts: Mappi
         ("all_summary_csv", "summary/all_summary.csv"),
         ("all_leaderboard", "summary/all_leaderboard.json"),
         ("report", "results/report.json"),
-        ("model_cards_manifest", "metadata/model_cards/manifest.json"),
-        ("model_card", "metadata/model_card.json"),
+        ("model_metadata_manifest", "metadata/models/manifest.json"),
+        ("model_metadata", "metadata/model_metadata.json"),
         ("training", "training/training.json"),
         ("learning_curve", "training/learning_curve.json"),
         ("learning_curve_csv", "training/learning_curve.csv"),
@@ -269,8 +274,15 @@ def _scenario_names(benchmark: Mapping[str, Any], model_manifest: Mapping[str, A
     return list(dict.fromkeys(str(row["scenario"]) for row in benchmark.get("rows", []) if row.get("scenario")))
 
 
-def _read_model_manifest(root: Path, artifacts: Mapping[str, str]) -> Mapping[str, Any] | None:
-    path = _artifact_path(root, artifacts, "model_cards_manifest", "metadata/model_cards/manifest.json")
+def _read_model_metadata_manifest(
+    root: Path, artifacts: Mapping[str, str]
+) -> Mapping[str, Any] | None:
+    path = _artifact_path(
+        root,
+        artifacts,
+        "model_metadata_manifest",
+        "metadata/models/manifest.json",
+    )
     if path.exists():
         return _read_json(path)
     return None

@@ -39,8 +39,8 @@ an experiment. Use `aiogym.make_env(...)` when Gymnasium interaction, task
 conditions, or objective semantics are needed.
 
 Model numeric backends and RK4 integration live in focused modules under
-`aiogym.models`; `models.core` retains the process-model contract and legacy
-re-exports. Environment configuration, disturbance scheduling, observation
+`aiogym.models`; `models.core` owns the process-model contract. Environment
+configuration, disturbance scheduling, observation
 construction, and transition evaluation are composed behind
 `aiogym.env.AIOGymNativeEnv`, so the public environment API remains stable.
 
@@ -48,14 +48,12 @@ Public resource identifiers use one consistent style:
 
 - scenario IDs use kebab case, for example `cascade-recirculating`;
 - task IDs use `scenario/name`, for example
-  `quadruple/minimum-phase-classic`;
+  `quadruple/minimum-phase`;
 - suite IDs use kebab case, for example `cascade-recirculating`;
 - Gymnasium IDs use names such as `AIOGym/CascadeRecirculating-v0`.
 
-Existing Python calls and configuration files may continue to use the explicit
-`cascade_recirculating` compatibility alias. Discovery commands and newly
-written artifacts emit the canonical kebab-case ID. Internal Python module
-names and Gymnasium IDs are unchanged.
+Public Python calls and configuration files must use canonical IDs. Internal
+Python module names and Gymnasium IDs are independent implementation details.
 
 ## Parameter metadata and runtime parameters
 
@@ -117,15 +115,13 @@ The five public objectives map to three internal environment reward modes:
 
 Users should select an objective. `reward_mode` is the internal training signal
 chosen by that objective; it is not a substitute identity for robustness or
-safety benchmarks. High-level APIs and training CLIs accept `objective`; the
-older `reward_mode` input remains a deprecated compatibility alias for
-`economic`, `tracking`, and `kpi`. Resolved metadata records
+safety benchmarks. High-level APIs and training CLIs accept only `objective`.
+Resolved metadata records
 `resolved_reward_mode` for diagnostics without replacing the objective identity.
 
 Evaluation internals separate metric catalog, objective resolution, benchmark
-case models, execution, rollout recording, aggregation, and metadata. Existing
-imports from `aiogym.evaluation.protocols` and `aiogym.evaluation.core` remain
-compatibility facades; public behavior and artifact schemas are unchanged.
+case models, execution, rollout recording, aggregation, and metadata. Public
+workflows should use the top-level `aiogym` API.
 
 ## Controller and controller preset
 
@@ -166,9 +162,8 @@ physical model is integrated on every step.
 
 `auto_events=True` enables generic automatically generated within-episode events.
 A reproducible task can set `auto_events: false` and still declare deterministic
-events under `setpoints.schedule` or `disturbances`. The former `dynamic` field
-is accepted as a deprecated compatibility alias and is not emitted by new
-metadata or bundled configurations.
+events under `setpoints.schedule` or `disturbances`. `auto_events` is the only
+accepted configuration field.
 
 ## Suite and resolved case
 
@@ -193,8 +188,7 @@ validates and fully expands those references before producing resolved cases or
 artifact configuration, so reuse syntax does not become a runtime dependency.
 
 Suite declaration loading, resolved-case expansion, and summary preparation
-live in evaluation modules rather than the CLI entrypoint. The existing
-`aiogym.cli.suite_benchmark` imports remain a compatibility facade.
+live in evaluation modules rather than the CLI entrypoint.
 
 The [suite source schemas](public_api.md#matrix-source-schema) document accepted
 fields, inheritance, and CLI selection behavior. The executable loader and JSON
@@ -212,9 +206,8 @@ whether declared task acceptance thresholds were met. A completed run can
 therefore fail its objective without being an execution failure.
 
 Artifact row preparation, file writing, plot orchestration, Markdown rendering,
-and structural checks are separate output-layer responsibilities. Public APIs
-from `aiogym.evaluation.artifacts` and `aiogym.evaluation.reports` remain stable,
-including the existing artifact paths and schemas.
+and structural checks are separate output-layer responsibilities. The top-level
+API and unified CLI expose supported artifact operations.
 
 ## Which page to use next
 
@@ -222,5 +215,5 @@ including the existing artifact paths and schemas.
 - Use the [public API guide](public_api.md) to construct or run it.
 - Use the [physical-model infrastructure guide](model_infrastructure.md) for
   model provenance and extension contracts.
-- Return to the [documentation index](index.md) for generated model cards,
-  selected case studies, validation snapshots, and internal records.
+- Return to the [documentation index](index.md) for model documentation,
+  validation snapshots, and internal records.

@@ -27,7 +27,7 @@ from aiogym.evaluation import (
     metric_direction,
     metric_for_reward_mode,
     primary_metric_for_objective,
-    resolve_objective_reward_mode,
+    reward_mode_for_objective,
     resolve_protocol,
     rollout_controller,
 )
@@ -74,18 +74,15 @@ def output_base_for(args, run_id: str | None = None) -> str:
     return str(run_path("rl", "rlpd", f"{args.scenario}_{run_id or utc_run_id()}"))
 
 
-def configure_training_objective(args, *, warn_legacy: bool = True):
+def configure_training_objective(args):
     """Resolve the public training objective and its internal environment reward."""
 
-    objective, reward_mode = resolve_objective_reward_mode(
-        getattr(args, "objective", None),
-        getattr(args, "reward_mode", None),
-        default_objective="kpi",
-        warn_legacy=warn_legacy,
-    )
+    if getattr(args, "reward_mode", None) is not None:
+        raise ValueError("reward_mode is not supported; use objective")
+    objective = getattr(args, "objective", None) or "kpi"
+    reward_mode = reward_mode_for_objective(objective)
     args.objective = objective
     args.resolved_reward_mode = reward_mode
-    args.reward_mode = reward_mode
     return args
 
 
@@ -97,12 +94,6 @@ def main(argv=None, prog=None):
         default=None,
         choices=["economic", "tracking", "robustness", "safety", "kpi"],
         help="training and evaluation objective; defaults to kpi",
-    )
-    ap.add_argument(
-        "--reward-mode",
-        default=None,
-        choices=["kpi", "economic", "tracking"],
-        help="deprecated compatibility alias for --objective",
     )
     ap.add_argument("--control-dt", type=float, default=0.5)
     ap.add_argument("--episode-steps", type=int, default=400)

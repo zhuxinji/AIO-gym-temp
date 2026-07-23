@@ -89,12 +89,6 @@ def main():
     ap.add_argument("--seed-list", default=None)
     ap.add_argument("--control-dt", type=float, default=0.5)
     ap.add_argument("--auto-events", action="store_true", default=None)
-    ap.add_argument(
-        "--dynamic",
-        action="store_true",
-        default=None,
-        help="deprecated compatibility alias for --auto-events",
-    )
     ap.add_argument("--randomize", action="store_true")
     ap.add_argument("--randomize-plant", action="store_true")
     ap.add_argument("--plant-drift", action="store_true")
@@ -108,10 +102,8 @@ def main():
     ap.add_argument("--out", default=str(run_path("tuning", "tune_extraction_pid_tracking.json")))
     args = ap.parse_args()
     args.auto_events = resolve_auto_events(
-        args.auto_events,
-        args.dynamic,
         default=False,
-        warn_legacy=args.dynamic is not None,
+        auto_events=args.auto_events,
     )
 
     seeds = parse_seed_list(args.seed_list, args.seed, args.episodes)

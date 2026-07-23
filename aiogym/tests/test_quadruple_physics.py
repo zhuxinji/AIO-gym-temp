@@ -80,7 +80,7 @@ def test_rk4_solution_is_step_converged_for_reference_transient():
 
 def test_reference_task_applies_equilibrium_and_setpoint_schedule():
     env = aiogym.make_env(
-        "quadruple", objective="tracking", task="minimum-phase-classic"
+        "quadruple", objective="tracking", task="minimum-phase"
     )
     env.reset(seed=0)
     assert env.control_dt == 1.0 and env.episode_steps == 600
@@ -97,7 +97,7 @@ def test_reference_task_applies_equilibrium_and_setpoint_schedule():
 
 def test_reference_pi_bias_and_closed_loop_smoke():
     env = aiogym.make_env(
-        "quadruple", objective="tracking", task="minimum-phase-classic"
+        "quadruple", objective="tracking", task="minimum-phase"
     )
     controller = make_controller("pid", scenario="quadruple")
     env.reset(seed=0)
@@ -111,7 +111,6 @@ def test_reference_pi_bias_and_closed_loop_smoke():
     assert result["tracking_cost"] == pytest.approx(
         result["tracking_error_cost"]
         + result["tracking_move_cost"]
-        + result["tracking_steady_cost"]
     )
     assert result["constraint_violation_count"] == 0
     assert result["normalized_score"] > 99.0
@@ -119,7 +118,7 @@ def test_reference_pi_bias_and_closed_loop_smoke():
 
 def test_nonminimum_phase_task_has_rhp_zero_and_matched_controller_profile():
     protocol = aiogym.BenchmarkProtocol.tracking(
-        "quadruple", task="nonminimum-phase-classic", episode_steps=2
+        "quadruple", task="nonminimum-phase", episode_steps=2
     )
     env = protocol.make_env()
     env.reset(seed=0)
@@ -173,7 +172,7 @@ def test_zero_boundary_has_no_unique_steady_input_target():
 
 def test_nonminimum_benchmark_pid_uses_cross_pairing():
     protocol = aiogym.BenchmarkProtocol.tracking(
-        "quadruple", task="nonminimum-phase-classic", episode_steps=2
+        "quadruple", task="nonminimum-phase", episode_steps=2
     )
     controller = make_controller(
         "pid",
@@ -187,7 +186,7 @@ def test_nonminimum_benchmark_pid_uses_cross_pairing():
 
 def test_nonminimum_mpc_profile_has_unconstrained_moves_and_feedforward_initialization():
     protocol = aiogym.BenchmarkProtocol.tracking(
-        "quadruple", task="nonminimum-phase-classic", episode_steps=2
+        "quadruple", task="nonminimum-phase", episode_steps=2
     )
     controller = make_controller(
         "mpc",
@@ -234,17 +233,17 @@ def test_mpc_steady_feedforward_only_seeds_the_first_solve(monkeypatch):
 @pytest.mark.parametrize(
     "profile,horizon,solve_every,r_move,terminal_weight",
     [
-        ("quadruple-minimum-phase", 4, 1, 0.0, 0.0),
-        ("quadruple-nonminimum-phase", 180, 10, 0.0, 0.0),
-        ("quadruple-zero-boundary", 4, 1, 0.0, 0.0),
-        ("quadruple-disturbance-rejection", 3, 2, 0.0, 0.0),
+        ("quadruple-minimum-phase", 12, 1, 1.0, 0.0),
+        ("quadruple-nonminimum-phase", 180, 10, 1.0, 0.0),
+        ("quadruple-zero-boundary", 4, 1, 1.0, 0.0),
+        ("quadruple-disturbance-rejection", 3, 2, 1.0, 0.0),
     ],
 )
 def test_quadruple_oracle_profiles_expose_task_specific_tuning(
     profile, horizon, solve_every, r_move, terminal_weight
 ):
     protocol = aiogym.BenchmarkProtocol.tracking(
-        "quadruple", task="minimum-phase-classic", episode_steps=2
+        "quadruple", task="minimum-phase", episode_steps=2
     )
     controller = make_controller(
         "oracle",
@@ -267,7 +266,7 @@ def test_quadruple_oracle_profiles_expose_task_specific_tuning(
 
 def test_oracle_setpoint_preview_is_opt_in_and_uses_future_task_events():
     env = aiogym.make_env(
-        "quadruple", objective="tracking", task="minimum-phase-classic"
+        "quadruple", objective="tracking", task="minimum-phase"
     )
     env.reset(seed=0)
     controller = make_controller(
@@ -384,14 +383,33 @@ def test_oracle_replays_the_optimized_plan_between_periodic_solves(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "task,horizon,phase,initial_action",
+    "task,horizon,phase,initial_action,setpoint",
     [
-        ("pminus-reference-step", 360, "minimum-phase", [0.3, 0.3]),
-        ("pplus-reference-step", 3600, "nonminimum-phase", [0.315, 0.315]),
+        (
+            "minimum-phase",
+            360,
+            "minimum-phase",
+            [0.3, 0.3],
+            [14.2629675195507, 12.783158403008972],
+        ),
+        (
+            "nonminimum-phase",
+            3600,
+            "nonminimum-phase",
+            [0.315, 0.315],
+            [14.441864220183483, 13.166812925360238],
+        ),
     ],
 )
-def test_paper_reference_steps_are_active_in_initial_context(task, horizon, phase, initial_action):
-    protocol = aiogym.BenchmarkProtocol.tracking("quadruple", task=task)
+def test_paper_reference_steps_are_active_in_initial_context(
+    task, horizon, phase, initial_action, setpoint
+):
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple",
+        task=task,
+        episode_steps=horizon,
+        setpoint_schedule=[{"at_step": 0, "values": setpoint}],
+    )
     env = protocol.make_env()
     env.reset(seed=0)
     equilibrium = env.model.initial_state()

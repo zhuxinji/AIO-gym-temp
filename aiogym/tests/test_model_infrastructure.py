@@ -11,19 +11,15 @@ import aiogym
 
 def test_all_builtins_have_non_mutating_parameter_profiles():
     assert set(aiogym.list_parameter_profiles()) == set(aiogym.list_scenarios())
-    for scenario in aiogym.SCENARIOS:
+    for scenario in aiogym.list_scenarios():
         model = aiogym.make_model(scenario)
         before = dict(model.p)
         profile = aiogym.load_parameter_profile(scenario)
         card = model.model_card()
-        expected_scenario_id = (
-            "cascade-recirculating"
-            if scenario == "cascade_recirculating" else scenario
-        )
-        assert profile["scenario"] == expected_scenario_id
+        assert profile["scenario"] == scenario
         expected_status = {
             "quadruple": "reference-parameterized",
-            "cascade_recirculating": "design-provisional",
+            "cascade-recirculating": "design-provisional",
         }.get(scenario, "legacy-unverified")
         assert profile["status"] == expected_status
         assert model.p == before
@@ -34,7 +30,7 @@ def test_all_builtins_have_non_mutating_parameter_profiles():
             assert {
                 row["status"] for row in card["parameters"].values()
             } == {"legacy-unverified", "assumed-benchmark"}
-        elif scenario == "cascade_recirculating":
+        elif scenario == "cascade-recirculating":
             statuses = {row["status"] for row in card["parameters"].values()}
             assert "design-specified" in statuses
             assert "assumed-benchmark" in statuses
@@ -44,12 +40,12 @@ def test_all_builtins_have_non_mutating_parameter_profiles():
 
 
 def test_all_builtins_pass_generic_readiness_checks():
-    for scenario in aiogym.SCENARIOS:
+    for scenario in aiogym.list_scenarios():
         report = aiogym.validate_model_readiness(scenario)
         assert report["passed"], report
         if scenario == "quadruple":
             expected_not_checked = []
-        elif scenario == "cascade_recirculating":
+        elif scenario == "cascade-recirculating":
             expected_not_checked = ["reference_parameter_fidelity"]
         else:
             expected_not_checked = [
@@ -61,7 +57,7 @@ def test_all_builtins_pass_generic_readiness_checks():
 
 
 def test_models_use_single_dynamics_and_flat_action_contract():
-    for scenario in aiogym.SCENARIOS:
+    for scenario in aiogym.list_scenarios():
         model = aiogym.make_model(scenario)
         assert not hasattr(model, "derivatives")
         assert not hasattr(model, "action_vector_to_dict")
@@ -73,38 +69,57 @@ def test_models_use_single_dynamics_and_flat_action_contract():
 
 
 def test_task_profiles_are_opt_in_and_explicit_timing_wins():
-    assert not any(name.endswith("/legacy-default") for name in aiogym.list_task_profiles())
-    assert "quadruple/minimum-phase-classic" in aiogym.list_task_profiles()
-    assert "quadruple/nonminimum-phase-classic" in aiogym.list_task_profiles()
-    assert "cascade/continuous-benchmark" in aiogym.list_task_profiles()
+    assert not any(name.endswith("/legacy-default") for name in aiogym.list_tasks())
+    assert "quadruple/minimum-phase" in aiogym.list_tasks()
+    assert "quadruple/nonminimum-phase" in aiogym.list_tasks()
+    assert "cascade/continuous-benchmark" in aiogym.list_tasks()
     assert {
-        "quadruple/pminus-reference-step",
-        "quadruple/pplus-reference-step",
         "quadruple/zero-boundary-stress",
         "quadruple/disturbance-rejection",
-    }.issubset(set(aiogym.list_task_profiles()))
+    }.issubset(set(aiogym.list_tasks()))
 
     direct_default = aiogym.AIOGymNativeEnv("cstr")
-    task_env = aiogym.AIOGymNativeEnv("quadruple", task="minimum-phase-classic")
+    task_env = aiogym.AIOGymNativeEnv("quadruple", task="minimum-phase")
     overridden = aiogym.AIOGymNativeEnv(
-        "quadruple", task="minimum-phase-classic", control_dt=0.25, episode_steps=12
+        "quadruple", task="minimum-phase", control_dt=0.25, episode_steps=12
     )
     assert (direct_default.control_dt, direct_default.episode_steps) == (0.5, 600)
     assert (task_env.control_dt, task_env.episode_steps) == (1.0, 600)
-    assert task_env.task_profile["name"] == "minimum-phase-classic"
+    assert task_env.task_profile["name"] == "minimum-phase"
+    assert task_env.tracking_q_y == pytest.approx([0.7, 0.7])
+    assert task_env.tracking_r_move == pytest.approx(0.3)
+    assert task_env.disturbance_obs is False
+    assert task_env.previous_action_obs is True
+    assert task_env.normalize_observations is True
+    assert task_env.tracking_error_obs is True
     assert (overridden.control_dt, overridden.episode_steps) == (0.25, 12)
 
     protocol_default = aiogym.BenchmarkProtocol.tracking("cstr")
-    protocol_task = aiogym.BenchmarkProtocol.tracking("quadruple", task="minimum-phase-classic")
-    factory_task = aiogym.make_env("quadruple", task="minimum-phase-classic")
+    protocol_task = aiogym.BenchmarkProtocol.tracking("quadruple", task="minimum-phase")
+    factory_task = aiogym.make_env("quadruple", task="minimum-phase")
     assert (protocol_default.control_dt, protocol_default.episode_steps) == (0.5, 400)
     assert (protocol_task.control_dt, protocol_task.episode_steps) == (1.0, 600)
-    assert protocol_task.metadata()["task"]["name"] == "minimum-phase-classic"
+    assert protocol_task.metadata()["task"]["name"] == "minimum-phase"
     assert (factory_task.control_dt, factory_task.episode_steps) == (1.0, 600)
 
 
+def test_task_setpoint_overrides_are_executable():
+    schedule = [{"at_step": 0, "values": [14.0, 13.0]}]
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple",
+        task="minimum-phase",
+        episode_steps=360,
+        setpoint_schedule=schedule,
+    )
+    env = protocol.make_env()
+    env.reset(seed=0)
+
+    assert env.episode_steps == 360
+    assert env.y_sp == pytest.approx([14.0, 13.0])
+
+
 def test_cascade_operation_profiles_are_validated_and_shared_with_controller_model():
-    from aiogym.evaluation.runner import run_evaluation_case
+    from aiogym.evaluation.execution import run_evaluation_case
 
     continuous = aiogym.load_task_profile("cascade/continuous-benchmark")
     assert aiogym.task_operation(continuous) == {
@@ -133,7 +148,7 @@ def test_cascade_operation_profiles_are_validated_and_shared_with_controller_mod
 
 
 def test_task_owns_conditions_while_objective_owns_scoring():
-    task = aiogym.load_task_profile("quadruple/nonminimum-phase-classic")
+    task = aiogym.load_task_profile("quadruple/nonminimum-phase")
     protocol = aiogym.BenchmarkProtocol.kpi(
         "quadruple", task=task, episode_steps=7
     )
@@ -141,47 +156,23 @@ def test_task_owns_conditions_while_objective_owns_scoring():
     assert protocol.objective == "kpi"
     assert protocol.env_reward_mode == "kpi"
     assert protocol.auto_events is False
-    assert protocol.dynamic is False
+    assert not hasattr(protocol, "dynamic")
     assert protocol.randomize is False
     assert protocol.noise is False
     assert protocol.episode_steps == 7
     assert protocol.model_params["gamma"] == [0.43, 0.34]
-    assert metadata["task_identity"]["name"] == "nonminimum-phase-classic"
+    assert metadata["task_identity"]["name"] == "nonminimum-phase"
     assert len(metadata["task_identity"]["profile_hash"]) == 64
     with pytest.raises(ValueError, match="does not support objective"):
         aiogym.BenchmarkProtocol.economic("quadruple", task=task)
 
 
-def test_auto_events_is_canonical_and_dynamic_remains_compatible():
+def test_removed_dynamic_option_is_rejected():
     assert aiogym.AIOGymNativeEnv("cstr").auto_events is True
     assert aiogym.BenchmarkProtocol.tracking("cstr").auto_events is False
 
-    canonical = aiogym.AIOGymNativeEnv(
-        "cstr",
-        episode_steps=20,
-        auto_events=True,
-        randomize=False,
-        randomize_setpoints=False,
-    )
-    with pytest.warns(FutureWarning, match="use auto_events"):
-        legacy = aiogym.AIOGymNativeEnv(
-            "cstr",
-            episode_steps=20,
-            dynamic=True,
-            randomize=False,
-            randomize_setpoints=False,
-        )
-    canonical.reset(seed=42)
-    legacy.reset(seed=42)
-    assert canonical._dist_events == legacy._dist_events
-    assert canonical.auto_events is True
-    assert legacy.auto_events is True
-    assert legacy.dynamic is True
-
-    with pytest.raises(ValueError, match="auto_events.*conflicts"):
-        aiogym.AIOGymNativeEnv(
-            "cstr", auto_events=False, dynamic=True
-        )
+    with pytest.raises(TypeError, match="dynamic"):
+        aiogym.AIOGymNativeEnv("cstr", dynamic=True)
 
 
 def test_auto_events_is_the_only_canonical_protocol_and_case_field():
@@ -200,26 +191,19 @@ def test_auto_events_is_the_only_canonical_protocol_and_case_field():
     assert "dynamic" not in protocol_metadata
     assert "dynamic" not in case_metadata["environment"]
 
-    with pytest.warns(FutureWarning, match="use auto_events"):
-        legacy = aiogym.BenchmarkProtocol.tracking("cstr", dynamic=True)
-    assert legacy.auto_events is True
-    with pytest.raises(ValueError, match="auto_events.*conflicts"):
-        aiogym.BenchmarkProtocol.tracking(
-            "cstr", auto_events=False, dynamic=True
-        )
+    with pytest.raises(TypeError, match="dynamic"):
+        aiogym.BenchmarkProtocol.tracking("cstr", dynamic=True)
 
 
-def test_legacy_task_and_suite_auto_event_fields_are_normalized(tmp_path):
-    task = aiogym.load_task_profile("quadruple/minimum-phase-classic")
+def test_removed_task_and_suite_dynamic_fields_are_rejected(tmp_path):
+    task = aiogym.load_task_profile("quadruple/minimum-phase")
     legacy_task = dict(task)
     legacy_task["environment"] = dict(task["environment"])
     legacy_task["environment"]["dynamic"] = legacy_task["environment"].pop(
         "auto_events"
     )
-    with pytest.warns(FutureWarning, match="use auto_events"):
-        normalized_task = aiogym.load_task_profile(legacy_task)
-    assert normalized_task["environment"]["auto_events"] is False
-    assert "dynamic" not in normalized_task["environment"]
+    with pytest.raises(ValueError, match="unknown task environment fields: dynamic"):
+        aiogym.load_task_profile(legacy_task)
 
     suite_path = tmp_path / "legacy-suite.json"
     suite_path.write_text(json.dumps({
@@ -230,18 +214,16 @@ def test_legacy_task_and_suite_auto_event_fields_are_normalized(tmp_path):
     }))
     from aiogym.cli.suite_benchmark import load_suite
 
-    with pytest.warns(FutureWarning, match="use auto_events"):
-        suite = load_suite(str(suite_path))
-    assert suite["auto_events"] is True
-    assert "dynamic" not in suite
+    with pytest.raises(ValueError, match="unsupported suite option.*dynamic"):
+        load_suite(str(suite_path))
 
 
 def test_benchmark_runner_aligns_oracle_with_primary_tracking_error_weights():
-    from aiogym.evaluation.runner import run_evaluation_case
+    from aiogym.evaluation.execution import run_evaluation_case
 
     protocol = aiogym.BenchmarkProtocol.tracking(
         "quadruple",
-        task="minimum-phase-classic",
+        task="minimum-phase",
         episode_steps=1,
         tracking_q_y=[2.0, 3.0],
         tracking_r_move=0.7,
@@ -266,6 +248,30 @@ def test_benchmark_runner_aligns_oracle_with_primary_tracking_error_weights():
     assert metadata["r_move"] == pytest.approx(0.7)
     assert metadata["terminal_weight"] == pytest.approx(0.6)
     assert "steady_input_weight" not in metadata
+
+
+def test_benchmark_runner_aligns_mpc_move_weight_with_tracking_protocol():
+    from aiogym.evaluation.execution import run_evaluation_case
+
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple",
+        task="minimum-phase",
+        episode_steps=1,
+        tracking_q_y=[0.7, 0.7],
+        tracking_r_move=0.0,
+    )
+    case = run_evaluation_case(
+        scenario="quadruple",
+        controller="mpc",
+        protocol=protocol,
+        seeds=[0],
+        controller_config={"q_y": [9.0, 9.0], "move_supp": 0.8},
+        include_episodes=False,
+    )
+
+    metadata = case["controller"].metadata()
+    assert metadata["q_y"] == pytest.approx([0.7, 0.7])
+    assert metadata["move_supp"] == pytest.approx(0.0)
 
 
 def test_scheduled_setpoint_is_visible_before_its_control_step():
@@ -314,16 +320,12 @@ def test_tracking_action_weights_default_to_one():
     protocol = aiogym.BenchmarkProtocol.tracking("quadruple")
 
     assert env.tracking_r_move == pytest.approx(1.0)
-    assert env.tracking_r_steady == pytest.approx(1.0)
     assert protocol.tracking_r_move == pytest.approx(1.0)
-    assert protocol.tracking_r_steady == pytest.approx(1.0)
-    with pytest.raises(ValueError, match="tracking_r_steady"):
-        aiogym.BenchmarkProtocol.tracking("quadruple", tracking_r_steady=-1.0)
 
 
 def test_profile_scenario_mismatches_are_rejected():
     with pytest.raises(ValueError, match="expected task"):
-        aiogym.load_task_profile("quadruple/minimum-phase-classic", scenario="hvac")
+        aiogym.load_task_profile("quadruple/minimum-phase", scenario="hvac")
     with pytest.raises(ValueError, match="expected parameter profile"):
         aiogym.load_parameter_profile("cstr", scenario="hvac")
 
@@ -348,15 +350,15 @@ def test_explicit_suite_cases_keep_task_identity_and_controller_profiles():
     _, cases = build_cases(args)
     assert len(cases) == 6
     assert {case["task"] for case in cases} == {
-        "minimum-phase-classic", "nonminimum-phase-classic",
+        "minimum-phase", "nonminimum-phase",
     }
     minimum_pid = next(
         case for case in cases
-        if case["task"] == "minimum-phase-classic" and case["controller"] == "pid"
+        if case["task"] == "minimum-phase" and case["controller"] == "pid"
     )
     nonminimum_pid = next(
         case for case in cases
-        if case["task"] == "nonminimum-phase-classic" and case["controller"] == "pid"
+        if case["task"] == "nonminimum-phase" and case["controller"] == "pid"
     )
     assert minimum_pid["protocol"].episode_steps == 600
     assert nonminimum_pid["protocol"].episode_steps == 1800
@@ -382,15 +384,13 @@ def test_quadruple_suite_runs_all_three_controllers_on_every_formal_task():
         onnx_path=None,
     )
     _, cases = build_cases(args)
-    assert len(cases) == 18
+    assert len(cases) == 12
     by_task = {}
     for case in cases:
         by_task.setdefault(case["task"], set()).add(case["controller"])
     assert by_task == {
-        "minimum-phase-classic": {"pid", "mpc", "oracle"},
-        "nonminimum-phase-classic": {"pid", "mpc", "oracle"},
-        "pminus-reference-step": {"pid", "mpc", "oracle"},
-        "pplus-reference-step": {"pid", "mpc", "oracle"},
+        "minimum-phase": {"pid", "mpc", "oracle"},
+        "nonminimum-phase": {"pid", "mpc", "oracle"},
         "zero-boundary-stress": {"pid", "mpc", "oracle"},
         "disturbance-rejection": {"pid", "mpc", "oracle"},
     }
@@ -402,10 +402,8 @@ def test_quadruple_suite_runs_all_three_controllers_on_every_formal_task():
         if case["controller"] == "pid"
     }
     assert pid_profiles == {
-        "minimum-phase-classic": "quadruple-minimum-phase-benchmark",
-        "nonminimum-phase-classic": "quadruple-nonminimum-phase-benchmark",
-        "pminus-reference-step": "quadruple-minimum-phase-benchmark",
-        "pplus-reference-step": "quadruple-nonminimum-phase-benchmark",
+        "minimum-phase": "quadruple-minimum-phase-benchmark",
+        "nonminimum-phase": "quadruple-nonminimum-phase-benchmark",
         "zero-boundary-stress": "quadruple-zero-boundary",
         "disturbance-rejection": "quadruple-disturbance-rejection",
     }
@@ -415,10 +413,8 @@ def test_quadruple_suite_runs_all_three_controllers_on_every_formal_task():
         if case["controller"] == "mpc"
     }
     assert mpc_profiles == {
-        "minimum-phase-classic": "quadruple-minimum-phase",
-        "nonminimum-phase-classic": "quadruple-nonminimum-phase",
-        "pminus-reference-step": "quadruple-minimum-phase",
-        "pplus-reference-step": "quadruple-nonminimum-phase",
+        "minimum-phase": "quadruple-minimum-phase",
+        "nonminimum-phase": "quadruple-nonminimum-phase",
         "zero-boundary-stress": "quadruple-zero-boundary",
         "disturbance-rejection": "quadruple-disturbance-rejection",
     }
@@ -428,17 +424,15 @@ def test_quadruple_suite_runs_all_three_controllers_on_every_formal_task():
         if case["controller"] == "oracle"
     }
     assert oracle_profiles == {
-        "minimum-phase-classic": "quadruple-minimum-phase",
-        "nonminimum-phase-classic": "quadruple-nonminimum-phase",
-        "pminus-reference-step": "quadruple-minimum-phase",
-        "pplus-reference-step": "quadruple-nonminimum-phase",
+        "minimum-phase": "quadruple-minimum-phase",
+        "nonminimum-phase": "quadruple-nonminimum-phase",
         "zero-boundary-stress": "quadruple-zero-boundary",
         "disturbance-rejection": "quadruple-disturbance-rejection",
     }
 
 
 def test_cascade_recirculating_suite_uses_formal_tasks_and_task_objectives():
-    from aiogym.cli.suite_benchmark import build_cases, builtin_suites
+    from aiogym.cli.suite_benchmark import build_cases
 
     args = SimpleNamespace(
         suite="cascade-recirculating",
@@ -456,7 +450,7 @@ def test_cascade_recirculating_suite_uses_formal_tasks_and_task_objectives():
     )
     _, cases = build_cases(args)
 
-    assert "cascade-recirculating" in builtin_suites()
+    assert "cascade-recirculating" in aiogym.list_suites()
     assert len(cases) == 8
     by_task = {}
     for case in cases:
@@ -484,7 +478,7 @@ def test_cascade_recirculating_suite_uses_formal_tasks_and_task_objectives():
 
 
 def test_quadruple_paper_reference_suite_contains_only_paper_pi_cases():
-    from aiogym.cli.suite_benchmark import build_cases, builtin_suites
+    from aiogym.cli.suite_benchmark import build_cases
 
     args = SimpleNamespace(
         suite="quadruple-paper-reference",
@@ -502,26 +496,59 @@ def test_quadruple_paper_reference_suite_contains_only_paper_pi_cases():
     )
     _, cases = build_cases(args)
     assert [(case["task"], case["controller"]) for case in cases] == [
-        ("pminus-reference-step", "pid"),
-        ("pplus-reference-step", "pid"),
+        ("minimum-phase", "pid"),
+        ("nonminimum-phase", "pid"),
     ]
+    assert [case["protocol"].episode_steps for case in cases] == [360, 3600]
     assert [case["controller_config"]["profile"] for case in cases] == [
         "quadruple-minimum-phase",
         "quadruple-nonminimum-phase",
     ]
-    assert "quadruple" in builtin_suites()
-    assert "quadruple-all" not in builtin_suites()
+    assert "quadruple" in aiogym.list_suites()
+    assert "quadruple-all" not in aiogym.list_suites()
+
+
+def test_single_benchmark_passes_oracle_specific_profile():
+    from aiogym.cli.single_benchmark import controller_specs
+
+    args = SimpleNamespace(
+        controllers="oracle",
+        controller_profile=None,
+        oracle_profile="quadruple-minimum-phase",
+        oracle_episodes=1,
+        episodes=3,
+        seed=9000,
+        seed_list=None,
+        sb3_path=None,
+        sb3_algo="sac",
+        sb3_action_mode="setpoint",
+        onnx_path=None,
+        onnx_action_mode="setpoint",
+    )
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple", task="minimum-phase"
+    )
+
+    specs = controller_specs(args, protocol)
+
+    assert specs[0]["config"] == {
+        "mode": "tracking",
+        "profile": "quadruple-minimum-phase",
+    }
 
 
 def test_tracking_plots_show_task_identity_setpoints_and_controls(tmp_path):
-    from aiogym.evaluation.artifacts import plot_results, write_benchmark_artifacts
+    from aiogym.evaluation.artifact import plot_results, write_benchmark_artifacts
 
-    task = "minimum-phase-classic"
+    task = "minimum-phase"
     rollout = {
         "controller_name": "PID",
-        "scenario": "quadruple",
-        "task": task,
         "objective": "tracking",
+        "protocol": {
+            "scenario": "quadruple",
+            "task": {"name": task},
+            "objective": "tracking",
+        },
         "rollout": [
             {
                 "time": 0.0,
@@ -574,20 +601,25 @@ def test_tracking_plots_show_task_identity_setpoints_and_controls(tmp_path):
     }
     artifacts = write_benchmark_artifacts(tmp_path, payload)
     payload["artifacts"] = artifacts
+    payload["artifacts"]["rollout_figure"] = str(tmp_path / "figures" / "quadruple_rollout.svg")
+    payload["artifacts"]["constraint_timeline_figure"] = str(tmp_path / "figures" / "constraint_timeline.svg")
+    (tmp_path / "figures").mkdir(exist_ok=True)
+    (tmp_path / "figures" / "quadruple_rollout.svg").write_text("stale")
+    (tmp_path / "figures" / "constraint_timeline.svg").write_text("stale")
     (tmp_path / "benchmark.json").write_text(json.dumps(payload))
     figures = plot_results(tmp_path)
 
     comparison = (tmp_path / "figures" / "tracking_comparison.svg").read_text()
     assert "Task" in comparison
-    assert "minimum-phase-classic" in comparison
+    assert "minimum-phase" in comparison
     assert "zero-boundary-stress" in comparison
     leaderboard = (tmp_path / "figures" / "leaderboard.svg").read_text()
-    assert "minimum-phase-classic / tracking" in leaderboard
-    assert "tracking / quadruple / minimum-phase-classic" not in leaderboard
+    assert "minimum-phase / tracking" in leaderboard
+    assert "tracking / quadruple / minimum-phase" not in leaderboard
     controls = figures["tracking_control_by_scenario"]
-    assert set(controls) == {"quadruple / minimum-phase-classic"}
-    control_svg = (tmp_path / "figures" / "tracking_control_quadruple-minimum-phase-classic.svg").read_text()
-    assert "quadruple / minimum-phase-classic tracking control" in control_svg
+    assert set(controls) == {"quadruple / minimum-phase"}
+    control_svg = (tmp_path / "figures" / "tracking_control_quadruple-minimum-phase.svg").read_text()
+    assert "quadruple / minimum-phase tracking control" in control_svg
     assert "Setpoint" in control_svg
     assert 'stroke-dasharray="6 5"' in control_svg
     assert "h3 (cm)" not in control_svg and "h4 (cm)" not in control_svg
@@ -598,10 +630,17 @@ def test_tracking_plots_show_task_identity_setpoints_and_controls(tmp_path):
     assert ">4.08</text>" in control_svg and ">1.92</text>" in control_svg
     assert 'font-size="18" text-anchor="middle"' in control_svg
     assert 'font-size="20" text-anchor="start"' in control_svg
+    assert not (tmp_path / "figures" / "quadruple_rollout.svg").exists()
+    assert not (tmp_path / "figures" / "constraint_timeline.svg").exists()
+    plotted_payload = json.loads((tmp_path / "benchmark.json").read_text())
+    assert "rollout_figure" not in plotted_payload["artifacts"]
+    assert "constraint_timeline_figure" not in plotted_payload["artifacts"]
+    assert plotted_payload["rollouts"][0]["scenario"] == "quadruple"
+    assert plotted_payload["rollouts"][0]["task"] == task
 
 
 def test_summary_bars_preserve_small_nonzero_value_labels(tmp_path):
-    from aiogym.evaluation.plots import plot_summary
+    from aiogym.evaluation.artifact.svg import plot_summary
 
     path = tmp_path / "small-values.svg"
     plot_summary([
@@ -611,19 +650,17 @@ def test_summary_bars_preserve_small_nonzero_value_labels(tmp_path):
             "tracking_cost": 0.004321,
             "tracking_error_cost": 0.0001234,
             "tracking_move_cost": 0.00001234,
-            "tracking_steady_cost": 0.000001234,
         }
     ], path, "quadruple")
     svg = path.read_text()
     assert ">0.004321</text>" in svg
     assert ">0.0001234</text>" in svg
     assert ">1.234e-05</text>" in svg
-    assert ">1.234e-06</text>" in svg
     assert ">0.00</text>" not in svg
 
 
 def test_quadruple_paper_reference_plot_uses_four_paper_signals(tmp_path):
-    from aiogym.evaluation.plots import plot_tracking_control
+    from aiogym.evaluation.artifact.svg import plot_tracking_control
 
     rollout = {
         "controller_name": "PID",
@@ -644,7 +681,7 @@ def test_quadruple_paper_reference_plot_uses_four_paper_signals(tmp_path):
     }
     path = tmp_path / "paper-reference.svg"
     plot_tracking_control(
-        [rollout], path, "quadruple", task="pminus-reference-step"
+        [rollout], path, "quadruple", task="minimum-phase"
     )
     svg = path.read_text()
     assert "h1 (cm)" in svg and "h2 (cm)" in svg
@@ -749,12 +786,12 @@ def test_economic_suites_exclude_models_without_meaningful_economics():
 
 
 def test_leaderboard_ranks_restart_for_each_task():
-    from aiogym.evaluation.artifacts import _leaderboard
+    from aiogym.evaluation.artifact.tables import _leaderboard
 
     rows = []
     for task, pid_cost, mpc_cost in (
-        ("minimum-phase-classic", 1.0, 2.0),
-        ("nonminimum-phase-classic", 5.0, 4.0),
+        ("minimum-phase", 1.0, 2.0),
+        ("nonminimum-phase", 5.0, 4.0),
     ):
         for controller, value in (("PID", pid_cost), ("MPC", mpc_cost)):
             rows.append({
@@ -769,13 +806,13 @@ def test_leaderboard_ranks_restart_for_each_task():
     board = _leaderboard(rows)
     winners = {(row["task"], row["controller"]) for row in board if row["rank"] == 1}
     assert winners == {
-        ("minimum-phase-classic", "PID"),
-        ("nonminimum-phase-classic", "MPC"),
+        ("minimum-phase", "PID"),
+        ("nonminimum-phase", "MPC"),
     }
 
 
 def test_tracking_artifact_count_distinguishes_tasks_within_one_scenario():
-    from aiogym.evaluation.reports import _tracking_benchmark_case_count
+    from aiogym.evaluation.artifact.report import _tracking_benchmark_case_count
 
     rows = [
         {
@@ -784,7 +821,7 @@ def test_tracking_artifact_count_distinguishes_tasks_within_one_scenario():
             "objective": "tracking",
             "execution_status": "passed",
         }
-        for task in ("pminus-reference-step", "pplus-reference-step")
+        for task in ("minimum-phase", "nonminimum-phase")
     ]
     assert _tracking_benchmark_case_count(rows) == 2
 
@@ -792,7 +829,7 @@ def test_tracking_artifact_count_distinguishes_tasks_within_one_scenario():
 def test_objective_resolution_has_one_documented_precedence_order():
     from aiogym.evaluation import resolve_objective, resolve_protocol
 
-    task = aiogym.load_task_profile("quadruple/minimum-phase-classic")
+    task = aiogym.load_task_profile("quadruple/minimum-phase")
     assert resolve_objective(
         explicit="safety",
         case_config="kpi",
@@ -814,13 +851,13 @@ def test_objective_resolution_has_one_documented_precedence_order():
 
     protocol = resolve_protocol(
         "quadruple",
-        data={"task": "minimum-phase-classic"},
+        data={"task": "minimum-phase"},
     )
     assert protocol.objective == "tracking"
     assert protocol.objective_source == "task-default"
 
     task_env = aiogym.make_env(
-        "quadruple", task="minimum-phase-classic", episode_steps=1
+        "quadruple", task="minimum-phase", episode_steps=1
     )
     assert task_env.reward_mode == "tracking"
     explicit_env = aiogym.make_env(
@@ -836,6 +873,8 @@ def test_objective_selection_does_not_change_implicit_environment_conditions():
     fields = (
         "action_mode", "auto_events", "randomize", "randomize_setpoints",
         "randomize_plant", "plant_drift", "integral_obs",
+        "disturbance_obs", "previous_action_obs", "normalize_observations",
+        "tracking_error_obs",
         "terminate_on_runaway", "noise",
     )
     protocols = [
@@ -865,9 +904,6 @@ def test_objective_selection_does_not_change_implicit_environment_conditions():
 def test_public_objectives_resolve_one_internal_reward_mode(objective, reward_mode):
     from aiogym.evaluation import resolve_protocol
 
-    selected, resolved = aiogym.resolve_objective_reward_mode(objective)
-    assert selected == objective
-    assert resolved == reward_mode
     assert aiogym.reward_mode_for_objective(objective) == reward_mode
 
     protocol = resolve_protocol(
@@ -879,23 +915,11 @@ def test_public_objectives_resolve_one_internal_reward_mode(objective, reward_mo
     assert protocol.metadata()["objective_spec"]["resolved_reward_mode"] == reward_mode
 
 
-def test_high_level_reward_mode_alias_warns_and_conflicts_fail():
-    with pytest.warns(FutureWarning, match="use objective"):
-        selected, resolved = aiogym.resolve_objective_reward_mode(
-            reward_mode="tracking", warn_legacy=True
-        )
-    assert (selected, resolved) == ("tracking", "tracking")
-
-    with pytest.warns(FutureWarning, match="use objective"):
-        legacy_env = aiogym.make_env(
-            "cstr", reward_mode="tracking", episode_steps=1
-        )
-    assert legacy_env.reward_mode == "tracking"
-
+def test_high_level_reward_mode_option_is_rejected():
     safety_env = aiogym.make_env("cstr", objective="safety", episode_steps=1)
     assert safety_env.reward_mode == "kpi"
 
-    with pytest.raises(ValueError, match="conflicts with reward_mode"):
+    with pytest.raises(ValueError, match="unsupported environment option.*reward_mode"):
         aiogym.make_env(
             "cstr",
             objective="tracking",
@@ -909,6 +933,7 @@ def test_training_cli_objective_resolution_and_metadata():
     from aiogym.rl.train_sb3 import (
         configure_training_auto_events,
         configure_training_objective as configure_sb3,
+        configure_training_task,
         training_metadata,
     )
 
@@ -918,28 +943,53 @@ def test_training_cli_objective_resolution_and_metadata():
     assert sb3.resolved_reward_mode == "kpi"
     assert sb3.eval_objective == "safety"
 
-    legacy = SimpleNamespace(objective=None, reward_mode="economic")
-    with pytest.warns(FutureWarning, match="use objective"):
-        configure_rlpd(legacy)
-    assert legacy.objective == "economic"
-    assert legacy.resolved_reward_mode == "economic"
+    task_objective = SimpleNamespace(
+        objective=None,
+        reward_mode=None,
+        eval_objective=None,
+        scenario="quadruple",
+        task="minimum-phase",
+    )
+    configure_sb3(task_objective)
+    assert task_objective.objective == "tracking"
+    assert task_objective.resolved_reward_mode == "tracking"
+    assert task_objective.eval_objective == "tracking"
 
-    conflict = SimpleNamespace(objective="tracking", reward_mode="economic")
-    with pytest.raises(ValueError, match="conflicts with reward_mode"):
-        configure_rlpd(conflict, warn_legacy=False)
+    with pytest.raises(ValueError, match="reward_mode is not supported"):
+        configure_rlpd(SimpleNamespace(objective=None, reward_mode="economic"))
+    with pytest.raises(ValueError, match="dynamic is not supported"):
+        configure_training_auto_events(SimpleNamespace(auto_events=None, dynamic=True))
 
-    legacy_events = SimpleNamespace(auto_events=None, dynamic=True)
-    with pytest.warns(FutureWarning, match="use auto_events"):
-        configure_training_auto_events(legacy_events)
-    assert legacy_events.auto_events is True
-
-    conflicting_events = SimpleNamespace(auto_events=False, dynamic=True)
-    with pytest.raises(ValueError, match="auto_events.*conflicts"):
-        configure_training_auto_events(conflicting_events, warn_legacy=False)
+    task_args = SimpleNamespace(
+        scenario="quadruple",
+        task="minimum-phase",
+        objective="tracking",
+        action_mode="actuator",
+        control_dt=None,
+        train_episode_steps=None,
+        eval_episode_steps=None,
+        tracking_q_y=None,
+        tracking_r_move=None,
+        disturbance_obs=None,
+        previous_action_obs=None,
+        normalize_observations=None,
+        tracking_error_obs=None,
+    )
+    configure_training_task(task_args)
+    assert task_args.control_dt == pytest.approx(1.0)
+    assert task_args.train_episode_steps == 600
+    assert task_args.eval_episode_steps == 600
+    assert task_args.tracking_q_y == pytest.approx(0.7)
+    assert task_args.tracking_r_move == pytest.approx(0.3)
+    assert task_args.disturbance_obs is False
+    assert task_args.previous_action_obs is True
+    assert task_args.normalize_observations is True
+    assert task_args.tracking_error_obs is True
 
     metadata_args = SimpleNamespace(
         algo="sac",
         scenario="cstr",
+        task=None,
         action_mode="actuator",
         objective="robustness",
         resolved_reward_mode="kpi",
@@ -957,22 +1007,170 @@ def test_training_cli_objective_resolution_and_metadata():
         randomize_plant=False,
         plant_drift=False,
         integral_obs=False,
+        disturbance_obs=False,
+        previous_action_obs=True,
+        normalize_observations=True,
+        tracking_error_obs=True,
         terminate_on_runaway=False,
         noise=False,
         noise_pct=0.01,
         control_dt=0.5,
+        tracking_q_y=0.7,
+        tracking_r_move=0.3,
+        gamma=0.999,
+        learning_rate=1e-4,
+        batch_size=256,
+        buffer_size=500000,
+        learning_starts=10000,
+        train_freq=1,
+        gradient_steps=4,
+        learning_curve_every=10000,
+        learning_curve_episodes=1,
+        save_rollout=True,
     )
     metadata = training_metadata(metadata_args, "checkpoint.zip")
     assert metadata["objective"] == "robustness"
     assert metadata["resolved_reward_mode"] == "kpi"
+    assert metadata["tracking_q_y"] == pytest.approx(0.7)
+    assert metadata["tracking_r_move"] == pytest.approx(0.3)
+    assert metadata["disturbance_obs"] is False
+    assert metadata["previous_action_obs"] is True
+    assert metadata["normalize_observations"] is True
+    assert metadata["tracking_error_obs"] is True
+    assert metadata["gamma"] == pytest.approx(0.999)
+    assert metadata["gradient_steps"] == 4
+    assert metadata["learning_curve_every"] == 10000
+    assert metadata["save_rollout"] is True
     assert "reward_mode" not in metadata
     assert metadata["env_kwargs"]["auto_events"] is False
+    assert metadata["env_kwargs"]["disturbance_obs"] is False
+    assert metadata["env_kwargs"]["previous_action_obs"] is True
+    assert metadata["env_kwargs"]["normalize_observations"] is True
+    assert metadata["env_kwargs"]["tracking_error_obs"] is True
     assert "dynamic" not in metadata["env_kwargs"]
+
+
+def test_sb3_training_env_receives_task_and_tracking_weights():
+    from aiogym.rl.train_sb3 import make_training_env
+
+    args = SimpleNamespace(
+        scenario="quadruple",
+        task="minimum-phase",
+        resolved_reward_mode="tracking",
+        action_mode="actuator",
+        control_dt=1.0,
+        train_episode_steps=600,
+        auto_events=False,
+        randomize=False,
+        randomize_setpoints=False,
+        randomize_plant=False,
+        plant_drift=False,
+        integral_obs=False,
+        disturbance_obs=False,
+        previous_action_obs=True,
+        normalize_observations=True,
+        tracking_error_obs=True,
+        terminate_on_runaway=False,
+        noise=False,
+        noise_pct=0.01,
+        tracking_q_y=0.7,
+        tracking_r_move=0.3,
+        seed=1000,
+    )
+    env = make_training_env(args)()
+    try:
+        assert env.task_profile["name"] == "minimum-phase"
+        assert env.control_dt == pytest.approx(1.0)
+        assert env.episode_steps == 600
+        assert env.tracking_q_y == pytest.approx([0.7, 0.7])
+        assert env.tracking_r_move == pytest.approx(0.3)
+        assert env.disturbance_obs is False
+        assert env.previous_action_obs is True
+        assert env.normalize_observations is True
+        assert env.tracking_error_obs is True
+        observation, _ = env.reset(seed=1000)
+        assert observation.shape == (8,)
+        assert observation.tolist() == pytest.approx([
+            12.2629675195507 / 20.0,
+            12.783158403008972 / 20.0,
+            1.6339411322567796 / 20.0,
+            1.409044702533737 / 20.0,
+            0.0,
+            0.0,
+            0.3,
+            0.3,
+        ])
+        next_observation, *_ = env.step([0.4, 0.2])
+        assert next_observation[4] == pytest.approx(
+            12.2629675195507 / 20.0 - next_observation[0],
+            abs=1e-6,
+        )
+        assert next_observation[5] == pytest.approx(
+            12.783158403008972 / 20.0 - next_observation[1],
+            abs=1e-6,
+        )
+        assert next_observation[-2:].tolist() == pytest.approx([0.4, 0.2])
+    finally:
+        env.close()
+
+
+def test_protocol_preserves_markov_normalized_observation_contract():
+    protocol = aiogym.BenchmarkProtocol.tracking(
+        "quadruple",
+        task="minimum-phase",
+        disturbance_obs=False,
+        previous_action_obs=True,
+        normalize_observations=True,
+        tracking_error_obs=True,
+    )
+
+    assert protocol.metadata()["disturbance_obs"] is False
+    assert protocol.metadata()["previous_action_obs"] is True
+    assert protocol.metadata()["normalize_observations"] is True
+    assert protocol.metadata()["tracking_error_obs"] is True
+    environment = protocol.environment_spec()
+    assert environment.disturbance_obs is False
+    assert environment.previous_action_obs is True
+    assert environment.normalize_observations is True
+    assert environment.tracking_error_obs is True
+    env = protocol.make_env()
+    try:
+        observation, _ = env.reset(seed=1000)
+        assert observation.shape == (8,)
+    finally:
+        env.close()
+
+    with pytest.raises(TypeError, match="previous_action_obs must be a boolean"):
+        aiogym.BenchmarkProtocol.tracking(
+            "quadruple",
+            previous_action_obs="yes",
+        )
+
+
+def test_learning_curve_best_checkpoint_comparison_respects_metric_direction():
+    from aiogym.rl.train_sb3 import _learning_curve_point_is_better
+
+    assert _learning_curve_point_is_better(
+        {"metric_value": 0.08, "metric_direction": "minimize"},
+        None,
+    )
+    assert _learning_curve_point_is_better(
+        {"metric_value": 0.07, "metric_direction": "minimize"},
+        0.08,
+    )
+    assert not _learning_curve_point_is_better(
+        {"metric_value": 0.09, "metric_direction": "minimize"},
+        0.08,
+    )
+    assert _learning_curve_point_is_better(
+        {"metric_value": 12.0, "metric_direction": "maximize"},
+        10.0,
+    )
 
 
 def test_benchmark_case_supports_injected_environment_factory():
     from aiogym.evaluation import BenchmarkCase
-    from aiogym.evaluation.runner import run_evaluation_case
+    from aiogym.evaluation.execution import run_evaluation_case
 
     protocol = aiogym.BenchmarkProtocol.tracking(
         "cstr", episode_steps=1
@@ -989,12 +1187,20 @@ def test_benchmark_case_supports_injected_environment_factory():
         captured.append((environment, objective))
         return environment.make_env(objective)
 
-    artifact = run_evaluation_case(case=case, env_factory=env_factory)
+    artifact = run_evaluation_case(
+        case=case,
+        env_factory=env_factory,
+        save_rollout=True,
+        rollout_steps=1,
+    )
     assert captured[0][0].scenario == "cstr"
     assert captured[0][1].name == "tracking"
     assert artifact["case"]["case_id"] == "test:cstr:tracking:pid"
     assert artifact["result"]["execution_status"] == "passed"
     assert artifact["result"]["objective_status"] == "not-defined"
+    assert artifact["rollout"]["scenario"] == "cstr"
+    assert artifact["rollout"]["task"] == "default"
+    assert artifact["rollout"]["objective"] == "tracking"
 
 
 def test_task_acceptance_is_separate_from_execution_status():

@@ -10,8 +10,8 @@ import aiogym
 
 
 def test_scenario_is_registered_with_pdf_hardware_contract():
-    assert "cascade_recirculating" in aiogym.SCENARIOS
-    model = aiogym.make_model("cascade_recirculating")
+    assert "cascade-recirculating" in aiogym.list_scenarios()
+    model = aiogym.make_model("cascade-recirculating")
 
     assert model.action_names == (
         "pump_P101", "valve_V12", "valve_V23", "heater_H1"
@@ -24,7 +24,7 @@ def test_scenario_is_registered_with_pdf_hardware_contract():
 
 
 def test_parameter_profile_separates_design_value_from_provisional_values():
-    profile = aiogym.load_parameter_profile("cascade_recirculating")
+    profile = aiogym.load_parameter_profile("cascade-recirculating")
 
     assert profile["status"] == "design-provisional"
     assert profile["parameters"]["heater_power"]["status"] == "design-specified"
@@ -42,7 +42,7 @@ def test_parameter_profile_separates_design_value_from_provisional_values():
 
 
 def test_nominal_closed_loop_conserves_total_liquid_volume():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     x = model.initial_state()
     dx = model.dynamics(x, model.default_action(), model.disturbance_defaults())
 
@@ -52,7 +52,7 @@ def test_nominal_closed_loop_conserves_total_liquid_volume():
 
 
 def test_pump_recirculates_tank3_temperature_into_tank1():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     action = [0.05, 0.0, 0.0, 0.0]
     cold_return = [0.40, 30.0, 0.40, 25.0, 0.40, 20.0]
     hot_return = [0.40, 30.0, 0.40, 25.0, 0.40, 40.0]
@@ -63,17 +63,17 @@ def test_pump_recirculates_tank3_temperature_into_tank1():
 
 
 def test_foundational_model_card_and_environment_step_are_finite():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     readiness = aiogym.validate_model_readiness(model)
     assert readiness["passed"], readiness
 
     card = model.model_card()
-    assert card["scenario"] == "cascade_recirculating"
+    assert card["scenario"] == "cascade-recirculating"
     assert card["action_vector"]["length"] == 4
     assert card["physical_metadata"]["parameter_status"] == "design-provisional"
 
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating",
+        "cascade-recirculating",
         auto_events=False,
         randomize=False,
         randomize_setpoints=False,
@@ -90,12 +90,12 @@ def test_foundational_model_card_and_environment_step_are_finite():
 
 
 def test_maximum_declared_actuator_power_matches_foundational_budget():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     assert model.energy_kw([1.0, 1.0, 1.0, 1.0]) == pytest.approx(2.5)
 
 
 def test_declared_default_is_a_model_consistent_closed_loop_equilibrium():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     equilibrium = model.nominal_steady_state()
     dx = model.dynamics(
         equilibrium["state"],
@@ -116,7 +116,7 @@ def test_declared_default_is_a_model_consistent_closed_loop_equilibrium():
 
 
 def test_random_internal_points_satisfy_independent_mass_and_energy_balances():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     rng = np.random.default_rng(20260720)
     max_mass = 0.0
     max_energy = 0.0
@@ -149,7 +149,7 @@ def test_random_internal_points_satisfy_independent_mass_and_energy_balances():
 
 
 def test_model_readiness_records_mass_and_energy_as_checked():
-    report = aiogym.validate_model_readiness("cascade_recirculating")
+    report = aiogym.validate_model_readiness("cascade-recirculating")
     checks = {row["name"]: row for row in report["checks"]}
 
     assert checks["mass_balance"]["passed"]
@@ -159,7 +159,7 @@ def test_model_readiness_records_mass_and_energy_as_checked():
 
 def test_numeric_and_casadi_dynamics_match_across_internal_domain():
     ca = pytest.importorskip("casadi")
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     rng = np.random.default_rng(20260720)
 
     for _ in range(40):
@@ -191,7 +191,7 @@ def test_numeric_and_casadi_dynamics_match_across_internal_domain():
 
 def test_numeric_and_casadi_use_the_same_action_clipping():
     ca = pytest.importorskip("casadi")
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.35, 35.0, 0.40, 30.0, 0.42, 25.0]
     disturbance = model.disturbance_defaults()
     raw = [-2.0, 1.5, 0.2, 4.0]
@@ -222,7 +222,7 @@ def _integrate(model, state, action, disturbance, max_step, duration=120.0):
 
 
 def test_rk4_step_refinement_converges_on_smooth_nominal_trajectory():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.40, 50.0, 0.40, 35.0, 0.40, 25.0]
     action = model.default_action()
     disturbance = model.disturbance_defaults()
@@ -252,7 +252,7 @@ def _process_info(model, state, action):
 
 @pytest.mark.parametrize("tank_index", [0, 1])
 def test_passive_overflow_returns_mass_and_enthalpy_to_tank3(tank_index):
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.40, 35.0, 0.40, 30.0, 0.35, 20.0]
     state[2 * tank_index] = 0.49
     state[2 * tank_index + 1] = 60.0 if tank_index == 0 else 50.0
@@ -275,7 +275,7 @@ def test_passive_overflow_returns_mass_and_enthalpy_to_tank3(tank_index):
 
 
 def test_passive_overflow_is_a_protective_flow_not_a_hard_termination():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.49, 40.0, 0.40, 30.0, 0.35, 25.0]
     constraints = model.process_constraint_info(state, [], [], {})
     info = _process_info(model, state, [0.0, 0.0, 0.0, 0.0])
@@ -296,7 +296,7 @@ def test_passive_overflow_is_a_protective_flow_not_a_hard_termination():
     ],
 )
 def test_h1_hardwired_interlocks_remove_actual_heater_power(state, expected_event):
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     action = [0.0, 0.0, 0.0, 1.0]
     info = _process_info(model, state, action)
 
@@ -307,7 +307,7 @@ def test_h1_hardwired_interlocks_remove_actual_heater_power(state, expected_even
 
 
 def test_tank3_low_level_interlock_stops_p101_without_terminating():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.40, 30.0, 0.40, 28.0, 0.04, 26.0]
     action = [1.0, 0.0, 0.0, 0.0]
     dx = model.dynamics(state, action, model.disturbance_defaults())
@@ -323,7 +323,7 @@ def test_tank3_low_level_interlock_stops_p101_without_terminating():
 
 
 def test_hard_boundaries_remain_distinct_from_passive_protection():
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
 
     assert model.hard_termination_reasons(
         [0.51, 30.0, 0.40, 28.0, 0.40, 26.0], [], [], {}
@@ -341,7 +341,7 @@ def test_hard_boundaries_remain_distinct_from_passive_protection():
 
 def test_numeric_and_casadi_match_with_both_overflow_branches_active():
     ca = pytest.importorskip("casadi")
-    model = aiogym.make_model("cascade_recirculating")
+    model = aiogym.make_model("cascade-recirculating")
     state = [0.49, 60.0, 0.495, 45.0, 0.30, 25.0]
     action = [0.08, 0.20, 0.30, 1.0]
     disturbance = {
@@ -367,7 +367,7 @@ def test_numeric_and_casadi_match_with_both_overflow_branches_active():
 
 def test_environment_reports_passive_protection_separately_from_hard_stop():
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating",
+        "cascade-recirculating",
         control_dt=0.01,
         episode_steps=3,
         auto_events=False,
@@ -400,26 +400,26 @@ def test_device_tasks_are_explicit_and_exclude_production_economics():
         "cascade-recirculating/safety-recovery",
         "cascade-recirculating/temperature-step",
     }
-    assert set(aiogym.list_task_profiles("cascade_recirculating")) == expected
+    assert set(aiogym.list_tasks("cascade-recirculating")) == expected
     for name in expected:
         profile = aiogym.load_task_profile(name)
         assert "economic" not in profile["supported_objectives"]
         assert profile["default_objective"] in profile["supported_objectives"]
 
     with pytest.raises(ValueError, match="does not support objective 'economic'"):
-        aiogym.BenchmarkProtocol.economic("cascade_recirculating")
+        aiogym.BenchmarkProtocol.economic("cascade-recirculating")
     with pytest.raises(ValueError, match="does not support objective 'economic'"):
         aiogym.BenchmarkProtocol.economic(
-            "cascade_recirculating", task="commissioning"
+            "cascade-recirculating", task="commissioning"
         )
 
 
 def test_commissioning_task_starts_at_the_declared_equilibrium():
-    model = aiogym.make_model("cascade_recirculating")
-    task = aiogym.load_task_profile("cascade_recirculating/commissioning")
+    model = aiogym.make_model("cascade-recirculating")
+    task = aiogym.load_task_profile("cascade-recirculating/commissioning")
     equilibrium = model.nominal_steady_state()
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating", task=task, reward_mode="tracking"
+        "cascade-recirculating", task=task, reward_mode="tracking"
     )
     env.reset(seed=4)
 
@@ -432,9 +432,9 @@ def test_commissioning_task_starts_at_the_declared_equilibrium():
 
 
 def test_temperature_step_is_visible_before_its_control_step():
-    task = aiogym.load_task_profile("cascade_recirculating/temperature-step")
+    task = aiogym.load_task_profile("cascade-recirculating/temperature-step")
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating", task=task, reward_mode="tracking"
+        "cascade-recirculating", task=task, reward_mode="tracking"
     )
     env.reset(seed=5)
     action = env.model.default_action()
@@ -447,9 +447,9 @@ def test_temperature_step_is_visible_before_its_control_step():
 
 
 def test_disturbance_task_applies_and_exposes_scheduled_p101_loss():
-    task = aiogym.load_task_profile("cascade_recirculating/disturbance-rejection")
+    task = aiogym.load_task_profile("cascade-recirculating/disturbance-rejection")
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating", task=task, reward_mode="kpi"
+        "cascade-recirculating", task=task, reward_mode="kpi"
     )
     env.reset(seed=6)
     action = env.model.default_action()
@@ -463,9 +463,9 @@ def test_disturbance_task_applies_and_exposes_scheduled_p101_loss():
 
 
 def test_safety_recovery_task_starts_with_recoverable_protection_layers():
-    task = aiogym.load_task_profile("cascade_recirculating/safety-recovery")
+    task = aiogym.load_task_profile("cascade-recirculating/safety-recovery")
     env = aiogym.AIOGymNativeEnv(
-        "cascade_recirculating", task=task, reward_mode="kpi"
+        "cascade-recirculating", task=task, reward_mode="kpi"
     )
     env.reset(seed=7)
     _, _, terminated, _, info = env.step(env.model.default_action())
@@ -498,13 +498,13 @@ def test_safety_recovery_task_starts_with_recoverable_protection_layers():
 def test_four_action_controllers_complete_short_commissioning_run(
     controller, controller_config
 ):
-    from aiogym.evaluation.runner import run_evaluation_case
+    from aiogym.evaluation.execution import run_evaluation_case
 
     protocol = aiogym.BenchmarkProtocol.tracking(
-        "cascade_recirculating", task="commissioning", episode_steps=2
+        "cascade-recirculating", task="commissioning", episode_steps=2
     )
     case = run_evaluation_case(
-        scenario="cascade_recirculating",
+        scenario="cascade-recirculating",
         controller=controller,
         protocol=protocol,
         seeds=[0],

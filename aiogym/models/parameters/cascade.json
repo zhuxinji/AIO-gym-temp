@@ -88,24 +88,24 @@
     "heater_min_level": {
       "value": 0.05,
       "unit": "m",
-      "source": "Cascade model modification plan",
-      "source_locator": "docs/plans/cascade-model-modification-plan.md",
+      "source": "AIO-Gym benchmark assumption",
+      "source_locator": "docs/scenarios/cascade.md",
       "status": "assumed-benchmark",
       "description": "Assumed minimum liquid level for the dry-heating interlock; requires device-specific validation before plant use."
     },
     "temperature_trip": {
       "value": 92.0,
       "unit": "degC",
-      "source": "Cascade model modification plan",
-      "source_locator": "docs/plans/cascade-model-modification-plan.md",
+      "source": "AIO-Gym benchmark assumption",
+      "source_locator": "docs/scenarios/cascade.md",
       "status": "assumed-benchmark",
       "description": "Assumed heater trip temperature for this liquid-water benchmark; not a certified protection setting."
     },
     "temperature_hard_limit": {
       "value": 120.0,
       "unit": "degC",
-      "source": "Cascade model modification plan",
-      "source_locator": "docs/plans/cascade-model-modification-plan.md",
+      "source": "AIO-Gym benchmark assumption",
+      "source_locator": "docs/scenarios/cascade.md",
       "status": "assumed-benchmark",
       "description": "Assumed simulation termination boundary, not a claim that an atmospheric water tank can physically operate at this temperature."
     }

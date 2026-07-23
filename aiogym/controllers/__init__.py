@@ -1,8 +1,4 @@
-"""Unified controller public API.
-
-The implementation is split by responsibility; this module remains the stable
-compatibility facade for existing imports.
-"""
+"""Unified controller public API."""
 
 from .adapters import PolicyController, SB3PolicyController, as_controller
 from .configs import (
@@ -15,7 +11,6 @@ from .contracts import (
     CONTROLLER_API_VERSION,
     Controller,
     ControllerContext,
-    _call_compatible,
     build_context,
     controller_metadata,
     make_meas,
@@ -27,7 +22,6 @@ from .registry import (
     _REGISTRY,
     make_controller,
     register_controller,
-    registered_controllers,
     unregister_controller,
 )
 
@@ -47,7 +41,6 @@ __all__ = [
     "make_controller",
     "make_meas",
     "register_controller",
-    "registered_controllers",
     "unregister_controller",
     "validate_action",
 ]

@@ -3,7 +3,7 @@ from aiogym.tests.interface_support import *  # noqa: F403
 
 def test_disturbance_schedule_config():
     """Dynamic disturbances are scheduled from the model disturbance schema."""
-    for scn in SCENARIOS:
+    for scn in SCENARIO_IDS:
         env = AIOGymNativeEnv(scn, auto_events=True, randomize=False, randomize_setpoints=False)
         env.reset(seed=0)
         configured = {
@@ -122,7 +122,7 @@ def test_plant_drift_semantics():
 
 def test_env_api():
     """Every scenario builds in both action modes with the right spaces + a valid step."""
-    for scn in SCENARIOS:
+    for scn in SCENARIO_IDS:
         modes = ["actuator"]
         if make_model(scn).supervisory_layout:
             modes.append("setpoint")

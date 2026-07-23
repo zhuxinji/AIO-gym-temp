@@ -59,7 +59,6 @@ def _summary_metrics(rows: list[dict]) -> list[tuple[str, str]]:
             ("tracking_cost", "Tracking Cost"),
             ("tracking_error_cost", "Tracking Error Cost"),
             ("tracking_move_cost", "Move Cost"),
-            ("tracking_steady_cost", "Steady-input Cost"),
         ]
     if objective == "economic":
         metrics = [
@@ -301,8 +300,8 @@ def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> N
     controllers = []
     for row in rows:
         for key in row:
-            if key.endswith("_tracking_error_cost") and key != "best_tracking_error_cost":
-                controllers.append(key[: -len("_tracking_error_cost")])
+            if key.endswith("_tracking_cost") and key != "best_tracking_cost":
+                controllers.append(key[: -len("_tracking_cost")])
     controllers = list(dict.fromkeys(controllers))
     display_labels = {
         controller: "Oracle" if controller == "NMPC-oracle" else controller
@@ -312,7 +311,7 @@ def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> N
         ("scenario", "Scenario", 150),
         ("task", "Task", 220),
         ("best_controller", "Best", 150),
-        ("best_tracking_error_cost", "Best error", 105),
+        ("best_tracking_cost", "Best cost", 105),
         ("oracle_gap_vs_best", "Oracle gap", 110),
     ]
     runtime_columns = [
@@ -323,7 +322,7 @@ def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> N
         ("best_runtime_total_seconds", "Best error ctrl total s", 155),
     ]
     for controller in controllers:
-        cost_columns.append((f"{controller}_tracking_error_cost", f"{display_labels[controller]} error", 105))
+        cost_columns.append((f"{controller}_tracking_cost", f"{display_labels[controller]} cost", 105))
         runtime_columns.append((f"{controller}_runtime_total_seconds", f"{display_labels[controller]} total s", 120))
     table_rows = []
     for row in rows:
@@ -347,8 +346,8 @@ def plot_tracking_comparison_table(rows: list[dict], path: str, title: str) -> N
     runtime_top = top + table_h + table_gap
     height = max(360, runtime_top + table_h + 44)
     parts = [_svg_header(width, height), _svg_text(36, 46, f"{title} tracking comparison", size=22, weight="700")]
-    parts.append(_svg_text(36, 70, "Lower tracking error cost is better. Runtime is total wall-clock seconds for all evaluated episodes.", size=12, fill="#64748b"))
-    parts.append(_svg_text(36, top - 16, "Tracking error cost", size=16, weight="700", fill="#0f172a"))
+    parts.append(_svg_text(36, 70, "Lower normalized tracking cost is better. Runtime is total wall-clock seconds for all evaluated episodes.", size=12, fill="#64748b"))
+    parts.append(_svg_text(36, top - 16, "Normalized tracking cost", size=16, weight="700", fill="#0f172a"))
     _append_tracking_table(parts, table_rows, cost_columns, left, top, width - left * 2, row_h, header_h, "tracking")
     parts.append(_svg_text(36, runtime_top - 16, "Total runtime", size=16, weight="700", fill="#0f172a"))
     _append_tracking_table(parts, table_rows, runtime_columns, left, runtime_top, width - left * 2, row_h, header_h, "runtime")
@@ -420,6 +419,16 @@ def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> 
         xhi = xlo + 1.0
     parts = [_svg_header(width, height), _svg_text(42, 46, f"{scenario} constraint timeline", size=22, weight="700")]
     parts.append(f'<rect x="{left}" y="{top}" width="{w}" height="{h}" fill="#f8fafc" stroke="#cbd5e1"/>')
+    if series and not any(abs(value) > 0.0 for value in ys):
+        parts.append(_svg_text(
+            left + w / 2,
+            top + h / 2,
+            "No constraint violations recorded",
+            size=18,
+            anchor="middle",
+            fill="#047857",
+            weight="700",
+        ))
     for i, row in enumerate(series):
         points = []
         for xv, yv in zip(row["x"], row["y"]):
@@ -441,6 +450,7 @@ def plot_constraint_timeline(rollouts: list[dict], path: str, scenario: str) -> 
 def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
     """Plot numeric RL training history rows as a compact SVG curve sheet."""
 
+    curve = _deduplicate_learning_curve(curve)
     series_keys = _learning_curve_keys(curve)
     width, height = 1100, 640
     left, top, w, h = 86, 96, 920, 380
@@ -455,7 +465,7 @@ def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
 
     x_key = "timesteps" if any("timesteps" in row for row in curve) else "step"
     xs = [float(row.get(x_key, row.get("step", i))) for i, row in enumerate(curve)]
-    xlo, xhi = min(xs), max(xs)
+    xlo, xhi = min(0.0, min(xs)), max(xs)
     if xlo == xhi:
         xhi = xlo + 1.0
     all_ys = [float(row[key]) for row in curve for key in series_keys if _is_number(row.get(key))]
@@ -465,6 +475,10 @@ def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
     pad = (yhi - ylo) * 0.08
     ylo -= pad
     yhi += pad
+    if all(key.startswith("tracking_") and key.endswith("cost") for key in series_keys):
+        ylo = max(0.0, ylo)
+    if series_keys == ["return"] and all(value <= 0 for value in all_ys):
+        yhi = 0.0
 
     for i, key in enumerate(series_keys):
         ys = [float(row[key]) if _is_number(row.get(key)) else None for row in curve]
@@ -478,7 +492,8 @@ def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
         lx = 42 + (i % 3) * 310
         ly = 530 + (i // 3) * 26
         parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 28}" y2="{ly}" stroke="{color}" stroke-width="3"/>')
-        parts.append(_svg_text(lx + 36, ly + 4, key, size=12, fill="#334155"))
+        label = "reward" if key == "return" else key
+        parts.append(_svg_text(lx + 36, ly + 4, label, size=12, fill="#334155"))
 
     parts.append(_svg_text(left - 12, top + 8, _fmt(yhi), size=10, anchor="end", fill="#64748b"))
     parts.append(_svg_text(left - 12, top + h, _fmt(ylo), size=10, anchor="end", fill="#64748b"))
@@ -489,7 +504,34 @@ def plot_learning_curve(curve: list[dict], path: str, title: str) -> None:
     _write_text(path, "\n".join(parts))
 
 
+def _deduplicate_learning_curve(curve: list[dict]) -> list[dict]:
+    """Keep one row per timestep, preferring the final multi-episode result."""
+
+    selected: dict[float, dict] = {}
+    for index, row in enumerate(curve):
+        raw_step = row.get("timesteps", row.get("step", index))
+        step = float(raw_step) if _is_number(raw_step) else float(index)
+        current = selected.get(step)
+        if current is None or row.get("phase") == "final":
+            selected[step] = row
+    return [selected[step] for step in sorted(selected)]
+
+
 def _learning_curve_keys(curve: list[dict]) -> list[str]:
+    if any(_is_number(row.get("return")) for row in curve):
+        return ["return"]
+
+    tracking = [
+        key for key in (
+            "tracking_cost",
+            "tracking_error_cost",
+            "tracking_move_cost",
+        )
+        if any(_is_number(row.get(key)) for row in curve)
+    ]
+    if tracking:
+        return tracking
+
     preferred = [
         "metric_value",
         "kpi",

@@ -10,11 +10,11 @@ from numbers import Integral
 from pathlib import Path
 from typing import Any
 
-from aiogym._internal.config import canonicalize_auto_events
 from aiogym._internal.identifiers import (
     canonical_scenario_id,
     canonical_task_id,
     internal_scenario_id,
+    require_canonical_scenario_id,
 )
 
 from .schema import (
@@ -27,9 +27,11 @@ from .schema import (
 _TASK_DIR = Path(__file__).with_name("builtin")
 
 
-def list_task_profiles(scenario: str | None = None) -> tuple[str, ...]:
+def list_tasks(scenario: str | None = None) -> tuple[str, ...]:
     """List bundled task identifiers as ``scenario/name`` strings."""
 
+    if scenario:
+        require_canonical_scenario_id(scenario)
     storage_scenario = internal_scenario_id(scenario) if scenario else None
     paths = (
         (_TASK_DIR / storage_scenario).glob("*.json")
@@ -58,18 +60,20 @@ def load_task_profile(
             parts = source.split("/", 1)
             if len(parts) == 2 and all(parts) and "/" not in parts[1] and not path.suffix:
                 task_scenario, task_name = parts
+                require_canonical_scenario_id(task_scenario)
                 storage_scenario = internal_scenario_id(task_scenario)
                 path = _TASK_DIR / storage_scenario / f"{task_name}.json"
                 named_scenario = canonical_scenario_id(storage_scenario)
                 named_task = True
             elif scenario and "/" not in source and not path.suffix:
+                require_canonical_scenario_id(scenario)
                 storage_scenario = internal_scenario_id(scenario)
                 path = _TASK_DIR / storage_scenario / f"{source}.json"
                 named_scenario = canonical_scenario_id(storage_scenario)
                 named_task = True
         if not path.is_file():
             if named_task:
-                available = list_task_profiles(named_scenario)
+                available = list_tasks(named_scenario)
                 available_text = ", ".join(available) if available else "none"
                 raise FileNotFoundError(
                     f"unknown task ID {source!r}; available task IDs for "
@@ -78,11 +82,6 @@ def load_task_profile(
             raise FileNotFoundError(f"task profile not found: {source}")
         with path.open(encoding="utf-8") as stream:
             data = json.load(stream)
-    if isinstance(data.get("environment"), Mapping):
-        data["environment"] = canonicalize_auto_events(
-            data["environment"],
-            warn_legacy=True,
-        )
     validate_task_profile(data, expected_scenario=scenario)
     return data
 
@@ -91,7 +90,19 @@ def task_environment(profile: Mapping[str, Any]) -> dict[str, Any]:
     """Return the executable environment conditions owned by a task."""
 
     validate_task_profile(profile)
-    return copy.deepcopy(canonicalize_auto_events(profile["environment"]))
+    return copy.deepcopy(profile["environment"])
+
+
+def task_objective_options(
+    profile: Mapping[str, Any] | None,
+    objective: str,
+) -> dict[str, Any]:
+    """Return objective options owned by a task, if declared."""
+
+    if profile is None:
+        return {}
+    validate_task_profile(profile)
+    return copy.deepcopy(profile.get("objectives", {}).get(objective, {}))
 
 
 def resolve_environment_options(
@@ -153,7 +164,8 @@ def resolve_environment_options(
     if resolved["action_mode"] not in {"actuator", "setpoint"}:
         raise ValueError("action_mode must be one of: actuator, setpoint")
     for name in ENVIRONMENT_BOOLEAN_FIELDS:
-        resolved[name] = bool(resolved[name])
+        if not isinstance(resolved[name], bool):
+            raise TypeError(f"{name} must be a boolean")
 
     explicit_model_params = provided.get("model_params")
     if explicit_model_params is not None and not isinstance(explicit_model_params, Mapping):
@@ -222,9 +234,6 @@ def task_identity(profile: Mapping[str, Any] | None) -> dict[str, Any]:
         }
     validate_task_profile(profile)
     canonical_profile = copy.deepcopy(dict(profile))
-    canonical_profile["environment"] = canonicalize_auto_events(
-        canonical_profile["environment"]
-    )
     canonical = json.dumps(
         canonical_profile,
         sort_keys=True,
@@ -241,10 +250,11 @@ def task_identity(profile: Mapping[str, Any] | None) -> dict[str, Any]:
 
 __all__ = [
     "configure_model_for_task",
-    "list_task_profiles",
+    "list_tasks",
     "load_task_profile",
     "resolve_environment_options",
     "task_environment",
     "task_identity",
+    "task_objective_options",
     "task_operation",
 ]

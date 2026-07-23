@@ -25,7 +25,7 @@
     "tracking": {
       "parameters": {
         "q_y": 1.0,
-        "r_move": 0.0,
+        "r_move": 1.0,
         "terminal_weight": 0.0
       },
       "scenarios": {
@@ -55,11 +55,11 @@
     "quadruple-minimum-phase": {
       "scenarios": {
         "quadruple": {
-          "horizon": 4,
+          "horizon": 12,
           "control_dt": 1.0,
           "mode": "tracking",
           "q_y": [1.0, 1.0],
-          "r_move": 0.0,
+          "r_move": 1.0,
           "terminal_weight": 0.0,
           "ipopt_max_iter": 300,
           "ipopt_tol": 1e-8,
@@ -78,7 +78,7 @@
           "control_dt": 1.0,
           "mode": "tracking",
           "q_y": [1.0, 1.0],
-          "r_move": 0.0,
+          "r_move": 1.0,
           "terminal_weight": 0.0,
           "ipopt_max_iter": 200,
           "ipopt_tol": 0.00001,
@@ -97,7 +97,7 @@
           "control_dt": 1.0,
           "mode": "tracking",
           "q_y": [1.0, 1.0],
-          "r_move": 0.0,
+          "r_move": 1.0,
           "terminal_weight": 0.0,
           "ipopt_max_iter": 300,
           "ipopt_tol": 1e-8,
@@ -116,7 +116,7 @@
           "control_dt": 1.0,
           "mode": "tracking",
           "q_y": [1.0, 1.0],
-          "r_move": 0.0,
+          "r_move": 1.0,
           "terminal_weight": 0.0,
           "ipopt_max_iter": 120,
           "ipopt_tol": 0.00001,

@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from aiogym._internal.config import resolve_auto_events
 from aiogym._internal.identifiers import internal_scenario_id
 
 
@@ -14,12 +13,15 @@ TASK_ENVIRONMENT_FIELDS = frozenset({
     "episode_steps",
     "action_mode",
     "auto_events",
-    "dynamic",
     "randomize",
     "randomize_setpoints",
     "randomize_plant",
     "plant_drift",
     "integral_obs",
+    "disturbance_obs",
+    "previous_action_obs",
+    "normalize_observations",
+    "tracking_error_obs",
     "terminate_on_runaway",
     "noise",
     "noise_pct",
@@ -32,6 +34,10 @@ ENVIRONMENT_BOOLEAN_FIELDS = (
     "randomize_plant",
     "plant_drift",
     "integral_obs",
+    "disturbance_obs",
+    "previous_action_obs",
+    "normalize_observations",
+    "tracking_error_obs",
     "terminate_on_runaway",
     "noise",
 )
@@ -77,11 +83,6 @@ def validate_task_profile(
             raise ValueError("task episode_steps must be a positive integer")
     if "action_mode" in environment and environment["action_mode"] not in {"actuator", "setpoint"}:
         raise ValueError("task action_mode must be one of: actuator, setpoint")
-    resolve_auto_events(
-        environment.get("auto_events"),
-        environment.get("dynamic"),
-        warn_legacy="dynamic" in environment,
-    )
     for key in ENVIRONMENT_BOOLEAN_FIELDS:
         if key in environment and not isinstance(environment[key], bool):
             raise TypeError(f"task {key} must be a boolean")
@@ -142,6 +143,35 @@ def validate_task_profile(
             raise TypeError("task default_objective must be a non-empty string")
         if supported is not None and default_objective not in supported:
             raise ValueError("task default_objective must be listed in supported_objectives")
+    objectives = profile.get("objectives", {})
+    if not isinstance(objectives, Mapping):
+        raise TypeError("task objectives must be a mapping")
+    unknown_objectives = set(objectives) - {"tracking"}
+    if unknown_objectives:
+        raise ValueError(
+            f"unsupported task objective options: {', '.join(sorted(unknown_objectives))}"
+        )
+    tracking = objectives.get("tracking", {})
+    if not isinstance(tracking, Mapping):
+        raise TypeError("task tracking objective options must be a mapping")
+    unknown_tracking = set(tracking) - {"tracking_q_y", "tracking_r_move"}
+    if unknown_tracking:
+        raise ValueError(
+            f"unknown task tracking options: {', '.join(sorted(unknown_tracking))}"
+        )
+    if "tracking_q_y" in tracking:
+        _finite_numeric_value("task tracking_q_y", tracking["tracking_q_y"])
+        values = (
+            tracking["tracking_q_y"]
+            if isinstance(tracking["tracking_q_y"], list)
+            else [tracking["tracking_q_y"]]
+        )
+        if any(float(value) < 0.0 for value in values):
+            raise ValueError("task tracking_q_y must be non-negative")
+    if "tracking_r_move" in tracking:
+        _finite_numeric_value("task tracking_r_move", tracking["tracking_r_move"])
+        if float(tracking["tracking_r_move"]) < 0.0:
+            raise ValueError("task tracking_r_move must be non-negative")
 
 
 def _finite_numeric_vector(name: str, values) -> None:

@@ -8,14 +8,12 @@ import json
 from time import perf_counter
 
 from aiogym.evaluation import resolve_protocol
-from aiogym.evaluation.runner import run_evaluation_case
+from aiogym.evaluation.execution import run_evaluation_case
 
 
 TASK_PROFILES = {
-    "minimum-phase-classic": "quadruple-minimum-phase",
-    "nonminimum-phase-classic": "quadruple-nonminimum-phase",
-    "pminus-reference-step": "quadruple-minimum-phase",
-    "pplus-reference-step": "quadruple-nonminimum-phase",
+    "minimum-phase": "quadruple-minimum-phase",
+    "nonminimum-phase": "quadruple-nonminimum-phase",
     "zero-boundary-stress": "quadruple-zero-boundary",
 }
 
@@ -30,20 +28,17 @@ def main() -> None:
     parser.add_argument("--profile", default=None)
     parser.add_argument("--horizons", default="10", help="comma-separated integers")
     parser.add_argument("--move-weights", default="0", help="comma-separated floats")
+    parser.add_argument("--error-weight", type=float, default=1.0)
+    parser.add_argument(
+        "--ranking-metric",
+        choices=("tracking_error_cost", "tracking_cost"),
+        default="tracking_cost",
+    )
     parser.add_argument("--cv-scales", default="1", help="comma-separated scalar scales")
     parser.add_argument("--seed", type=int, default=9000)
     parser.add_argument("--episode-steps", type=int, default=None)
     args = parser.parse_args()
 
-    protocol = resolve_protocol(
-        "quadruple",
-        "tracking",
-        {
-            "task": args.task,
-            "action_mode": "actuator",
-            **({"episode_steps": args.episode_steps} if args.episode_steps else {}),
-        },
-    )
     profile = args.profile or TASK_PROFILES[args.task]
     grid = itertools.product(
         _csv(args.horizons, int),
@@ -52,6 +47,17 @@ def main() -> None:
     )
     rows = []
     for horizon, move, cv_scale in grid:
+        protocol = resolve_protocol(
+            "quadruple",
+            "tracking",
+            {
+                "task": args.task,
+                "action_mode": "actuator",
+                "tracking_q_y": args.error_weight,
+                "tracking_r_move": move,
+                **({"episode_steps": args.episode_steps} if args.episode_steps else {}),
+            },
+        )
         parameters = {
             "P": horizon,
             "move_supp": move,
@@ -84,8 +90,12 @@ def main() -> None:
         if not row["constraint_violation_count"] and not row["controller_fallback_count"]
     ]
     ranked = feasible or rows
-    best = min(ranked, key=lambda row: float(row["tracking_error_cost"]))
-    print(json.dumps({"best": best, "candidate_count": len(rows)}, sort_keys=True))
+    best = min(ranked, key=lambda row: float(row[args.ranking_metric]))
+    print(json.dumps({
+        "best": best,
+        "candidate_count": len(rows),
+        "ranking_metric": args.ranking_metric,
+    }, sort_keys=True))
 
 
 if __name__ == "__main__":

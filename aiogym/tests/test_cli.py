@@ -40,7 +40,6 @@ def test_list_tasks_can_filter_by_scenario(capsys):
         (("train", "rlpd"), "_train_rlpd"),
         (("artifacts", "report"), "_artifact_report"),
         (("artifacts", "check"), "_artifact_check"),
-        (("model-cards",), "_model_cards"),
     ],
 )
 def test_unified_commands_delegate_arguments_unchanged(monkeypatch, route, target):
@@ -66,18 +65,44 @@ def test_group_without_leaf_prints_group_help(capsys):
     assert "suite" in output
 
 
-def test_console_script_metadata_keeps_legacy_aliases():
+def test_benchmark_options_use_direct_single_benchmark(monkeypatch):
+    received = []
+
+    def fake_handler(argv):
+        received.append(argv)
+        return 17
+
+    monkeypatch.setattr(cli, "_direct_benchmark", fake_handler)
+
+    result = cli.main([
+        "benchmark", "--scenario", "quadruple", "--task", "minimum-phase"
+    ])
+
+    assert result == 17
+    assert received == [[
+        "--scenario", "quadruple", "--task", "minimum-phase"
+    ]]
+
+
+def test_benchmark_setpoint_parser():
+    from aiogym.cli.single_benchmark import parse_setpoint_step
+
+    assert parse_setpoint_step("120:13.25,11.75") == {
+        "at_step": 120,
+        "values": [13.25, 11.75],
+    }
+    with pytest.raises(ValueError, match="STEP:VALUE1"):
+        parse_setpoint_step("120")
+
+
+def test_console_script_metadata_exposes_only_unified_cli():
     pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
     text = pyproject.read_text()
 
-    expected_entries = (
-        'aiogym = "aiogym.cli.main:main"',
-        'aiogym-artifact-check = "aiogym.cli.artifact_tools:artifact_check_main"',
-        'aiogym-model-cards = "aiogym.cli.artifact_tools:model_cards_main"',
-        'aiogym-report = "aiogym.cli.artifact_tools:report_main"',
-        'aiogym-single-benchmark = "aiogym.cli.single_benchmark:main"',
-        'aiogym-suite-benchmark = "aiogym.cli.suite_benchmark:main"',
-        'aiogym-train-rlpd = "aiogym.rl.train_rlpd:main"',
-        'aiogym-train-sb3 = "aiogym.rl.train_sb3:main"',
-    )
-    assert all(entry in text for entry in expected_entries)
+    assert 'aiogym = "aiogym.cli.main:main"' in text
+    for removed in (
+        "aiogym-artifact-check", "aiogym-model-cards", "aiogym-report",
+        "aiogym-single-benchmark", "aiogym-suite-benchmark",
+        "aiogym-train-rlpd", "aiogym-train-sb3",
+    ):
+        assert removed not in text

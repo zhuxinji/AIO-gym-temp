@@ -164,10 +164,12 @@ class NMPCOracle:
 
     def _tracking_state_cost(self, x, sp):
         y = self.model.controlled_output(x, backend="casadi", ca=ca)
+        scales = self.model.controlled_output_scales()
         c = 0
         for i, yi in enumerate(y):
             weight = self.q_y[i] if i < len(self.q_y) else 1.0
-            c += weight * (yi - sp["y_sp"][i]) ** 2
+            scale = float(scales[i]) if i < len(scales) else 1.0
+            c += weight * ((yi - sp["y_sp"][i]) / max(scale, 1e-12)) ** 2
         return c
 
     def _econ_profit(self, x, u, d):

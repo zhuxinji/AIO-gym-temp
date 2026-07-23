@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ._internal.identifiers import canonical_scenario_ids
-from .controllers import registered_controllers
-from .models.tasks import list_task_profiles
+from .controllers.registry import _controller_ids
+from .models.tasks import list_tasks as _list_tasks
 from .models.registry import MODELS
 
 
@@ -21,7 +21,7 @@ def list_scenarios() -> tuple[str, ...]:
 def list_tasks(scenario: str | None = None) -> tuple[str, ...]:
     """Return canonical ``scenario/name`` IDs for bundled task specs."""
 
-    return list_task_profiles(scenario)
+    return _list_tasks(scenario)
 
 
 def list_suites() -> tuple[str, ...]:
@@ -35,7 +35,7 @@ def list_suites() -> tuple[str, ...]:
 def list_controllers() -> tuple[str, ...]:
     """Return canonical IDs for all currently registered controllers."""
 
-    return registered_controllers()
+    return _controller_ids()
 
 
 __all__ = ["list_controllers", "list_scenarios", "list_suites", "list_tasks"]

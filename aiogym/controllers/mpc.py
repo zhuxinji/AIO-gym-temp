@@ -15,7 +15,8 @@ class MPCAgent:
     action_mode = "actuator"
     control_structure = "fixed_sp_mpc"
 
-    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, cv_scale=None):
+    def __init__(self, model, Ts=0.5, P=40, move_supp=0.8, cv_scale=None,
+                 q_y=1.0):
         self.m = model
         self.nu = model.action_dim()
         self.nx = len(model.initial_state())
@@ -24,6 +25,7 @@ class MPCAgent:
         self.P = positive_int("P", P)
         self.move_supp = nonnegative_float("move_supp", move_supp)
         self.cv_scale = self._resolve_cv_scale(cv_scale)
+        self.q_y = self._resolve_q_y(q_y)
         self.reset()
 
     def _resolve_cv_scale(self, cv_scale):
@@ -40,6 +42,17 @@ class MPCAgent:
             raise ValueError("cv_scale values must be finite and positive")
         return values
 
+    def _resolve_q_y(self, q_y):
+        values = q_y if isinstance(q_y, (list, tuple)) else [q_y]
+        values = [nonnegative_float("q_y", value) for value in values]
+        if len(values) == 1:
+            values *= self.ncv
+        if len(values) != self.ncv:
+            raise ValueError(
+                f"q_y must contain 1 or {self.ncv} values, got {len(values)}"
+            )
+        return values
+
     def metadata(self):
         return {"name": self.name, "class": self.__class__.__name__,
                 "kind": "successive_linearization_mpc", "scenario": self.m.scenario,
@@ -48,7 +61,8 @@ class MPCAgent:
                 "Ts": self.Ts, "horizon": self.P,
                 "move_supp": self.move_supp,
                 "initialization": "tracking_steady_state_action",
-                "cv_scale": self.cv_scale}
+                "cv_scale": self.cv_scale,
+                "q_y": self.q_y}
 
     def reset(self, seed=None):
         initializer = getattr(self.m, "mpc_init", None)
@@ -71,7 +85,10 @@ class MPCAgent:
         return np.asarray(self.m.controlled_output(list(x)), dtype=np.float64)
 
     def _wcv(self):
-        return np.array([1.0 / max(float(scale), 1e-12) ** 2 for scale in self.cv_scale], dtype=np.float64)
+        return np.array([
+            float(weight) / max(float(scale), 1e-12) ** 2
+            for weight, scale in zip(self.q_y, self.cv_scale)
+        ], dtype=np.float64)
 
     def compute(self, meas, sp, dt):
         self._clock += dt

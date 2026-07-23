@@ -21,7 +21,7 @@ retain the snapshot limitations stated below.
 - [Concepts](concepts.md) — how scenario, task, objective, controller, action
   mode, suite, and artifact fit together.
 - [Architecture](architecture.md) — source layout, layer ownership, runtime data
-  flow, compatibility facades, and extension points.
+  flow, and extension points.
 - [Capability matrix](capabilities.md) — current built-in scenarios, formal
   tasks, objective declarations, action modes, and controller entry points.
 - [Public API guide](public_api.md) — supported Python and command-line entry
@@ -29,8 +29,6 @@ retain the snapshot limitations stated below.
 
 ## Models and experiments
 
-- [Model-card index](model_cards/README.md) — generated metadata summaries for
-  all eight registered scenarios.
 - [Physical-model infrastructure](model_infrastructure.md) — model contracts,
   parameter provenance, numerical readiness, and the acceptance gate for new
   physical models.
@@ -38,16 +36,17 @@ retain the snapshot limitations stated below.
   experiment declarations, objective resolution, and task-owned operation
   semantics.
 
-The `docs/scenarios/` directory contains selected deep case studies, not a
-complete list of supported scenarios:
+The `docs/scenarios/` directory is the single documentation entry point for
+all built-in process models:
 
 - [Heated-tank cascade](scenarios/cascade.md)
 - [Recirculating heated-tank cascade](scenarios/cascade_recirculating.md)
 - [Johansson quadruple-tank process](scenarios/quadruple.md)
-
-Use the [model-card index](model_cards/README.md) or the
-[capability matrix](capabilities.md) when you need coverage of all eight
-scenarios.
+- [Exothermic CSTR](scenarios/cstr.md)
+- [Two-zone HVAC](scenarios/hvac.md)
+- [Multistage extraction column](scenarios/extraction.md)
+- [Fired heater](scenarios/heater.md)
+- [Batch crystallization](scenarios/crystallization.md)
 
 ## Validation and research records
 
@@ -60,17 +59,5 @@ and working-tree state stated in that report.
 - [Recirculating-cascade accuracy and authenticity snapshot](reports/cascade-recirculating-accuracy-authenticity.md)
 
 The adjacent JSON files are machine-readable evidence from the same snapshots;
-they are not a live catalog of current tasks.
-
-## Internal implementation records
-
-Files under `docs/plans/` are historical implementation context. They may
-mention paths, compatibility tasks, or intermediate behavior that no longer
-exists. Do not use them as current API or configuration documentation.
-
-- [Cascade modification plan](plans/cascade-model-modification-plan.md)
-- [Cascade stage-0 baseline](plans/cascade-stage0-baseline.md)
-- [Recirculating-cascade implementation plan](plans/cascade-recirculating-implementation-plan.md)
-
-For current behavior, prefer the README, concepts, capability matrix, public
-API guide, task declarations, and executable registries.
+they are not a live catalog of current tasks. Historical implementation plans
+are retained in Git history rather than published as current documentation.

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
 import os
 import time
 
@@ -19,7 +20,7 @@ from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import (
     evaluate_controller,
-    resolve_objective_reward_mode,
+    reward_mode_for_objective,
     resolve_protocol,
     rollout_controller,
 )
@@ -36,10 +37,8 @@ def make_training_env(args, rank: int = 0):
     def _init():
         env = AIOGymNativeEnv(
             args.scenario,
-            reward_mode=(
-                getattr(args, "resolved_reward_mode", None)
-                or getattr(args, "reward_mode", "kpi")
-            ),
+            task=args.task,
+            reward_mode=args.resolved_reward_mode,
             action_mode=args.action_mode,
             control_dt=args.control_dt,
             episode_steps=args.train_episode_steps,
@@ -49,9 +48,15 @@ def make_training_env(args, rank: int = 0):
             randomize_plant=args.randomize_plant,
             plant_drift=args.plant_drift,
             integral_obs=args.integral_obs,
+            disturbance_obs=args.disturbance_obs,
+            previous_action_obs=args.previous_action_obs,
+            normalize_observations=args.normalize_observations,
+            tracking_error_obs=args.tracking_error_obs,
             terminate_on_runaway=args.terminate_on_runaway,
             noise=args.noise,
             noise_pct=args.noise_pct,
+            tracking_q_y=args.tracking_q_y,
+            tracking_r_move=args.tracking_r_move,
         )
         env.reset(seed=args.seed + rank)
         return env
@@ -87,6 +92,7 @@ def build_algo(args, env):
         seed=args.seed,
         device=args.device,
         learning_rate=args.learning_rate,
+        gamma=args.gamma,
         tensorboard_log=args.tensorboard_log,
     )
     if algo == "sac":
@@ -122,8 +128,15 @@ def evaluate_checkpoint(args, checkpoint_path: str):
         args.eval_objective,
         {
             "action_mode": args.action_mode,
+            **({"task": args.task} if args.task else {}),
             "episode_steps": args.eval_episode_steps,
             "control_dt": args.control_dt,
+            "tracking_q_y": args.tracking_q_y,
+            "tracking_r_move": args.tracking_r_move,
+            "disturbance_obs": args.disturbance_obs,
+            "previous_action_obs": args.previous_action_obs,
+            "normalize_observations": args.normalize_observations,
+            "tracking_error_obs": args.tracking_error_obs,
         },
     )
     controller = make_controller(
@@ -168,8 +181,15 @@ def evaluate_training_policy(args, model, step: int, phase: str = "eval"):
         args.eval_objective,
         {
             "action_mode": args.action_mode,
+            **({"task": args.task} if args.task else {}),
             "episode_steps": args.eval_episode_steps,
             "control_dt": args.control_dt,
+            "tracking_q_y": args.tracking_q_y,
+            "tracking_r_move": args.tracking_r_move,
+            "disturbance_obs": args.disturbance_obs,
+            "previous_action_obs": args.previous_action_obs,
+            "normalize_observations": args.normalize_observations,
+            "tracking_error_obs": args.tracking_error_obs,
         },
     )
     controller = make_controller(
@@ -205,10 +225,20 @@ def evaluate_training_policy(args, model, step: int, phase: str = "eval"):
     return learning_curve_point(step, result, phase=phase)
 
 
-def training_metadata(args, checkpoint_path: str):
-    return {
+def training_metadata(
+    args,
+    checkpoint_path: str,
+    *,
+    final_checkpoint_path: str | None = None,
+    best_checkpoint_path: str | None = None,
+    best_step: int | None = None,
+    best_metric_value: float | None = None,
+    checkpoint_selection: str = "final",
+):
+    metadata = {
         "algo": args.algo,
         "scenario": args.scenario,
+        "task": args.task,
         "action_mode": args.action_mode,
         "objective": args.objective,
         "resolved_reward_mode": args.resolved_reward_mode,
@@ -220,22 +250,53 @@ def training_metadata(args, checkpoint_path: str):
         "device": args.device,
         "torch_threads": args.torch_threads,
         "train_episode_steps": args.train_episode_steps,
+        "gamma": args.gamma,
+        "learning_rate": args.learning_rate,
+        "batch_size": args.batch_size,
+        "buffer_size": args.buffer_size,
+        "learning_starts": args.learning_starts,
+        "train_freq": args.train_freq,
+        "gradient_steps": args.gradient_steps,
+        "learning_curve_every": args.learning_curve_every,
+        "learning_curve_episodes": args.learning_curve_episodes,
+        "save_rollout": args.save_rollout,
+        "tracking_q_y": args.tracking_q_y,
+        "tracking_r_move": args.tracking_r_move,
+        "disturbance_obs": args.disturbance_obs,
+        "previous_action_obs": args.previous_action_obs,
+        "normalize_observations": args.normalize_observations,
+        "tracking_error_obs": args.tracking_error_obs,
         "env_kwargs": {
-            "auto_events": getattr(
-                args, "auto_events", getattr(args, "dynamic", False)
-            ),
+            "auto_events": args.auto_events,
             "randomize": args.randomize,
             "randomize_setpoints": args.randomize_setpoints,
             "randomize_plant": args.randomize_plant,
             "plant_drift": args.plant_drift,
             "integral_obs": args.integral_obs,
+            "disturbance_obs": args.disturbance_obs,
+            "previous_action_obs": args.previous_action_obs,
+            "normalize_observations": args.normalize_observations,
+            "tracking_error_obs": args.tracking_error_obs,
             "terminate_on_runaway": args.terminate_on_runaway,
             "noise": args.noise,
             "noise_pct": args.noise_pct,
             "control_dt": args.control_dt,
+            "task": args.task,
+            "tracking_q_y": args.tracking_q_y,
+            "tracking_r_move": args.tracking_r_move,
         },
         "checkpoint_path": checkpoint_path,
+        "checkpoint_selection": checkpoint_selection,
     }
+    if final_checkpoint_path is not None:
+        metadata["final_checkpoint_path"] = final_checkpoint_path
+    if best_checkpoint_path is not None:
+        metadata["best_checkpoint_path"] = best_checkpoint_path
+    if best_step is not None:
+        metadata["best_step"] = int(best_step)
+    if best_metric_value is not None:
+        metadata["best_metric_value"] = float(best_metric_value)
+    return metadata
 
 
 def artifact_dir_for(args, run_name: str) -> str:
@@ -245,45 +306,92 @@ def artifact_dir_for(args, run_name: str) -> str:
 def run_name_for(args, run_id: str | None = None) -> str:
     if args.name:
         return args.name
-    objective = getattr(args, "objective", None) or getattr(args, "reward_mode", "kpi")
-    stem = f"{args.algo}_{args.scenario}_{args.action_mode}_{objective}_seed{args.seed}"
+    objective = getattr(args, "objective", None) or "kpi"
+    task = getattr(args, "task", None)
+    identity = f"{args.scenario}_{task}" if task else args.scenario
+    stem = f"{args.algo}_{identity}_{args.action_mode}_{objective}_seed{args.seed}"
     return f"{stem}_{run_id or utc_run_id()}"
 
 
-def configure_training_objective(args, *, warn_legacy: bool = True):
+def configure_training_objective(args):
     """Resolve the public training objective and its internal environment reward."""
 
-    objective, reward_mode = resolve_objective_reward_mode(
-        getattr(args, "objective", None),
-        getattr(args, "reward_mode", None),
-        default_objective="kpi",
-        warn_legacy=warn_legacy,
-    )
+    if getattr(args, "reward_mode", None) is not None:
+        raise ValueError("reward_mode is not supported; use objective")
+    objective = getattr(args, "objective", None)
+    task_name = getattr(args, "task", None)
+    if objective is None and task_name:
+        from aiogym.models.tasks import load_task_profile
+
+        task = load_task_profile(task_name, scenario=args.scenario)
+        objective = task.get("default_objective")
+    objective = objective or "kpi"
+    reward_mode = reward_mode_for_objective(objective)
     args.objective = objective
     args.resolved_reward_mode = reward_mode
-    # Keep this internal attribute for existing helper calls; generated metadata
-    # uses objective + resolved_reward_mode instead.
-    args.reward_mode = reward_mode
     if hasattr(args, "eval_objective") and args.eval_objective is None:
         args.eval_objective = objective
     return args
 
 
-def configure_training_auto_events(args, *, warn_legacy: bool = True):
-    """Resolve the automatic-event flag and deprecated CLI alias."""
+def configure_training_auto_events(args):
+    """Resolve the automatic-event flag."""
 
-    auto_events = resolve_auto_events(
-        getattr(args, "auto_events", None),
-        getattr(args, "dynamic", None),
-        default=False,
-        warn_legacy=warn_legacy and getattr(args, "dynamic", None) is not None,
+    if getattr(args, "dynamic", None) is not None:
+        raise ValueError("dynamic is not supported; use auto_events")
+    args.auto_events = resolve_auto_events(
+        getattr(args, "auto_events", None), default=False
     )
-    args.auto_events = auto_events
-    args.dynamic = auto_events
     return args
 
 
-def make_learning_curve_callback(args):
+def configure_training_task(args):
+    """Resolve task-owned timing while preserving explicit CLI overrides."""
+
+    config = {
+        "action_mode": args.action_mode,
+        "tracking_q_y": args.tracking_q_y,
+        "tracking_r_move": args.tracking_r_move,
+        "disturbance_obs": args.disturbance_obs,
+        "previous_action_obs": args.previous_action_obs,
+        "normalize_observations": args.normalize_observations,
+        "tracking_error_obs": args.tracking_error_obs,
+    }
+    if args.task:
+        config["task"] = args.task
+    if args.control_dt is not None:
+        config["control_dt"] = args.control_dt
+    if args.train_episode_steps is not None:
+        config["episode_steps"] = args.train_episode_steps
+    protocol = resolve_protocol(args.scenario, args.objective, config)
+    args.control_dt = protocol.control_dt
+    args.train_episode_steps = protocol.episode_steps
+    args.tracking_q_y = protocol.tracking_q_y
+    args.tracking_r_move = protocol.tracking_r_move
+    for name in (
+        "disturbance_obs",
+        "previous_action_obs",
+        "normalize_observations",
+        "tracking_error_obs",
+    ):
+        setattr(args, name, getattr(protocol, name))
+    if args.eval_episode_steps is None:
+        args.eval_episode_steps = protocol.episode_steps if args.task else 80
+    return args
+
+
+def _learning_curve_point_is_better(row, best_metric_value):
+    value = float(row["metric_value"])
+    if not math.isfinite(value):
+        return False
+    if best_metric_value is None:
+        return True
+    if row.get("metric_direction") == "maximize":
+        return value > best_metric_value
+    return value < best_metric_value
+
+
+def make_learning_curve_callback(args, best_checkpoint_path: str | None = None):
     from stable_baselines3.common.callbacks import BaseCallback
 
     class LearningCurveCallback(BaseCallback):
@@ -291,6 +399,8 @@ def make_learning_curve_callback(args):
             super().__init__()
             self.history = []
             self._next_eval = max(1, int(args.learning_curve_every))
+            self.best_metric_value = None
+            self.best_step = None
 
         def _on_step(self) -> bool:
             if args.learning_curve_every <= 0 or self.num_timesteps < self._next_eval:
@@ -298,6 +408,13 @@ def make_learning_curve_callback(args):
             row = evaluate_training_policy(args, self.model, self.num_timesteps)
             row["timesteps"] = self.num_timesteps
             self.history.append(row)
+            if (
+                best_checkpoint_path is not None
+                and _learning_curve_point_is_better(row, self.best_metric_value)
+            ):
+                self.best_metric_value = float(row["metric_value"])
+                self.best_step = int(self.num_timesteps)
+                self.model.save(best_checkpoint_path)
             self._next_eval += max(1, int(args.learning_curve_every))
             return True
 
@@ -348,19 +465,14 @@ def require_onnx_export_dependencies():
 def main(argv=None, prog=None):
     ap = argparse.ArgumentParser(prog=prog)
     ap.add_argument("--scenario", default="cstr")
+    ap.add_argument("--task", default=None, help="named scenario task profile")
     ap.add_argument("--algo", default="sac", choices=["sac", "ppo", "td3"])
     ap.add_argument("--action-mode", default="actuator", choices=["actuator", "setpoint"])
     ap.add_argument(
         "--objective",
         default=None,
         choices=["economic", "tracking", "robustness", "safety", "kpi"],
-        help="training objective; defaults to kpi",
-    )
-    ap.add_argument(
-        "--reward-mode",
-        default=None,
-        choices=["kpi", "economic", "tracking"],
-        help="deprecated compatibility alias for --objective",
+        help="training objective; task-owned when available, otherwise kpi",
     )
     ap.add_argument("--steps", type=int, default=10000)
     ap.add_argument("--n-envs", type=int, default=default_n_envs())
@@ -368,35 +480,75 @@ def main(argv=None, prog=None):
                     help="parallel rollout backend; subproc gives one process per env")
     ap.add_argument("--subproc-start-method", default="fork", choices=["fork", "forkserver", "spawn"],
                     help="multiprocessing start method for SubprocVecEnv")
-    ap.add_argument("--train-episode-steps", type=int, default=400)
+    ap.add_argument("--train-episode-steps", type=int, default=None,
+                    help="override task episode length; task/default owns it when omitted")
     ap.add_argument("--seed", type=int, default=1000)
-    ap.add_argument("--control-dt", type=float, default=0.5)
+    ap.add_argument("--control-dt", type=float, default=None,
+                    help="override task control interval; task/default owns it when omitted")
+    ap.add_argument("--tracking-q-y", type=float, default=None,
+                    help="override scalar tracking weight Q; task-owned when omitted")
+    ap.add_argument("--tracking-r-move", type=float, default=None,
+                    help="override move weight R; task-owned when omitted")
     ap.add_argument(
         "--auto-events",
         action="store_true",
         default=None,
         help="enable generic automatically generated within-episode events",
     )
-    ap.add_argument(
-        "--dynamic",
-        action="store_true",
-        default=None,
-        help="deprecated compatibility alias for --auto-events",
-    )
     ap.add_argument("--randomize", action="store_true")
     ap.add_argument("--randomize-setpoints", action="store_true")
     ap.add_argument("--randomize-plant", action="store_true")
     ap.add_argument("--plant-drift", action="store_true")
     ap.add_argument("--integral-obs", action="store_true")
+    ap.add_argument(
+        "--disturbance-obs",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="include current disturbances in the policy observation; task-owned when omitted",
+    )
+    ap.add_argument(
+        "--previous-action-obs",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="include the previous applied action; task-owned when omitted",
+    )
+    ap.add_argument(
+        "--normalize-observations",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="scale observations with fixed physical bounds; task-owned when omitted",
+    )
+    ap.add_argument(
+        "--tracking-error-obs",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="replace setpoints with normalized tracking errors; task-owned when omitted",
+    )
     ap.add_argument("--terminate-on-runaway", action="store_true")
     ap.add_argument("--noise", action="store_true")
     ap.add_argument("--noise-pct", type=float, default=0.01)
     ap.add_argument("--learning-rate", type=float, default=3e-4)
+    ap.add_argument(
+        "--gamma",
+        type=float,
+        default=0.99,
+        help="discount factor; use a value near 1 for long-horizon tracking",
+    )
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--buffer-size", type=int, default=300000)
     ap.add_argument("--learning-starts", type=int, default=100)
-    ap.add_argument("--train-freq", type=int, default=1)
-    ap.add_argument("--gradient-steps", type=int, default=1)
+    ap.add_argument(
+        "--train-freq",
+        type=int,
+        default=1,
+        help="vector-environment rollout steps between optimizer phases",
+    )
+    ap.add_argument(
+        "--gradient-steps",
+        type=int,
+        default=1,
+        help="optimizer steps per phase; with N environments, N gives about one update per collected transition",
+    )
     ap.add_argument("--ppo-n-steps", type=int, default=2048)
     ap.add_argument("--device", default=None,
                     help="SB3 policy device; defaults to CUDA if available, otherwise CPU. Use 'mps' explicitly if desired.")
@@ -415,19 +567,28 @@ def main(argv=None, prog=None):
         help="evaluation objective; defaults to the training objective",
     )
     ap.add_argument("--eval-episodes", type=int, default=3)
-    ap.add_argument("--eval-episode-steps", type=int, default=80)
+    ap.add_argument("--eval-episode-steps", type=int, default=None,
+                    help="override evaluation episode length; task owns it when omitted")
     ap.add_argument("--eval-seed", type=int, default=9000)
     ap.add_argument("--eval-seed-list", default=None)
-    ap.add_argument("--learning-curve-every", type=int, default=0,
-                    help="evaluate the in-memory policy every N timesteps; 0 records only the final point")
+    ap.add_argument("--learning-curve-every", type=int, default=10000,
+                    help="evaluate every N timesteps; 0 records only initial/final points (default: 10000)")
     ap.add_argument("--learning-curve-episodes", type=int, default=1)
-    ap.add_argument("--save-rollout", action="store_true")
+    ap.add_argument(
+        "--save-rollout",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="save a final tracking rollout for report plots (default: enabled)",
+    )
     ap.add_argument("--rollout-steps", type=int, default=None)
     ap.add_argument("--onnx", action="store_true", help="export deterministic policy to ONNX after training")
     ap.add_argument("--onnx-path", default=None, help="optional ONNX export path; defaults to checkpoint basename + .onnx")
     args = ap.parse_args(argv)
+    if not 0.0 < args.gamma <= 1.0:
+        ap.error("--gamma must be in (0, 1]")
     configure_training_objective(args)
     configure_training_auto_events(args)
+    configure_training_task(args)
     if args.onnx:
         require_onnx_export_dependencies()
 
@@ -462,26 +623,66 @@ def main(argv=None, prog=None):
         f"device={args.device} | action={args.action_mode} | "
         f"objective={args.objective} | reward={args.resolved_reward_mode}"
     )
+    curve_callback = make_learning_curve_callback(args, checkpoint_path)
+    initial_curve_point = evaluate_training_policy(args, model, 0, phase="initial")
+    initial_curve_point["timesteps"] = 0
+    curve_callback.history.append(initial_curve_point)
     t0 = time.time()
-    curve_callback = make_learning_curve_callback(args)
     model.learn(total_timesteps=args.steps, progress_bar=False, callback=curve_callback)
     train_seconds = time.time() - t0
-    model.save(checkpoint_path)
+    final_step = int(getattr(model, "num_timesteps", args.steps))
+    if (
+        curve_callback.history
+        and int(curve_callback.history[-1].get("timesteps", -1)) == final_step
+    ):
+        final_curve_point = dict(curve_callback.history[-1])
+        final_curve_point["phase"] = "final"
+    else:
+        final_curve_point = evaluate_training_policy(
+            args, model, final_step, phase="final"
+        )
+    final_curve_point["timesteps"] = final_step
+    final_checkpoint_path = f"{checkpoint_path}_final"
+    model.save(final_checkpoint_path)
+    final_checkpoint_zip = f"{final_checkpoint_path}.zip"
+    if curve_callback.best_step is None:
+        model.save(checkpoint_path)
+        checkpoint_selection = "final"
+    else:
+        checkpoint_selection = "best-evaluation"
     checkpoint_zip = f"{checkpoint_path}.zip"
     onnx_path = None
     if args.onnx:
         onnx_path = args.onnx_path or f"{checkpoint_path}.onnx"
-        export_onnx(model, env.observation_space.shape[0], onnx_path)
+        export_model = model
+        if checkpoint_selection == "best-evaluation":
+            algorithm_class = type(model)
+            export_model = algorithm_class.load(
+                checkpoint_zip,
+                device=args.device,
+            )
+        export_onnx(export_model, env.observation_space.shape[0], onnx_path)
     env.close()
 
     protocol, result, rollout = evaluate_checkpoint(args, checkpoint_zip)
-    training = training_metadata(args, checkpoint_zip)
+    training = training_metadata(
+        args,
+        checkpoint_zip,
+        final_checkpoint_path=final_checkpoint_zip,
+        best_checkpoint_path=(
+            checkpoint_zip if curve_callback.best_step is not None else None
+        ),
+        best_step=curve_callback.best_step,
+        best_metric_value=curve_callback.best_metric_value,
+        checkpoint_selection=checkpoint_selection,
+    )
     if onnx_path is not None:
         training["onnx_path"] = onnx_path
     learning_curve = list(curve_callback.history)
-    final_curve_point = learning_curve_point(args.steps, result, phase="final")
-    final_curve_point["timesteps"] = args.steps
-    learning_curve.append(final_curve_point)
+    if learning_curve and int(learning_curve[-1].get("timesteps", -1)) == final_step:
+        learning_curve[-1] = final_curve_point
+    else:
+        learning_curve.append(final_curve_point)
     artifact_payload = rl_payload(
         kind="sb3_train_eval",
         scenario=args.scenario,
@@ -510,7 +711,8 @@ def main(argv=None, prog=None):
     write_rl_artifacts(artifact_dir_for(args, run_name), artifact_payload)
 
     metric = result["metric"]
-    print(f"saved checkpoint {checkpoint_zip}")
+    print(f"saved selected checkpoint {checkpoint_zip} ({checkpoint_selection})")
+    print(f"saved final checkpoint {final_checkpoint_zip}")
     if onnx_path is not None:
         print(f"exported onnx {onnx_path}")
     print(f"saved artifacts {artifact_dir_for(args, run_name)}")

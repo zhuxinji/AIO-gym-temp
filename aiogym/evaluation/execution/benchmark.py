@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .._internal.config import as_list, load_config, protocol_data
-from .._internal.paths import run_path
-from .._internal.serialization import jsonable
-from .cases import BenchmarkCase
-from .metric_catalog import PUBLIC_BENCHMARK_SCHEMA_VERSION
-from .protocols import resolve_protocol
-from .aggregation import build_evaluation_report
+from ..._internal.config import as_list, load_config, protocol_data
+from ..._internal.paths import run_path
+from ..._internal.serialization import jsonable
+from ..cases import BenchmarkCase
+from ..metric_catalog import PUBLIC_BENCHMARK_SCHEMA_VERSION
+from ..protocols import resolve_protocol
+from ..results import build_evaluation_report
 from .runner import execute_benchmark_case
 
 
@@ -134,7 +134,7 @@ def run_benchmark(
         "report": build_evaluation_report(results) if results else {},
         "errors": errors,
     }
-    from .artifacts import finalize_benchmark_artifacts
+    from ..artifact import finalize_benchmark_artifacts
 
     return finalize_benchmark_artifacts(out_dir, payload)
 

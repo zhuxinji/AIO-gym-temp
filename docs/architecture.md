@@ -67,7 +67,7 @@ AIO-Gym/
 |   |   |-- registry.py             model registry and construction
 |   |   |-- declarative.py          declarative custom-model support
 |   |   |-- validation.py           numerical readiness checks
-|   |   |-- cards.py                model-card generation
+|   |   |-- cards.py                structured model metadata validation
 |   |   |-- scenarios/              eight built-in process models
 |   |   |-- parameters/             parameter metadata JSON files
 |   |   |-- tasks/                  task schema, registry, and built-in task JSON
@@ -88,24 +88,12 @@ AIO-Gym/
 |   |   |-- objective_specs.py      objective and reward-mode resolution
 |   |   |-- protocols.py            BenchmarkProtocol
 |   |   |-- cases.py                EnvironmentSpec and BenchmarkCase
-|   |   |-- evaluator.py            multi-episode evaluation
-|   |   |-- rollouts.py             scenario-neutral rollout recording
-|   |   |-- aggregation.py          result aggregation and report tables
-|   |   |-- metadata.py             diagnostics and reproducibility metadata
-|   |   |-- runner.py               one resolved benchmark-case execution path
-|   |   |-- benchmark.py            public configuration-driven benchmark API
-|   |   |-- task_acceptance.py      task acceptance evaluation
+|   |   |-- results.py              schemas, rows, aggregation, and task acceptance
+|   |   |-- suite.py                suite loading, expansion, summaries, and paths
 |   |   |-- metrics/                tracking/economic/KPI/safety/robustness metrics
-|   |   |-- suite_loading.py        suite loading, inheritance, and presets
-|   |   |-- suite_cases.py          resolved suite-case expansion
-|   |   |-- suite_results.py        suite summaries and artifact paths
+|   |   |-- execution/              benchmark, runner, evaluator, rollout, metadata
+|   |   |-- artifact/               writers, tables, plots, reports, and checks
 |   |   |-- suites/                 built-in suite JSON and shared presets
-|   |   |-- artifact_tables.py      leaderboard and CSV data preparation
-|   |   |-- artifact_writers.py     standard artifact file writing
-|   |   |-- artifact_plotting.py    plot orchestration
-|   |   |-- artifact_checks.py      artifact structure/content checks
-|   |   |-- report_rendering.py     Markdown report generation
-|   |   `-- plots.py                SVG rendering
 |   |
 |   |-- cli/                        command-line adapters
 |   |-- rl/                         SB3/RLPD training and transition datasets
@@ -118,23 +106,12 @@ AIO-Gym/
 `-- MANIFEST.in                     source-distribution files
 ```
 
-## Public APIs and compatibility facades
+## Public APIs
 
-Implementation modules are deliberately focused, but established imports remain
-available through stable facades:
-
-- `aiogym` exposes the primary user API;
-- `aiogym.controllers` exposes controller construction and registration;
-- `aiogym.evaluation.core` preserves earlier evaluation imports;
-- `aiogym.evaluation.protocols` preserves protocol and metric imports;
-- `aiogym.evaluation.artifacts` exposes artifact writing and plotting;
-- `aiogym.evaluation.reports` exposes report rendering and artifact checks;
-- `aiogym.evaluation.task_profiles` preserves the former task-profile path while
-  task definitions live under `aiogym.models.tasks`.
-
-Applications should prefer the top-level `aiogym` API or the documented package
-facades. The focused implementation modules are useful for extension and
-maintenance work, but are not all intended as permanent public APIs.
+`aiogym` exposes the supported user API, while `aiogym.controllers` and
+`aiogym.models` expose their documented extension contracts. Evaluation
+implementation modules are organized by responsibility and are not compatibility
+import surfaces.
 
 ## Configuration and generated data
 

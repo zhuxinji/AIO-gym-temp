@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, Mapping
 
-from .._internal.serialization import write_json as _write_json
-from .artifact_tables import (
+from ..._internal.serialization import write_json as _write_json
+from .tables import (
     _benchmark_case_key,
     _leaderboard,
     _plot_row,
@@ -15,7 +16,7 @@ from .artifact_tables import (
     _tracking_comparison_rows,
     _tracking_rollout_groups,
 )
-from .plots import (
+from .svg import (
     plot_constraint_timeline,
     plot_grouped_leaderboard,
     plot_learning_curve,
@@ -89,7 +90,8 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
             figures["leaderboard_by_scenario"] = str(leaderboard_path)
             artifact_figures["summary_figures"] = summary_figures
             artifact_figures["leaderboard_figure"] = str(leaderboard_path)
-    rollouts = list(payload.get("rollouts") or [])
+    rollouts = _resolved_rollouts(payload)
+    payload["rollouts"] = rollouts
     tracking_rollout_groups = _tracking_rollout_groups(rollouts)
     if tracking_rollout_groups:
         control_figures = {}
@@ -118,7 +120,7 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
     payload.setdefault("artifacts", {})
     for key in (
         "summary_figure", "leaderboard_figure", "summary_figures", "leaderboard_figures",
-        "tracking_control_figures",
+        "tracking_control_figures", "rollout_figure", "constraint_timeline_figure",
     ):
         payload["artifacts"].pop(key, None)
     payload["artifacts"].update(artifact_figures)
@@ -128,7 +130,29 @@ def plot_results(run_dir: str | Path) -> dict[str, str]:
 def _clear_comparison_figures(figures_dir: Path) -> None:
     for pattern in (
         "summary*.svg", "leaderboard*.svg", "tracking_comparison.svg",
-        "tracking_control_*.svg",
+        "tracking_control_*.svg", "*_rollout.svg", "constraint_timeline.svg",
     ):
         for path in figures_dir.glob(pattern):
             path.unlink()
+
+
+def _resolved_rollouts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Backfill rollout identity fields missing from older benchmark artifacts."""
+
+    resolved = []
+    for raw_rollout in payload.get("rollouts") or []:
+        rollout = dict(raw_rollout)
+        protocol = rollout.get("protocol") or {}
+        protocol_task = protocol.get("task")
+        if isinstance(protocol_task, Mapping):
+            protocol_task = protocol_task.get("name")
+        identity = {
+            "scenario": protocol.get("scenario") or payload.get("scenario"),
+            "task": protocol_task or payload.get("task"),
+            "objective": protocol.get("objective") or payload.get("objective"),
+        }
+        for key, value in identity.items():
+            if not rollout.get(key) and value:
+                rollout[key] = value
+        resolved.append(rollout)
+    return resolved

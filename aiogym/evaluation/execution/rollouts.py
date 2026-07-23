@@ -1,12 +1,12 @@
 """Scenario-neutral rollout recording."""
 from __future__ import annotations
 
-from .._internal.serialization import jsonable as _jsonable
-from ..controllers import as_controller, build_context, validate_action
-from .aggregation import result_schema
+from ..._internal.serialization import jsonable as _jsonable
+from ...controllers import as_controller, build_context, validate_action
+from ..results import result_schema
 from .metadata import _env_disturbances, _env_metadata, _env_objective
-from .objective_specs import ObjectiveSpec, objective_spec
-from .protocols import BenchmarkProtocol
+from ..objective_specs import ObjectiveSpec, objective_spec
+from ..protocols import BenchmarkProtocol
 
 
 def rollout_controller(agent, env, seed: int = 0, max_steps: int | None = None,

@@ -1,13 +1,14 @@
 """Standard benchmark artifact file writers."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from .._internal.identifiers import canonicalize_artifact_ids
-from .._internal.serialization import write_json as _write_json
-from ..models import collect_model_cards
-from .artifact_tables import (
+from ..._internal.identifiers import canonicalize_artifact_ids
+from ..._internal.serialization import write_json as _write_json
+from ...models import collect_model_cards
+from .tables import (
     _artifact_scenarios,
     _leaderboard,
     _rows_by_objective,
@@ -46,7 +47,9 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
     }
     _write_json(paths["input_config"], payload.get("config", payload.get("suite_config", {})))
     _write_json(paths["benchmark_config"], payload.get("benchmark_config", payload.get("configs", {})))
-    model_card_artifacts = _write_model_card_artifacts(dirs["metadata"], payload)
+    model_metadata_artifacts = _write_model_metadata_artifacts(
+        dirs["metadata"], payload
+    )
     _write_json(paths["rows"], payload.get("rows", []))
     rows = list(payload.get("rows", []))
     objective_groups = _rows_by_objective(rows)
@@ -88,7 +91,7 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
     _write_json(paths["report"], payload.get("report", {}))
     for key, path in paths.items():
         artifacts[key] = str(path)
-    artifacts.update(model_card_artifacts)
+    artifacts.update(model_metadata_artifacts)
 
     if payload.get("training"):
         training_path = dirs["training"] / "training.json"
@@ -108,36 +111,42 @@ def _write_benchmark_artifacts(out_dir: Path, payload: Mapping[str, Any]) -> dic
         artifacts["rollouts"] = str(rollout_path)
     return artifacts
 
-def _write_model_card_artifacts(metadata_dir: Path, payload: Mapping[str, Any]) -> dict[str, str]:
+def _write_model_metadata_artifacts(
+    metadata_dir: Path, payload: Mapping[str, Any]
+) -> dict[str, str]:
     scenarios = _artifact_scenarios(payload)
     if not scenarios:
         return {}
-    cards = collect_model_cards(scenarios)
+    metadata = collect_model_cards(scenarios)
     artifacts = {}
-    if len(cards) == 1:
-        cards_dir = metadata_dir / "model_cards"
-        _clear_json_files(cards_dir)
-        scenario, card = next(iter(cards.items()))
-        path = metadata_dir / "model_card.json"
-        _write_json(path, canonicalize_artifact_ids(card))
-        artifacts["model_card"] = str(path)
+    models_dir = metadata_dir / "models"
+    legacy_cards_dir = metadata_dir / "model_cards"
+    _clear_json_files(legacy_cards_dir)
+    legacy_single_path = metadata_dir / "model_card.json"
+    if legacy_single_path.exists():
+        legacy_single_path.unlink()
+    if len(metadata) == 1:
+        _clear_json_files(models_dir)
+        _, model_metadata = next(iter(metadata.items()))
+        path = metadata_dir / "model_metadata.json"
+        _write_json(path, canonicalize_artifact_ids(model_metadata))
+        artifacts["model_metadata"] = str(path)
         return artifacts
-    single_path = metadata_dir / "model_card.json"
+    single_path = metadata_dir / "model_metadata.json"
     if single_path.exists():
         single_path.unlink()
-    cards_dir = metadata_dir / "model_cards"
-    cards_dir.mkdir(parents=True, exist_ok=True)
-    _clear_json_files(cards_dir)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    _clear_json_files(models_dir)
     artifact_root = metadata_dir.parent
-    manifest = {"scenarios": list(cards), "cards": {}}
-    for scenario, card in cards.items():
-        path = cards_dir / f"{scenario}.json"
-        _write_json(path, canonicalize_artifact_ids(card))
-        manifest["cards"][scenario] = str(path.relative_to(artifact_root))
-    manifest_path = cards_dir / "manifest.json"
+    manifest = {"scenarios": list(metadata), "models": {}}
+    for scenario, model_metadata in metadata.items():
+        path = models_dir / f"{scenario}.json"
+        _write_json(path, canonicalize_artifact_ids(model_metadata))
+        manifest["models"][scenario] = str(path.relative_to(artifact_root))
+    manifest_path = models_dir / "manifest.json"
     _write_json(manifest_path, manifest)
-    artifacts["model_cards_dir"] = str(cards_dir)
-    artifacts["model_cards_manifest"] = str(manifest_path)
+    artifacts["model_metadata_dir"] = str(models_dir)
+    artifacts["model_metadata_manifest"] = str(manifest_path)
     return artifacts
 
 
@@ -146,3 +155,45 @@ def _clear_json_files(path: Path) -> None:
         return
     for child in path.glob("*.json"):
         child.unlink()
+
+
+def write_benchmark_artifacts(
+    out_dir: str | Path, payload: Mapping[str, Any]
+) -> dict[str, str]:
+    """Write the standard artifact directory for a benchmark payload."""
+
+    return _write_benchmark_artifacts(
+        Path(out_dir), canonicalize_artifact_ids(dict(payload))
+    )
+
+
+def finalize_benchmark_artifacts(
+    out_dir: str | Path,
+    payload: Mapping[str, Any],
+    *,
+    create_plots: bool = False,
+    markdown_report: bool = False,
+) -> dict[str, Any]:
+    """Write one canonical benchmark payload and its derived outputs."""
+
+    root = Path(out_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    data = canonicalize_artifact_ids(dict(payload))
+    data["artifacts"] = write_benchmark_artifacts(root, data)
+    benchmark_path = root / "benchmark.json"
+    _write_json(benchmark_path, data)
+    if create_plots:
+        from .plotting import plot_results
+
+        plot_results(root)
+        with benchmark_path.open() as stream:
+            data = json.load(stream)
+    if markdown_report:
+        from .report import render_benchmark_report
+
+        report_path = root / "report.md"
+        render_benchmark_report(root, out_path=report_path)
+        data.setdefault("artifacts", {})
+        data["artifacts"]["markdown_report"] = str(report_path)
+        _write_json(benchmark_path, data)
+    return data

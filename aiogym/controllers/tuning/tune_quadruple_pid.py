@@ -11,12 +11,12 @@ from pathlib import Path
 
 from aiogym.controllers import load_controller_config
 from aiogym.evaluation import resolve_protocol
-from aiogym.evaluation.runner import run_evaluation_case
+from aiogym.evaluation.execution import run_evaluation_case
 
 
 FAMILIES = {
     "minimum-phase": {
-        "tasks": [("minimum-phase-classic", "tracking"), ("pminus-reference-step", "tracking")],
+        "tasks": [("minimum-phase", "tracking")],
         "baseline_profile": "quadruple-minimum-phase-benchmark",
         "bias": 0.3,
         "kp_bounds": (0.03, 2.0),
@@ -24,7 +24,7 @@ FAMILIES = {
         "topologies": ["direct"],
     },
     "nonminimum-phase": {
-        "tasks": [("nonminimum-phase-classic", "tracking"), ("pplus-reference-step", "tracking")],
+        "tasks": [("nonminimum-phase", "tracking")],
         "baseline_profile": "quadruple-nonminimum-phase-benchmark",
         "bias": 0.315,
         "kp_bounds": (0.001, 0.3),

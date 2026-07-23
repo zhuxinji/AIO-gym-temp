@@ -2,30 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import inspect
 from typing import Any, Mapping, Protocol
 
 import numpy as np
 
 
 CONTROLLER_API_VERSION = "aiogym.controller.v1"
-
-
-def _call_compatible(func, calls, label: str):
-    """Call the first signature-compatible argument set without masking errors."""
-
-    try:
-        signature = inspect.signature(func)
-    except (TypeError, ValueError):
-        args, kwargs = calls[0]
-        return func(*args, **kwargs)
-    for args, kwargs in calls:
-        try:
-            signature.bind(*args, **kwargs)
-        except TypeError:
-            continue
-        return func(*args, **kwargs)
-    raise TypeError(f"{label} has an unsupported call signature")
 
 
 @dataclass(frozen=True)
@@ -86,8 +68,6 @@ def validate_action(action: Any, env, controller_name: str) -> np.ndarray:
 def controller_metadata(obj) -> dict[str, Any]:
     if hasattr(obj, "metadata"):
         return dict(obj.metadata())
-    if hasattr(obj, "protocol_metadata"):
-        return dict(obj.protocol_metadata())
     return {
         "name": getattr(obj, "name", obj.__class__.__name__),
         "class": obj.__class__.__name__,

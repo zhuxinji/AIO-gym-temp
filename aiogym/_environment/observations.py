@@ -24,10 +24,83 @@ class ObservationRuntimeMixin:
                         scale = float(hi) - float(lo)
                 noisy.append(float(value) + float(self.np_random.normal(0, self.noise_pct * scale)))
             state = noisy
-        o = state + list(self.y_sp) + list(self.model.disturbance_vector(self._env()))
+        setpoint = list(self.y_sp)
+        observed_output = list(self.model.controlled_output(state))
+        tracking_error = [
+            float(target) - float(value)
+            for target, value in zip(setpoint, observed_output)
+        ]
+        disturbance = list(self.model.disturbance_vector(self._env()))
+        previous_action = self.model.action_vector(self.previous_act)
+        if self.normalize_observations:
+            state = self._normalize_observation_values(
+                state, self.model.state_schema()
+            )
+            if self.tracking_error_obs:
+                tracking_error = self._normalize_observation_deltas(
+                    tracking_error, self.model.setpoint_schema()
+                )
+            else:
+                setpoint = self._normalize_observation_values(
+                    setpoint, self.model.setpoint_schema()
+                )
+            if self.disturbance_obs:
+                names = list(self.model.dynamics_disturbance_names())
+                by_name = {
+                    row.get("name"): row for row in self.model.disturbance_schema()
+                }
+                disturbance = self._normalize_observation_values(
+                    disturbance, [by_name.get(name, {}) for name in names]
+                )
+            if self.previous_action_obs:
+                previous_action = self._normalize_observation_values(
+                    previous_action, self.model.action_schema()
+                )
+        reference = tracking_error if self.tracking_error_obs else setpoint
+        o = state + reference
+        if self.disturbance_obs:
+            o += disturbance
+        if self.previous_action_obs:
+            o += previous_action
         if self.integral_obs:
             o = o + [iy / I_TEMP_MAX for iy in self._iy]
         return np.asarray(o, dtype=np.float32)
+
+    @staticmethod
+    def _normalize_observation_values(values, schema):
+        normalized = []
+        for value, row in zip(values, schema):
+            bounds = row.get("bounds") if isinstance(row, dict) else None
+            if (
+                isinstance(bounds, (tuple, list))
+                and len(bounds) == 2
+                and bounds[0] is not None
+                and bounds[1] is not None
+                and float(bounds[1]) > float(bounds[0])
+            ):
+                lo, hi = float(bounds[0]), float(bounds[1])
+                normalized.append((float(value) - lo) / (hi - lo))
+            else:
+                normalized.append(float(value))
+        return normalized
+
+    @staticmethod
+    def _normalize_observation_deltas(values, schema):
+        normalized = []
+        for value, row in zip(values, schema):
+            bounds = row.get("bounds") if isinstance(row, dict) else None
+            if (
+                isinstance(bounds, (tuple, list))
+                and len(bounds) == 2
+                and bounds[0] is not None
+                and bounds[1] is not None
+                and float(bounds[1]) > float(bounds[0])
+            ):
+                scale = float(bounds[1]) - float(bounds[0])
+                normalized.append(float(value) / scale)
+            else:
+                normalized.append(float(value))
+        return normalized
 
     def _accumulate_integral(self):
         if not self.model.supports_integral_observation:

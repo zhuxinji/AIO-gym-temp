@@ -9,7 +9,6 @@ from .contracts import (
     CONTROLLER_API_VERSION,
     Controller,
     ControllerContext,
-    _call_compatible,
     controller_metadata,
 )
 
@@ -33,30 +32,14 @@ class PolicyController:
 
     def reset(self, seed: int | None = None) -> None:
         if hasattr(self.policy, "reset"):
-            _call_compatible(
-                self.policy.reset,
-                (((), {"seed": seed}), ((), {})),
-                f"{self.policy.__class__.__name__}.reset",
-            )
+            self.policy.reset(seed=seed)
 
     def act(self, obs: np.ndarray, context: ControllerContext) -> np.ndarray:
         if hasattr(self.policy, "predict"):
-            out = _call_compatible(
-                self.policy.predict,
-                (((obs,), {"deterministic": True}), ((obs,), {})),
-                f"{self.policy.__class__.__name__}.predict",
-            )
+            out = self.policy.predict(obs, deterministic=True)
             return np.asarray(out[0] if isinstance(out, tuple) else out, dtype=np.float32)
         if hasattr(self.policy, "act"):
-            out = _call_compatible(
-                self.policy.act,
-                (
-                    ((obs,), {"deterministic": True}),
-                    ((obs, context), {}),
-                    ((obs,), {}),
-                ),
-                f"{self.policy.__class__.__name__}.act",
-            )
+            out = self.policy.act(obs, context)
             return np.asarray(out, dtype=np.float32)
         raise TypeError(f"{self.policy!r} has neither predict(obs) nor act(obs)")
 

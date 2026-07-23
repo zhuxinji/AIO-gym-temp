@@ -7,7 +7,7 @@ import tempfile
 import numpy as np
 import gymnasium as gym
 import aiogym  # registers ids
-from aiogym.controllers import as_controller, load_controller_config, make_controller, registered_controllers
+from aiogym.controllers import as_controller, load_controller_config, make_controller
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import (
     BenchmarkCase,
@@ -16,7 +16,10 @@ from aiogym.evaluation import (
     evaluate_controller,
     rollout_controller,
 )
-from aiogym.models import BUILTIN_MODELS, SCENARIOS, ProcessModelContract, builtin_gym_ids, define_model, make_model, register_model, unregister_model
+from aiogym.models import BUILTIN_MODELS, ProcessModelContract, builtin_gym_ids, define_model, make_model, register_model, unregister_model
+
+SCENARIO_IDS = aiogym.list_scenarios()
+list_controllers = aiogym.list_controllers
 
 OK = "OK"
 try:

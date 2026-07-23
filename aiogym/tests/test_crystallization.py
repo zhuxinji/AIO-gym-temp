@@ -6,7 +6,8 @@ import numpy as np
 from aiogym.controllers import make_controller
 from aiogym.env import AIOGymNativeEnv
 from aiogym.evaluation import BenchmarkProtocol, evaluate_controller, rollout_controller
-from aiogym.models import SCENARIOS, make_model
+from aiogym import list_scenarios
+from aiogym.models import make_model
 
 
 def _make_env(**kwargs):
@@ -21,7 +22,7 @@ def _make_env(**kwargs):
 
 
 def test_registered_model_contract():
-    assert "crystallization" in SCENARIOS
+    assert "crystallization" in list_scenarios()
     model = make_model("crystallization")
     assert model.scenario == "crystallization"
     assert model.action_dim() == 1
@@ -111,7 +112,7 @@ def test_pid_tracking_rollout():
         protocol=protocol,
     )
     assert result["controller_name"] == "PID"
-    assert result["metric"] == "tracking_error_cost"
+    assert result["metric"] == "tracking_cost"
     assert np.isfinite(result["tracking_cost"])
     assert np.isfinite(result["tracking_mse"])
     assert np.isfinite(result["tracking_iae"])

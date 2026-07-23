@@ -82,7 +82,7 @@ class TransitionDatasetTests(unittest.TestCase):
 
     def test_controller_collection_uses_controller_actions(self):
         class ConstantPolicy:
-            def act(self, obs):
+            def act(self, obs, context):
                 return np.array([0.25, 0.75], dtype=np.float32)
 
         dataset = collect_transitions(_environment(), ConstantPolicy(), episodes=1, seed=4)

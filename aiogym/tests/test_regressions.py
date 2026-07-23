@@ -10,18 +10,20 @@ import tempfile
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
+import aiogym
 from aiogym import make_env
 from aiogym._internal.config import parse_seed_list
 from aiogym.cli.single_benchmark import main as single_benchmark_main
-from aiogym.cli.suite_benchmark import controller_config_for, run_case
+from aiogym.cli.suite_benchmark import run_case
+from aiogym.evaluation.suite import controller_config_for
 from aiogym.controllers import (
     ControllerContext,
     PolicyController,
     load_controller_config,
     make_controller,
     register_controller,
-    registered_controllers,
     unregister_controller,
     validate_action,
 )
@@ -33,7 +35,6 @@ from aiogym.evaluation import (
     BenchmarkProtocol,
     check_benchmark_artifacts,
     evaluate_controller,
-    load_task_profile,
     plot_results,
     resolve_protocol,
     run_benchmark,
@@ -42,14 +43,17 @@ from aiogym.evaluation import (
 from aiogym.evaluation.metrics.robustness import robustness_extrema
 from aiogym.evaluation.protocols import METRIC_DIRECTIONS
 from aiogym.models import (
-    SCENARIOS,
     apply_model_params,
     define_model,
     make_model,
     register_model,
 )
+from aiogym.models.tasks import load_task_profile
 from aiogym.rl.train_rlpd import output_base_for
 from aiogym.rl.train_sb3 import run_name_for
+
+SCENARIO_IDS = aiogym.list_scenarios()
+list_controllers = aiogym.list_controllers
 
 
 def test_skipped_rows_are_not_plotted():
@@ -170,9 +174,9 @@ def test_controller_registration_requires_explicit_replacement():
 
     name = "regression-temporary-controller"
     register_controller(name, lambda **_: None)
-    assert name in registered_controllers()
+    assert name in list_controllers()
     unregister_controller(name)
-    assert name not in registered_controllers()
+    assert name not in list_controllers()
 
     register_controller("pid", lambda **_: None, replace=True)
     unregister_controller("pid")
@@ -217,7 +221,7 @@ def test_policy_adapters_do_not_mask_internal_type_errors():
         raise AssertionError("environment should preserve process_info implementation errors")
 
     class BrokenDiagnosticsPolicy:
-        def act(self, obs):
+        def act(self, obs, context):
             return [0.5, 0.5]
 
         def diagnostics(self):
@@ -230,6 +234,26 @@ def test_policy_adapters_do_not_mask_internal_type_errors():
         assert str(ex) == "diagnostics implementation failed"
     else:
         raise AssertionError("evaluation should preserve diagnostics implementation errors")
+
+
+def test_sb3_in_memory_policy_does_not_receive_loader_algorithm():
+    class InMemoryPolicy:
+        def predict(self, obs, deterministic=True):
+            return np.asarray([0.25, 0.75], dtype=np.float32), None
+
+    controller = make_controller(
+        "sb3",
+        scenario="quadruple",
+        policy=InMemoryPolicy(),
+        config={
+            "algo": "sac",
+            "action_mode": "actuator",
+            "name": "SB3-SAC",
+        },
+    )
+
+    assert controller.name == "SB3-SAC"
+    assert controller.action_mode == "actuator"
 
 
 def test_onnx_policy_controller_validates_and_runs_export_contract():
@@ -319,7 +343,7 @@ def test_oracle_scenario_overrides_are_exposed_in_metadata():
     assert hvac["warm_start"] is True
     assert extraction["control_dt"] == 0.05 and extraction["ipopt_max_iter"] == 120
     for tracking_oracle in (hvac, extraction, heater):
-        assert tracking_oracle["r_move"] == 0.0
+        assert tracking_oracle["r_move"] == 1.0
         assert tracking_oracle["terminal_weight"] == 0.0
         assert "du_max" not in tracking_oracle
         assert "steady_input_weight" not in tracking_oracle
@@ -338,7 +362,7 @@ def test_tracking_suite_uses_tracking_oracle_objective():
     assert controller_config_for(args, "oracle", "actuator", "economic") == {}
 
 
-def test_artifact_check_accepts_failed_rows_and_model_card_paths():
+def test_artifact_check_accepts_failed_rows_and_model_metadata_paths():
     with tempfile.TemporaryDirectory() as tmpdir:
         payload = {
             "benchmark": "benchmark_suite",
@@ -390,34 +414,17 @@ def test_artifact_check_accepts_failed_rows_and_model_card_paths():
         artifacts = write_benchmark_artifacts(tmpdir, payload)
         payload["artifacts"] = artifacts
         Path(tmpdir, "benchmark.json").write_text(json.dumps(payload, indent=2))
-        with open(artifacts["model_cards_manifest"]) as f:
+        with open(artifacts["model_metadata_manifest"]) as f:
             manifest = json.load(f)
-        assert manifest["cards"]["cstr"] == "metadata/model_cards/cstr.json"
+        assert manifest["models"]["cstr"] == "metadata/models/cstr.json"
         plot_results(tmpdir)
         check_result = check_benchmark_artifacts(tmpdir)
         assert check_result["ok"], check_result["failed"]
 
 
-def test_single_benchmark_accepts_basename_output():
-    previous_argv = sys.argv
-    previous_cwd = os.getcwd()
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.chdir(tmpdir)
-            sys.argv = [
-                "aiogym-single-benchmark",
-                "--scenario", "cstr",
-                "--objective", "tracking",
-                "--controllers", "pid",
-                "--episodes", "1",
-                "--episode-steps", "1",
-                "--out", "report.json",
-            ]
-            single_benchmark_main()
-            assert Path("report.json").is_file()
-    finally:
-        sys.argv = previous_argv
-        os.chdir(previous_cwd)
+def test_single_benchmark_rejects_removed_legacy_output_option():
+    with pytest.raises(SystemExit):
+        single_benchmark_main(["--out", "report.json"])
 
 
 def test_single_benchmark_writes_checkable_standard_artifacts(tmp_path):
@@ -429,6 +436,12 @@ def test_single_benchmark_writes_checkable_standard_artifacts(tmp_path):
         "--controllers", "pid",
         "--episodes", "1",
         "--episode-steps", "1",
+        "--tracking-q-y", "0.7",
+        "--tracking-r-move", "0",
+        "--no-disturbance-obs",
+        "--previous-action-obs",
+        "--normalize-observations",
+        "--tracking-error-obs",
         "--artifact-dir", str(artifact_dir),
     ])
 
@@ -437,8 +450,20 @@ def test_single_benchmark_writes_checkable_standard_artifacts(tmp_path):
     assert benchmark["scenario"] == "cstr"
     assert benchmark["controllers"] == ["pid"]
     assert benchmark["config"]["output_dir"] == str(artifact_dir)
+    assert benchmark["config"]["tracking_q_y"] == 0.7
+    assert benchmark["config"]["tracking_r_move"] == 0.0
+    assert benchmark["config"]["disturbance_obs"] is False
+    assert benchmark["config"]["previous_action_obs"] is True
+    assert benchmark["config"]["normalize_observations"] is True
+    assert benchmark["config"]["tracking_error_obs"] is True
+    assert benchmark["protocol"]["disturbance_obs"] is False
+    assert benchmark["protocol"]["previous_action_obs"] is True
+    assert benchmark["protocol"]["normalize_observations"] is True
+    assert benchmark["protocol"]["tracking_error_obs"] is True
+    assert benchmark["protocol"]["objective_spec"]["reward_options"]["tracking_q_y"] == 0.7
+    assert benchmark["protocol"]["objective_spec"]["reward_options"]["tracking_r_move"] == 0.0
     assert (artifact_dir / "config" / "config.json").is_file()
-    assert (artifact_dir / "metadata" / "model_card.json").is_file()
+    assert (artifact_dir / "metadata" / "model_metadata.json").is_file()
     assert (artifact_dir / "summary" / "summary.csv").is_file()
     assert (artifact_dir / "results" / "results.json").is_file()
     assert (artifact_dir / "figures" / "summary.svg").is_file()
@@ -448,7 +473,7 @@ def test_single_benchmark_writes_checkable_standard_artifacts(tmp_path):
 
 
 def test_pid_json_is_the_single_default_config_source():
-    for scenario in SCENARIOS:
+    for scenario in SCENARIO_IDS:
         expected = load_controller_config("pid", scenario)["parameters"]
         direct = PIDAgent(make_model(scenario)).metadata()
         registered = make_controller("pid", scenario=scenario).metadata()
@@ -465,6 +490,8 @@ def test_predictive_controller_configs_fail_at_construction():
         ({"move_supp": -1}, "move_supp"),
         ({"cv_scale": [1.0, 2.0, 3.0]}, "cv_scale"),
         ({"cv_scale": [0.0]}, "cv_scale"),
+        ({"q_y": [1.0, 2.0, 3.0]}, "q_y"),
+        ({"q_y": -1.0}, "q_y"),
     )
     for config, expected in invalid_mpc:
         try:
@@ -517,12 +544,11 @@ def test_invalid_environment_configuration_fails_early():
 
 def test_removed_compatibility_surfaces_stay_removed():
     import aiogym.env as env_module
-    import aiogym.evaluation.core as evaluation_core
     from aiogym.rl import TransitionDataset
 
     assert importlib.util.find_spec("aiogym.objectives") is None
+    assert importlib.util.find_spec("aiogym.evaluation.core") is None
     assert not hasattr(env_module, "make_env")
-    assert not hasattr(evaluation_core, "run_benchmark")
     assert not hasattr(TransitionDataset(), "rl_tuples")
 
     for build in (

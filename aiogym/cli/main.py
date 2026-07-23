@@ -19,6 +19,12 @@ def _single_benchmark(argv):
     return main(argv, prog="aiogym benchmark run")
 
 
+def _direct_benchmark(argv):
+    from aiogym.cli.single_benchmark import main
+
+    return main(argv, prog="aiogym benchmark")
+
+
 def _suite_benchmark(argv):
     from aiogym.cli.suite_benchmark import main
 
@@ -47,12 +53,6 @@ def _artifact_check(argv):
     from aiogym.cli.artifact_tools import artifact_check_main
 
     return artifact_check_main(argv, prog="aiogym artifacts check")
-
-
-def _model_cards(argv):
-    from aiogym.cli.artifact_tools import model_cards_main
-
-    return model_cards_main(argv, prog="aiogym model-cards")
 
 
 def _print_items(items):
@@ -131,7 +131,6 @@ def build_parser():
     _add_delegate(artifact_commands, "report", "artifact report", _artifact_report)
     _add_delegate(artifact_commands, "check", "artifact validator", _artifact_check)
 
-    _add_delegate(commands, "model-cards", "model-card exporter", _model_cards)
     return parser
 
 
@@ -144,11 +143,12 @@ def main(argv=None):
         ("train", "rlpd"): _train_rlpd,
         ("artifacts", "report"): _artifact_report,
         ("artifacts", "check"): _artifact_check,
-        ("model-cards",): _model_cards,
     }
     for route, handler in delegated_commands.items():
         if tuple(raw_args[:len(route)]) == route:
             return handler(raw_args[len(route):])
+    if len(raw_args) > 1 and raw_args[0] == "benchmark":
+        return _direct_benchmark(raw_args[1:])
 
     parser = build_parser()
     args = parser.parse_args(raw_args)

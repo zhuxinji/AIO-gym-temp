@@ -1,9 +1,9 @@
-"""Model contract, model-card, custom-model, and public API tests."""
+"""Model contract, metadata, custom-model, and public API tests."""
 from aiogym.tests.interface_support import *  # noqa: F403
 
 def test_model_contract():
     """Every process model exposes a usable backend contract for tooling."""
-    for scn in SCENARIOS:
+    for scn in SCENARIO_IDS:
         model = make_model(scn)
         card = model.model_card()
         n_act = model.action_dim()
@@ -42,20 +42,18 @@ def test_model_contract():
         check(f"{scn:10s} model contract states={len(card['states'])} actions={len(card['actions'])} params={len(params)}", state_ok and action_ok and output_ok and vector_ok and param_ok and bounds_ok and meta_ok and generic_ok)
 
 
-def test_model_card_export():
-    """Model-card export covers the current registry, not a hand-written scenario list."""
+def test_model_metadata_export_and_scenario_docs():
+    """Structured metadata and one canonical document cover every scenario."""
     from aiogym.models import (
         MODEL_CARD_SCHEMA_VERSION,
         collect_model_cards,
-        export_model_card_markdown,
         export_model_cards,
-        render_model_card_markdown,
         validate_model_card,
     )
 
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     cards = collect_model_cards()
-    cards_ok = set(cards) == set(SCENARIOS)
+    cards_ok = set(cards) == set(SCENARIO_IDS)
     cards_ok = cards_ok and all(card["schema_version"] == MODEL_CARD_SCHEMA_VERSION for card in cards.values())
     for scenario, card in cards.items():
         validate_model_card(card, expected_scenario=scenario)
@@ -63,46 +61,32 @@ def test_model_card_export():
     with tempfile.TemporaryDirectory() as tmpdir:
         manifest = export_model_cards(tmpdir)
         exported = set(manifest["scenarios"])
-        files_ok = exported == set(SCENARIOS)
-        for scenario in SCENARIOS:
+        files_ok = exported == set(SCENARIO_IDS)
+        for scenario in SCENARIO_IDS:
             path = os.path.join(tmpdir, f"{scenario}.json")
             files_ok = files_ok and os.path.exists(path)
             with open(path) as f:
                 validate_model_card(json.load(f), expected_scenario=scenario)
         files_ok = files_ok and os.path.exists(os.path.join(tmpdir, "manifest.json"))
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        manifest = export_model_card_markdown(tmpdir)
-        markdown_ok = set(manifest["scenarios"]) == set(SCENARIOS)
-        markdown_ok = markdown_ok and os.path.exists(os.path.join(tmpdir, "README.md"))
-        for scenario, card in cards.items():
-            text = render_model_card_markdown(card)
-            path = os.path.join(tmpdir, f"{scenario}.md")
-            markdown_ok = markdown_ok and os.path.exists(path)
-            markdown_ok = markdown_ok and f"`{scenario}`" in text
-            markdown_ok = markdown_ok and "## State Vector" in text
-            markdown_ok = markdown_ok and "## Dynamics And Assumptions" in text
-
     docs_path = os.path.join(root, "README.md")
     docs_ok = os.path.exists(docs_path)
     if docs_ok:
         with open(docs_path) as f:
             docs_text = f.read()
-        for scenario in SCENARIOS:
-            public_id = (
-                "cascade-recirculating"
-                if scenario == "cascade_recirculating" else scenario
-            )
-            docs_ok = docs_ok and f"`{public_id}`" in docs_text
-            card_path = os.path.join(root, "docs", "model_cards", f"{scenario}.md")
-            docs_ok = docs_ok and os.path.exists(card_path)
-            if os.path.exists(card_path):
-                with open(card_path) as f:
-                    card_text = f.read()
-                docs_ok = docs_ok and f"`{scenario}`" in card_text
-                docs_ok = docs_ok and "## Benchmark Semantics" in card_text
+        for scenario in SCENARIO_IDS:
+            docs_ok = docs_ok and f"`{scenario}`" in docs_text
+            filename = "cascade_recirculating" if scenario == "cascade-recirculating" else scenario
+            scenario_path = os.path.join(root, "docs", "scenarios", f"{filename}.md")
+            docs_ok = docs_ok and os.path.exists(scenario_path)
+        docs_ok = docs_ok and not os.path.exists(
+            os.path.join(root, "docs", "model_cards")
+        )
 
-    check("model-card export covers registered built-ins", cards_ok and files_ok and markdown_ok and docs_ok)
+    check(
+        "model metadata and canonical scenario docs cover registered built-ins",
+        cards_ok and files_ok and docs_ok,
+    )
 
 
 def test_custom_model_entrypoints():
@@ -275,10 +259,13 @@ def test_public_api_entrypoints():
         api_ok = api_ok and payload["results"][0]["protocol"]["model_params"]["Dmax"] == 0.015
         api_ok = api_ok and payload["rows"][0]["execution_status"] in {"passed", "degraded"}
         api_ok = api_ok and os.path.exists(benchmark_path)
-        for key in ("input_config", "benchmark_config", "model_card", "rows", "summary_csv",
+        for key in ("input_config", "benchmark_config", "model_metadata", "rows", "summary_csv",
                     "leaderboard", "results", "report", "rollouts"):
             api_ok = api_ok and os.path.exists(payload["artifacts"][key])
-        for key in ("summary", "leaderboard", "rollout", "constraint_timeline"):
+        for key in ("summary", "leaderboard"):
             api_ok = api_ok and os.path.exists(figures[key])
+        tracking_controls = figures["tracking_control_by_scenario"]
+        api_ok = api_ok and set(tracking_controls) == {"cstr"}
+        api_ok = api_ok and os.path.exists(tracking_controls["cstr"])
 
     check("public make_env/run_benchmark/plot_results API", public_surface_ok and env_ok and public_model_ok and api_ok)

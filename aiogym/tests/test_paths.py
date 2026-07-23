@@ -4,7 +4,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from aiogym._internal.paths import RUNS_DIR_ENV, run_path, runs_dir
-from aiogym.cli.suite_benchmark import artifact_dir_for
+from aiogym.evaluation.suite import artifact_dir_for
 from aiogym.evaluation import run_benchmark
 from aiogym.rl.train_rlpd import output_base_for
 
@@ -26,7 +26,7 @@ def test_runs_dir_environment_override_applies_only_to_defaults(monkeypatch, tmp
     monkeypatch.setenv(RUNS_DIR_ENV, str(custom_root))
 
     assert runs_dir() == custom_root
-    assert run_path("model_cards") == custom_root / "model_cards"
+    assert run_path("model_metadata") == custom_root / "model_metadata"
     assert artifact_dir_for("example", run_id="fixed") == str(
         custom_root / "bench_suite_example_fixed_artifacts"
     )

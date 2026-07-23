@@ -139,14 +139,14 @@
               "y_index": 0,
               "pid": [1.0159437333249033, 0.1, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym tracking_error_cost family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost tuning on the minimum-phase default benchmark, 120 random plus 60 refinement samples, seed 20260715"
             },
             {
               "u_index": 1,
               "y_index": 1,
               "pid": [2.0, 0.09001698960588032, 0.0],
               "bias": 0.3,
-              "source": "AIO-Gym tracking_error_cost family tuning: minimum-phase-classic plus pminus-reference-step, 120 random plus 60 refinement samples, seed 20260715"
+              "source": "AIO-Gym tracking_error_cost tuning on the minimum-phase default benchmark, 120 random plus 60 refinement samples, seed 20260715"
             }
           ]
         }

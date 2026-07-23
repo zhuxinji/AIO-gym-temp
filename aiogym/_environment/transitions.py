@@ -45,7 +45,6 @@ class TransitionRuntimeMixin:
             reward_scale=self.reward_scale,
             tracking_q_y=self.tracking_q_y,
             tracking_r_move=self.tracking_r_move,
-            tracking_r_steady=self.tracking_r_steady,
             terminate_on_runaway=self.terminate_on_runaway,
             dt=self.control_dt,
             economic_config=self._econ,

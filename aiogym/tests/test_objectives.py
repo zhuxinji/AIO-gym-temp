@@ -8,7 +8,10 @@ import unittest
 import numpy as np
 
 from aiogym.env import AIOGymNativeEnv
-from aiogym.models import SCENARIOS, apply_model_params, make_model
+from aiogym import list_scenarios
+from aiogym.models import apply_model_params, make_model
+
+SCENARIO_IDS = list_scenarios()
 from aiogym.evaluation.objectives import stage_reward
 
 class StageRewardContractTests(unittest.TestCase):
@@ -117,7 +120,7 @@ class StageRewardContractTests(unittest.TestCase):
         self.assertAlmostEqual(result.info["profit"], -0.7 * 1.5 * 2.0)
 
     def test_stage_reward_matches_environment_step(self):
-        for scenario in SCENARIOS:
+        for scenario in SCENARIO_IDS:
             for reward_mode in ("tracking", "kpi", "economic"):
                 with self.subTest(scenario=scenario, reward_mode=reward_mode):
                     env = AIOGymNativeEnv(
@@ -173,15 +176,15 @@ class StageRewardContractTests(unittest.TestCase):
                     ))
                     self.assertEqual(env.scorer.report(), score_after_step)
 
-    def test_quadruple_tracking_cost_includes_steady_input_deviation(self):
+    def test_quadruple_tracking_cost_uses_identity_weights_after_normalization(self):
         model = apply_model_params(make_model("quadruple"), {
             "gamma": [0.43, 0.34],
             "nominal_voltage": [3.15, 3.15],
         })
         state = model.initial_state()
         setpoint = [state[0] + 1.0, state[1]]
-        action = model.default_action()
-        steady_action = model.tracking_steady_state_action(setpoint)
+        action = [0.4, 0.2]
+        previous_action = [0.3, 0.3]
         result = stage_reward(
             model,
             state,
@@ -189,32 +192,21 @@ class StageRewardContractTests(unittest.TestCase):
             state,
             setpoint=setpoint,
             disturbance=model.runtime_env(model.disturbance_defaults()),
-            previous_action=action,
+            previous_action=previous_action,
             reward_mode="tracking",
             reward_scale=1.0,
             tracking_q_y=[1.0, 1.0],
             tracking_r_move=1.0,
-            tracking_r_steady=1.0,
             terminate_on_runaway=False,
         )
-        expected_steady_cost = sum(
-            (value - target) ** 2
-            for value, target in zip(
-                model.physical_action_vector(action),
-                model.physical_action_vector(steady_action),
-            )
-        )
 
-        self.assertAlmostEqual(result.info["tracking_move_cost"], 0.0)
-        self.assertAlmostEqual(result.info["tracking_error_cost"], 1.0)
-        self.assertAlmostEqual(result.info["tracking_steady_cost"], expected_steady_cost)
-        self.assertEqual(
-            result.info["tracking_steady_action"],
-            model.physical_action_vector(steady_action),
-        )
+        self.assertAlmostEqual(result.info["tracking_move_cost"], 0.1 ** 2 + 0.1 ** 2)
+        self.assertAlmostEqual(result.info["tracking_error_cost"], (1.0 / 20.0) ** 2)
+        self.assertNotIn("tracking_steady_cost", result.info)
+        self.assertNotIn("tracking_steady_action", result.info)
         self.assertAlmostEqual(
             result.info["tracking_cost"],
-            result.info["tracking_error_cost"] + result.info["tracking_steady_cost"],
+            result.info["tracking_error_cost"] + result.info["tracking_move_cost"],
         )
         self.assertAlmostEqual(result.reward, -result.info["tracking_cost"])
 
@@ -239,7 +231,6 @@ class StageRewardContractTests(unittest.TestCase):
             "reward_scale": env.reward_scale,
             "tracking_q_y": tuple(env.tracking_q_y),
             "tracking_r_move": env.tracking_r_move,
-            "tracking_r_steady": env.tracking_r_steady,
             "terminate_on_runaway": env.terminate_on_runaway,
             "economic_config": copy.deepcopy(env._econ),
         }

@@ -77,7 +77,7 @@ import aiogym
 
 env = aiogym.make_env(
     scenario="quadruple",
-    task="minimum-phase-classic",
+    task="minimum-phase",
     objective="tracking",
     seed=7,
     episode_steps=200,
@@ -88,7 +88,7 @@ env = aiogym.make_env(
 `auto_events` controls generic automatically generated within-episode events; it
 does not switch the process differential equations on or off. Named tasks can
 disable generic events and still declare deterministic setpoint or disturbance
-schedules. The former `dynamic` input remains a deprecated compatibility alias.
+schedules. `auto_events` is the only accepted field for this behavior.
 
 `scenario` selects the process, `task` selects the operating point and
 experiment, and `objective` selects scoring. Reproducible benchmark artifacts
@@ -109,7 +109,7 @@ PID layer when the selected model declares a supervisory layout.
 - Start at the [documentation index](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/index.md).
 - Read [concepts](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/concepts.md) for the scenario-to-artifact vocabulary.
 - See the [architecture guide](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/architecture.md) for the source tree,
-  layer ownership, compatibility facades, and extension points.
+  layer ownership, and extension points.
 - Use the [capability matrix](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/capabilities.md) to distinguish interface
   support from bundled task and benchmark evidence.
 - See the [public API guide](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/public_api.md) for the model, environment,
@@ -133,10 +133,8 @@ aiogym list suites
 aiogym list controllers
 ```
 
-Use `aiogym --help` to see the grouped benchmark, training, artifact, and
-model-card workflows. The previous `aiogym-single-benchmark`,
-`aiogym-suite-benchmark`, `aiogym-train-*`, and artifact commands remain
-installed as compatibility aliases.
+Use `aiogym --help` to see the grouped benchmark, training, and artifact
+workflows. The unified `aiogym` command is the only installed CLI.
 
 ## Benchmarking
 
@@ -151,7 +149,7 @@ aiogym benchmark suite \
 Run a smaller single-scenario comparison:
 
 ```bash
-aiogym benchmark run \
+aiogym benchmark \
   --scenario cstr \
   --objective tracking \
   --controllers pid,mpc \
@@ -165,10 +163,25 @@ their rankings:
 aiogym benchmark suite --suite quadruple-phase-comparison --episodes 1
 ```
 
+Run one task with its default benchmark conditions, or replace its duration and
+absolute setpoint schedule:
+
+```bash
+aiogym benchmark \
+  --scenario quadruple \
+  --task minimum-phase
+
+aiogym benchmark \
+  --scenario quadruple \
+  --task minimum-phase \
+  --episode-steps 360 \
+  --setpoint-step "0:14.2629675195507,12.783158403008972"
+```
+
 Run the heated-tank cascade as an explicit continuous-production economic task:
 
 ```bash
-aiogym benchmark run \
+aiogym benchmark \
   --scenario cascade \
   --task continuous-benchmark \
   --objective economic \
@@ -183,7 +196,7 @@ Run the PDF-derived closed-loop retrofit independently from the historical
 open cascade:
 
 ```bash
-aiogym benchmark run \
+aiogym benchmark \
   --scenario cascade-recirculating \
   --task commissioning \
   --objective tracking \
@@ -204,7 +217,7 @@ overflow returns to Tank 3, and no production-economic objective. See the
 [recirculating scenario guide](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/scenarios/cascade_recirculating.md) and
 [accuracy/authenticity report](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/reports/cascade-recirculating-accuracy-authenticity.md).
 
-Run all six formal quadruple-tank tasks with PID, MPC, and NMPC Oracle on every
+Run all four formal quadruple-tank tasks with PID, MPC, and NMPC Oracle on every
 task:
 
 ```bash
@@ -275,18 +288,7 @@ Set `AIOGYM_RUNS_DIR` to choose another default root, or pass an explicit option
 such as `--out-dir` or `--artifact-dir` when a stable path is required. Explicit
 paths take precedence over the environment variable.
 
-The former single-file output remains available for existing automation:
-
-```bash
-aiogym benchmark run \
-  --scenario cstr \
-  --controllers pid,mpc \
-  --format legacy-json \
-  --out runs/cstr_controllers.json
-```
-
-Using `--out` by itself continues to imply `--format legacy-json`. New workflows
-should use the standard artifact directory.
+Benchmark commands always write the standard artifact directory contract.
 
 ## Training
 
@@ -301,6 +303,35 @@ aiogym train sb3 \
   --onnx
 ```
 
+Train on a named tracking task with task-owned timing, reward, and observation
+semantics:
+
+```bash
+aiogym train sb3 \
+  --scenario quadruple \
+  --task minimum-phase \
+  --gamma 0.999 \
+  --steps 500000 \
+  --n-envs 4 \
+  --gradient-steps 4 \
+  --learning-starts 10000 \
+  --learning-rate 1e-4
+```
+
+When `--task` is provided, its control interval, episode length, tracking
+weights, and observation contract are used unless explicitly overridden. The
+quadruple tasks use normalized tracking errors instead of setpoint channels,
+exclude disturbance channels, include the previous applied action, and normalize
+observations with fixed model-schema bounds. Boolean observation options support
+both forms, such as `--disturbance-obs` and `--no-disturbance-obs`, for explicit
+ablation runs. Older checkpoints trained under another observation contract
+must still be evaluated with that original contract. When periodic
+learning-curve evaluation is enabled, the main checkpoint is the best evaluated
+policy and a separate `_final.zip` checkpoint preserves the last training state.
+Training evaluates every 10,000 steps and saves the final plotting rollout by
+default; use `--learning-curve-every 0` or `--no-save-rollout` for a minimal
+artifact run.
+
 Run the offline-to-online RLPD workflow:
 
 ```bash
@@ -314,9 +345,8 @@ aiogym train rlpd \
 Training runs write checkpoints, exports, learning curves, evaluation results,
 and standard benchmark artifacts. High-level training commands accept all five
 public objectives; `robustness` and `safety` resolve to the KPI environment
-reward while retaining their own evaluation identity. The former
-`--reward-mode` option remains a deprecated compatibility alias for
-`economic`, `tracking`, and `kpi`.
+reward while retaining their own evaluation identity. Select it with
+`--objective`; training commands do not accept a separate reward-mode option.
 
 ## Custom Models and Controllers
 
@@ -333,12 +363,9 @@ Use the Python model example for lower-level behavior:
 python aiogym/models/examples/custom_model.py
 ```
 
-Human-readable model documentation is generated under `docs/model_cards/`:
-
-```bash
-aiogym model-cards --format markdown --out-dir docs/model_cards
-aiogym model-cards --check --format markdown --out-dir docs/model_cards
-```
+Human-readable documentation for every built-in model lives under
+`docs/scenarios/`. Structured model metadata is stored in benchmark artifacts
+for reproducibility.
 
 The shared physical-model foundation is described in
 [`docs/model_infrastructure.md`](https://github.com/zhuxinji/AIO-gym-temp/blob/main/docs/model_infrastructure.md). It covers
@@ -355,7 +382,7 @@ aiogym/
   cli/            console entrypoints
   controllers/    controller API, algorithms, configs, and tuning
   evaluation/     protocols, objectives, metrics, reports, and artifacts
-  models/         model contracts, registry, scenarios, and model cards
+  models/         model contracts, registry, scenarios, and metadata
   rl/             transition data, RLPD, and training workflows
   tests/          backend contract and regression tests
   env.py          Gymnasium environment

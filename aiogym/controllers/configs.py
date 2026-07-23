@@ -21,7 +21,7 @@ _CONFIG_META_KEYS = {
 def load_controller_config(
     name: str, scenario: str | None = None, profile: str | None = None
 ) -> dict[str, Any]:
-    from .._internal.identifiers import internal_scenario_id
+    from .._internal.identifiers import canonical_scenario_id, internal_scenario_id
 
     key = name.lower()
     path = Path(__file__).resolve().parent / "configs" / f"{key}.json"
@@ -39,6 +39,11 @@ def load_controller_config(
             profile_data.get("scenarios", {}).get(internal_scenario_id(scenario), {})
         )
     out = {k: v for k, v in data.items() if k not in {"parameters", "profiles"}}
+    if isinstance(out.get("scenarios"), dict):
+        out["scenarios"] = {
+            canonical_scenario_id(key): value
+            for key, value in out["scenarios"].items()
+        }
     out["parameters"] = params
     return out
 

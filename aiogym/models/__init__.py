@@ -1,7 +1,4 @@
-"""Process-model package for AIO-Gym.
-
-The public API intentionally matches the old aiogym.models module.
-"""
+"""Process-model package for AIO-Gym."""
 
 from .core import (
     CP,
@@ -25,7 +22,6 @@ from .scenarios import (
 from .registry import (
     MODELS,
     BUILTIN_MODELS,
-    SCENARIOS,
     apply_model_params,
     builtin_gym_ids,
     gym_id_name,
@@ -37,10 +33,8 @@ from .registry import (
 from .cards import (
     MODEL_CARD_SCHEMA_VERSION,
     collect_model_cards,
-    export_model_card_markdown,
     export_model_cards,
     iter_model_cards,
-    render_model_card_markdown,
     validate_model_card,
 )
 from .parameter_profiles import (
@@ -53,7 +47,6 @@ from .validation import validate_model_readiness
 from .tasks import (
     TASK_PROFILE_SCHEMA_VERSION,
     configure_model_for_task,
-    list_task_profiles,
     load_task_profile,
     resolve_environment_options,
     task_environment,
@@ -84,20 +77,16 @@ __all__ = [
     "MODEL_CARD_SCHEMA_VERSION",
     "PARAMETER_PROFILE_SCHEMA_VERSION",
     "TASK_PROFILE_SCHEMA_VERSION",
-    "SCENARIOS",
     "apply_model_params",
     "builtin_gym_ids",
     "collect_model_cards",
-    "export_model_card_markdown",
     "export_model_cards",
     "gym_id_name",
     "iter_model_cards",
     "make_model",
     "list_parameter_profiles",
     "load_parameter_profile",
-    "list_task_profiles",
     "load_task_profile",
-    "render_model_card_markdown",
     "register_model",
     "unregister_model",
     "validate_model_card",

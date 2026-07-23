@@ -32,6 +32,11 @@ def make_env(scenario: Any = "cascade", objective: str | Mapping[str, Any] | Non
         raise TypeError("config['environment'] must be a mapping of environment options")
     data.update(nested_environment)
     data.update(overrides)
+    removed_options = sorted(set(data) & {"dynamic", "reward_mode", "env_reward_mode"})
+    if removed_options:
+        raise ValueError(
+            f"unsupported environment option(s): {', '.join(removed_options)}"
+        )
     config_objective = data.pop("objective", None)
     config_protocol = data.pop("protocol", None)
     if protocol is None:
@@ -59,8 +64,6 @@ def make_env(scenario: Any = "cascade", objective: str | Mapping[str, Any] | Non
         or configured_objective is not None
         or task_has_default
         or isinstance(protocol, BenchmarkProtocol)
-        or data.get("reward_mode") is not None
-        or data.get("env_reward_mode") is not None
     )
     if use_protocol:
         protocol_options = protocol_data({**data, **protocol_options})

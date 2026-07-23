@@ -17,8 +17,7 @@
       "aiogym/env.py": "0e737ccd8d3dec13072d2c03507853e65f9f7b3544d26a6f1455e3285e1c327e",
       "aiogym/evaluation/objectives.py": "b6d6ec582588c4b320d9c8bb65708305ecdb8679e85cb1377f0442b05d2eef8c",
       "aiogym/models/parameters/cascade.json": "3f62929521184f95eccd72a5a3ddc1eebbef9618acbe1ebf5dc5606f9b15de8b",
-      "aiogym/evaluation/tasks/cascade/continuous-benchmark.json": "25ac45058ffdaa41a4b400d227414b074a2b09e6923da17874f4987845e44af5",
-      "docs/model_cards/cascade.md": "3d1c83f7c7bdbd631df63d428acdcd08b2ca9c240faf0971f95fd15d6d613adc"
+      "aiogym/evaluation/tasks/cascade/continuous-benchmark.json": "25ac45058ffdaa41a4b400d227414b074a2b09e6923da17874f4987845e44af5"
     }
   },
   "verdict": {

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .report_rendering import _read_json, _tracking_benchmark_case_count
+from .report import _read_json, _tracking_benchmark_case_count
 
 
 ARTIFACT_CHECK_SCHEMA_VERSION = "aiogym.artifact_check.v1"
@@ -138,45 +138,74 @@ def check_benchmark_artifacts(artifact_dir: str | Path) -> dict[str, Any]:
     if rollout_rows is not None:
         _add_count_check(checks, "rollouts_json_count", len(rollout_rows), len(rollouts), paths["rollouts"])
 
-    _check_model_cards(root, artifacts, expected_scenarios, checks)
+    _check_model_metadata(root, artifacts, expected_scenarios, checks)
     return _check_result(root, checks)
 
 
-def _check_model_cards(root: Path, artifacts: Mapping[str, str], expected_scenarios: list[str],
-                       checks: list[dict[str, Any]]) -> None:
-    manifest_path = _check_artifact_path(root, artifacts, "model_cards_manifest", "metadata/model_cards/manifest.json")
-    single_path = _check_artifact_path(root, artifacts, "model_card", "metadata/model_card.json")
-    cards_dir = root / "metadata" / "model_cards"
+def _check_model_metadata(
+    root: Path,
+    artifacts: Mapping[str, str],
+    expected_scenarios: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    manifest_path = _check_artifact_path(
+        root,
+        artifacts,
+        "model_metadata_manifest",
+        "metadata/models/manifest.json",
+    )
+    single_path = _check_artifact_path(
+        root, artifacts, "model_metadata", "metadata/model_metadata.json"
+    )
+    models_dir = root / "metadata" / "models"
     if len(expected_scenarios) <= 1:
-        _add_exists(checks, "model_card", single_path, required=True)
-        if cards_dir.exists():
-            stale = sorted(path.name for path in cards_dir.glob("*.json"))
-            checks.append(_check("stale_model_cards", not stale, str(cards_dir), _stale_message(stale)))
+        _add_exists(checks, "model_metadata", single_path, required=True)
+        if models_dir.exists():
+            stale = sorted(path.name for path in models_dir.glob("*.json"))
+            checks.append(_check(
+                "stale_model_metadata",
+                not stale,
+                str(models_dir),
+                _stale_message(stale),
+            ))
         return
 
-    _add_exists(checks, "model_cards_manifest", manifest_path, required=True)
+    _add_exists(checks, "model_metadata_manifest", manifest_path, required=True)
     if not manifest_path.exists():
         return
     try:
         manifest = _read_json(manifest_path)
     except Exception as ex:
-        checks.append(_check("model_cards_manifest_json", False, str(manifest_path), str(ex)))
+        checks.append(_check(
+            "model_metadata_manifest_json", False, str(manifest_path), str(ex)
+        ))
         return
     manifest_scenarios = [str(item) for item in manifest.get("scenarios", [])]
     checks.append(_check(
-        "model_cards_manifest_scenarios",
+        "model_metadata_manifest_scenarios",
         manifest_scenarios == expected_scenarios,
         str(manifest_path),
         f"expected {expected_scenarios}, found {manifest_scenarios}",
     ))
-    cards = dict(manifest.get("cards") or {})
+    models = dict(manifest.get("models") or {})
     for scenario in expected_scenarios:
-        path = _resolve_artifact_path(root, cards.get(scenario), f"metadata/model_cards/{scenario}.json")
-        _add_exists(checks, f"model_card:{scenario}", path, required=True)
-    if cards_dir.exists():
+        path = _resolve_artifact_path(
+            root, models.get(scenario), f"metadata/models/{scenario}.json"
+        )
+        _add_exists(checks, f"model_metadata:{scenario}", path, required=True)
+    if models_dir.exists():
         expected_files = {f"{scenario}.json" for scenario in expected_scenarios} | {"manifest.json"}
-        stale = sorted(path.name for path in cards_dir.glob("*.json") if path.name not in expected_files)
-        checks.append(_check("stale_model_cards", not stale, str(cards_dir), _stale_message(stale)))
+        stale = sorted(
+            path.name
+            for path in models_dir.glob("*.json")
+            if path.name not in expected_files
+        )
+        checks.append(_check(
+            "stale_model_metadata",
+            not stale,
+            str(models_dir),
+            _stale_message(stale),
+        ))
 
 
 def _safe_json_list(checks: list[dict[str, Any]], name: str, path: Path) -> list[Any] | None:
@@ -310,5 +339,5 @@ def _resolve_artifact_path(root: Path, raw, default: str) -> Path:
 
 def _stale_message(stale: list[str]) -> str:
     if not stale:
-        return "no stale model-card JSON files"
+        return "no stale model metadata JSON files"
     return "stale files: " + ", ".join(stale)

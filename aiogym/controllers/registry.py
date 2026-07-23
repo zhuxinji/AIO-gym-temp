@@ -24,7 +24,7 @@ def register_controller(name: str, factory: ControllerFactory, *, replace: bool 
     _REGISTRY[key] = factory
 
 
-def registered_controllers() -> tuple[str, ...]:
+def _controller_ids() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
 
 
@@ -49,7 +49,7 @@ def make_controller(
     if key not in _REGISTRY:
         raise KeyError(
             f"unknown controller ID {name!r}; available controller IDs: "
-            f"{', '.join(registered_controllers())}"
+            f"{', '.join(_controller_ids())}"
         )
     requested_scenario = scenario or dict(config or {}).get("scenario")
     cfg = _merged_controller_config(key, requested_scenario, config)
@@ -108,11 +108,14 @@ def _sb3_factory(model=None, scenario=None, config=None, policy=None):
     params = _controller_params(cfg)
     params.setdefault("action_mode", cfg.get("action_mode", "setpoint"))
     params.setdefault("control_structure", cfg.get("control_structure", "sb3_policy"))
+    # ``algo`` selects the loader for on-disk checkpoints. It is not a
+    # PolicyController constructor argument when evaluating an in-memory model.
+    algo = params.pop("algo", "sac")
     pol = policy or params.pop("policy", None)
     if pol is not None:
+        params.setdefault("name", f"SB3-{algo.upper()}")
         return SB3PolicyController(pol, **params)
     path = params.pop("path")
-    algo = params.pop("algo", "sac")
     return SB3PolicyController.load(path, algo=algo, **params)
 
 

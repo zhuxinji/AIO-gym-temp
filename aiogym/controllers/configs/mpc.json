@@ -6,7 +6,8 @@
     "Ts": 0.5,
     "P": 40,
     "move_supp": 0.8,
-    "cv_scale": null
+    "cv_scale": null,
+    "q_y": 1.0
   },
   "scenarios": {
     "cascade": {},

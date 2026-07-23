@@ -36,13 +36,6 @@ dev = [
 
 [project.scripts]
 aiogym = "aiogym.cli.main:main"
-aiogym-artifact-check = "aiogym.cli.artifact_tools:artifact_check_main"
-aiogym-model-cards = "aiogym.cli.artifact_tools:model_cards_main"
-aiogym-report = "aiogym.cli.artifact_tools:report_main"
-aiogym-single-benchmark = "aiogym.cli.single_benchmark:main"
-aiogym-suite-benchmark = "aiogym.cli.suite_benchmark:main"
-aiogym-train-rlpd = "aiogym.rl.train_rlpd:main"
-aiogym-train-sb3 = "aiogym.rl.train_sb3:main"
 
 [tool.setuptools]
 packages = [
@@ -53,6 +46,8 @@ packages = [
   "aiogym.controllers",
   "aiogym.controllers.tuning",
   "aiogym.evaluation",
+  "aiogym.evaluation.artifact",
+  "aiogym.evaluation.execution",
   "aiogym.evaluation.metrics",
   "aiogym.models",
   "aiogym.models.scenarios",

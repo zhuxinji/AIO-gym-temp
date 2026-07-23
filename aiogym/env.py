@@ -11,7 +11,7 @@ reward_mode:
   "kpi"      (default) reward = -(instantaneous KPI penalty) using the same
              tracking + excess-energy + safety KPI
              (evaluation.metrics.kpi), so the RL optimizes exactly what it is judged on.
-  "economic" CSTR production-maximisation (legacy economic demo).
+  "economic" production-value reward with energy and constraint penalties.
   "tracking" setpoint tracking: reward = -(normalized squared SP error
              + input move penalty + nominal steady-input deviation penalty).
 
@@ -31,6 +31,7 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from ._internal.config import resolve_auto_events
+from ._internal.identifiers import canonical_scenario_id
 from .models import apply_model_params, make_model
 from .models.integration import Integrator
 from .evaluation.metrics.kpi import KPIScorer
@@ -60,25 +61,24 @@ class AIOGymNativeEnv(
     metadata = {"render_modes": []}
 
     def __init__(self, scenario="cascade", control_dt=None, episode_steps=None, task=None,
-                 reward_mode="kpi", auto_events=None, dynamic=None, randomize=None,
+                 reward_mode="kpi", auto_events=None, randomize=None,
                  randomize_setpoints=None,
                  randomize_plant=None, plant_drift=None, integral_obs=None, action_mode=None,
+                 disturbance_obs=None, previous_action_obs=None,
+                 normalize_observations=None, tracking_error_obs=None,
+                 initial_setpoint=None, setpoint_schedule=None,
                  noise=None, noise_pct=None, custom_stage_reward=None,
                  model_params=None,
                  terminate_on_runaway=None, reward_scale=0.03, w_prod=1000.0, w_energy=2.0, w_constraint=8.0,
-                 tracking_q_y=1.0, tracking_r_move=1.0, tracking_r_steady=1.0,
+                 tracking_q_y=None, tracking_r_move=None,
                  crystal_ln_sp=None, crystal_cv_sp=None, crystal_random_targets=False,
                  crystal_ln_range=(10.0, 11.5), crystal_cv_range=(0.75, 0.95)):
         super().__init__()
         base_model = make_model(scenario)
-        self.scenario = base_model.scenario
+        self.scenario = canonical_scenario_id(base_model.scenario)
         from .models.tasks import resolve_environment_options
 
-        auto_events = resolve_auto_events(
-            auto_events,
-            dynamic,
-            warn_legacy=dynamic is not None,
-        )
+        auto_events = resolve_auto_events(auto_events)
 
         self.task_profile, environment_options = resolve_environment_options(
             scenario=self.scenario,
@@ -93,6 +93,10 @@ class AIOGymNativeEnv(
                 "randomize_plant": randomize_plant,
                 "plant_drift": plant_drift,
                 "integral_obs": integral_obs,
+                "disturbance_obs": disturbance_obs,
+                "previous_action_obs": previous_action_obs,
+                "normalize_observations": normalize_observations,
+                "tracking_error_obs": tracking_error_obs,
                 "terminate_on_runaway": terminate_on_runaway,
                 "noise": noise,
                 "noise_pct": noise_pct,
@@ -111,11 +115,43 @@ class AIOGymNativeEnv(
             (self.task_profile or {}).get("initialization", {}).get("state")
         )
         task_setpoints = (self.task_profile or {}).get("setpoints", {})
-        self._task_initial_setpoint = copy.deepcopy(task_setpoints.get("initial"))
-        self._task_setpoint_events = {
-            int(event["at_step"]): list(event["values"])
-            for event in task_setpoints.get("schedule", [])
-        }
+        initial_setpoint = (
+            task_setpoints.get("initial")
+            if initial_setpoint is None
+            else initial_setpoint
+        )
+        if initial_setpoint is not None:
+            if isinstance(initial_setpoint, (str, bytes)) or not isinstance(
+                initial_setpoint, (list, tuple)
+            ):
+                raise TypeError("initial_setpoint must be a numeric vector")
+            initial_setpoint = [float(value) for value in initial_setpoint]
+            if not all(np.isfinite(value) for value in initial_setpoint):
+                raise ValueError("initial_setpoint values must be finite")
+        self._task_initial_setpoint = copy.deepcopy(initial_setpoint)
+        schedule = (
+            task_setpoints.get("schedule", [])
+            if setpoint_schedule is None
+            else setpoint_schedule
+        )
+        if not isinstance(schedule, (list, tuple)):
+            raise TypeError("setpoint_schedule must be a list of event mappings")
+        self._task_setpoint_events = {}
+        for event in schedule:
+            if not isinstance(event, dict):
+                raise TypeError("each setpoint_schedule event must be a mapping")
+            at_step = event.get("at_step")
+            if isinstance(at_step, bool) or not isinstance(at_step, int) or at_step < 0:
+                raise ValueError("setpoint_schedule at_step must be a non-negative integer")
+            values = event.get("values")
+            if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple)):
+                raise TypeError("setpoint_schedule values must be a numeric vector")
+            values = [float(value) for value in values]
+            if not all(np.isfinite(value) for value in values):
+                raise ValueError("setpoint_schedule values must be finite")
+            if at_step in self._task_setpoint_events:
+                raise ValueError("setpoint_schedule cannot contain duplicate at_step values")
+            self._task_setpoint_events[at_step] = values
         self._task_disturbance_events = {}
         for event in (self.task_profile or {}).get("disturbances", []):
             self._task_disturbance_events.setdefault(int(event["at_step"]), []).append({
@@ -128,6 +164,10 @@ class AIOGymNativeEnv(
         randomize_plant = environment_options["randomize_plant"]
         plant_drift = environment_options["plant_drift"]
         integral_obs = environment_options["integral_obs"]
+        disturbance_obs = environment_options["disturbance_obs"]
+        previous_action_obs = environment_options["previous_action_obs"]
+        normalize_observations = environment_options["normalize_observations"]
+        tracking_error_obs = environment_options["tracking_error_obs"]
         action_mode = environment_options["action_mode"]
         noise = environment_options["noise"]
         terminate_on_runaway = environment_options["terminate_on_runaway"]
@@ -140,11 +180,16 @@ class AIOGymNativeEnv(
         self.noise_pct = environment_options["noise_pct"]
         self.reward_mode = reward_mode
         self.reward_scale = reward_scale          # keep Q-magnitudes sane -> stable critic
+        from .models.tasks import task_objective_options
+
+        tracking_options = task_objective_options(self.task_profile, "tracking")
+        if tracking_q_y is None:
+            tracking_q_y = tracking_options.get("tracking_q_y", 1.0)
+        if tracking_r_move is None:
+            tracking_r_move = tracking_options.get("tracking_r_move", 1.0)
         self.tracking_q_y = self._resolve_tracking_q_y(tracking_q_y)
         self.tracking_r_move = self._nonnegative("tracking_r_move", tracking_r_move)
-        self.tracking_r_steady = self._nonnegative("tracking_r_steady", tracking_r_steady)
         self.auto_events = auto_events
-        self.dynamic = auto_events  # deprecated read compatibility
         self.randomize_plant = randomize_plant    # per-episode operating-regime variation
         self.plant_drift = plant_drift            # slow within-episode parameter drift
         self.randomize = randomize
@@ -155,7 +200,6 @@ class AIOGymNativeEnv(
             raise TypeError("custom_stage_reward must be callable")
         self.custom_stage_reward = custom_stage_reward
         self.terminate_on_runaway = terminate_on_runaway
-        # legacy economic-mode weights (CSTR)
         self.w_prod, self.w_energy, self.w_constraint = w_prod, w_energy, w_constraint
         self.crystal_ln_sp = crystal_ln_sp
         self.crystal_cv_sp = crystal_cv_sp
@@ -215,7 +259,21 @@ class AIOGymNativeEnv(
         # integral-of-error obs (the I-term a memoryless policy otherwise lacks): lets
         # the RL policy do offset-free tracking like PID + adapt under operating-regime drift.
         self.integral_obs = integral_obs
-        obs_dim = len(self.model.initial_state()) + len(self._ysp0) + len(self.model.dynamics_disturbance_names())
+        observation_flags = {
+            "disturbance_obs": disturbance_obs,
+            "previous_action_obs": previous_action_obs,
+            "normalize_observations": normalize_observations,
+            "tracking_error_obs": tracking_error_obs,
+        }
+        for name, value in observation_flags.items():
+            if not isinstance(value, bool):
+                raise TypeError(f"{name} must be a boolean")
+            setattr(self, name, value)
+        obs_dim = len(self.model.initial_state()) + len(self._ysp0)
+        if self.disturbance_obs:
+            obs_dim += len(self.model.dynamics_disturbance_names())
+        if self.previous_action_obs:
+            obs_dim += self.nu
         if integral_obs and self.model.supports_integral_observation:
             obs_dim += len(self._ysp0)       # integral controlled-output error
         # supervisory (RL-on-PID): action = setpoints, an inner PID does the regulation.

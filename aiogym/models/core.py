@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import math
 
+from .._internal.identifiers import canonical_scenario_id
 from .backends import _NUMERIC_OPS, _NumericOps, _casadi_ops, _maxv
 from .integration import Integrator
 
@@ -211,8 +212,8 @@ class ProcessModelContract:
     def measurement(self, x, env=None):
         """Measured state dict exposed to controllers.
 
-        New controllers should use x/y generically; legacy display adapters can
-        still inspect levels, temps, conc, and disturbance names.
+        Controllers should use x/y generically; scenario-specific consumers can
+        also inspect levels, temps, conc, and disturbance names.
         """
         return {**self.outputs(x), **dict(env or {})}
 
@@ -486,7 +487,7 @@ class ProcessModelContract:
     def model_card(self):
         physical_metadata = self.physical_metadata()
         return {
-            "scenario": self.scenario,
+            "scenario": canonical_scenario_id(self.scenario),
             "name": self.display_name,
             "summary": self.summary,
             "states": self.state_schema(),

@@ -49,6 +49,10 @@ the nonlinear equations. The simulator starts from the model-consistent
 equilibrium $(12.26297,12.78316,1.63394,1.40904)$ cm while retaining the
 reported point in the parameter profile.
 
+For P+, the paper reports $(12.6,13.0,4.8,4.9)$ cm at $(3.15,3.15)$ V.
+The corresponding model-consistent equilibrium used by AIO-Gym is
+$(12.44186,13.16681,4.73026,4.98633)$ cm.
+
 Primary reference: K. H. Johansson, “The Quadruple-Tank Process: A
 Multivariable Laboratory Process with an Adjustable Zero,” IEEE Transactions on
 Control Systems Technology, 8(3), 456–465, 2000,
@@ -64,7 +68,7 @@ import aiogym
 env = aiogym.make_env(
     "quadruple",
     objective="tracking",
-    task="minimum-phase-classic",
+    task="minimum-phase",
 )
 ```
 
@@ -83,17 +87,17 @@ single-move approximation unnecessarily sluggish.
 Run the complete PID/MPC/NMPC comparison with:
 
 ```bash
-aiogym-suite-benchmark --suite quadruple-classic --episodes 1
+aiogym benchmark suite --suite quadruple-classic --episodes 1
 ```
 
 ## Nonminimum-phase task
 
-`nonminimum-phase-classic` changes the valve splits, pump gains, nominal pump
+`nonminimum-phase` changes the valve splits, pump gains, nominal pump
 voltages, exact equilibrium, setpoint experiment, and horizon as one coherent
 task. It runs for 1800 s because the P+ response reported by Johansson is much
 slower. The paper-reference PID profile uses the paper's P+ decentralized PI
 settings; the benchmark-tuned PID uses cross pairing for this nonminimum-phase
-plant because it performed substantially better on both P+ benchmark tasks. The
+plant because it performed substantially better on the P+ benchmark. The
 MPC profile combines a longer prediction horizon with a model-derived
 steady-state pump target so the initial inverse response does not send the pump
 allocation in the wrong long-term direction.
@@ -102,25 +106,25 @@ allocation in the wrong long-term direction.
 env = aiogym.make_env(
     "quadruple",
     objective="tracking",
-    task="nonminimum-phase-classic",
+    task="nonminimum-phase",
 )
 ```
 
 Run it alone or compare both physical configurations:
 
 ```bash
-aiogym-suite-benchmark --suite quadruple-nonminimum --episodes 1
-aiogym-suite-benchmark --suite quadruple-phase-comparison --episodes 1
+aiogym benchmark suite --suite quadruple-nonminimum --episodes 1
+aiogym benchmark suite --suite quadruple-phase-comparison --episodes 1
 ```
 
 The comparison suite produces separate leaderboards for the two tasks. A lower
 tracking error cost in P− and a lower tracking error cost in P+ are two distinct ranking
 claims; the tool does not rank them against each other.
 
-Run all six formal quadruple-tank tasks with:
+Run all four formal quadruple-tank tasks with:
 
 ```bash
-aiogym-suite-benchmark --suite quadruple --episodes 1
+aiogym benchmark suite --suite quadruple --episodes 1
 ```
 
 The `quadruple` suite runs PID, MPC, and NMPC Oracle on every formal task.
@@ -180,23 +184,24 @@ python -m aiogym.controllers.tuning.tune_quadruple_pid \
 
 ## Paper-reference steps
 
-The `classic` tasks above are useful AIO-Gym benchmarks, but their setpoint
-schedules are not literal copies of the paper figures. The strict reference
-suite adds two separate tasks:
+The default task schedules above are useful AIO-Gym benchmarks, but they are not
+literal copies of the paper figures. The reference suite reuses the two phase
+tasks with explicit custom timing and setpoint overrides:
 
-- `pminus-reference-step`: the Fig. 10 P− experiment, 360 s;
-- `pplus-reference-step`: the Fig. 11 P+ experiment, 3600 s.
+- P− Fig. 10: `minimum-phase`, 360 s;
+- P+ Fig. 11: `nonminimum-phase`, 3600 s.
 
 Both apply the plotted 1 V step in `r1` at time zero. With the paper's
 `kc=0.5 V/cm` sensor gain this is represented as a 2 cm `h1` step. The initial
 states are exact nonlinear equilibria for the rounded paper parameters; the
-reported experimental operating points remain in task metadata.
+reported experimental operating points remain in the archived reference
+configuration files.
 
 ```bash
-aiogym-suite-benchmark --suite quadruple-paper-reference --episodes 1
+aiogym benchmark suite --suite quadruple-paper-reference --episodes 1
 ```
 
-This suite contains only the two paper-reference tasks and the paper's
+This suite contains only the two custom paper-reference runs and the paper's
 decentralized PI controller. Its control charts show the two controlled lower
 tank levels and two pump voltages, matching the four simulated signals in each
 paper figure rather than adding the two unmeasured upper-tank states.
@@ -209,7 +214,7 @@ independent 0.5 cm `h1` demand therefore tests offset, integral windup, slow
 response, and constraint handling close to the fundamental limit.
 
 ```bash
-aiogym-suite-benchmark --suite quadruple-zero-boundary --episodes 1
+aiogym benchmark suite --suite quadruple-zero-boundary --episodes 1
 ```
 
 ## Deterministic disturbance rejection
@@ -221,7 +226,7 @@ observe the changed disturbance values after they occur, and the exact schedule
 is recorded in benchmark artifacts.
 
 ```bash
-aiogym-suite-benchmark --suite quadruple-disturbance-rejection --episodes 1
+aiogym benchmark suite --suite quadruple-disturbance-rejection --episodes 1
 ```
 
 ## Acceptance tests

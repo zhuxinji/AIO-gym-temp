@@ -43,7 +43,6 @@ def _leaderboard(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
             "tracking_return": row.get("tracking_return"),
             "tracking_error_cost": row.get("tracking_error_cost"),
             "tracking_move_cost": row.get("tracking_move_cost"),
-            "tracking_steady_cost": row.get("tracking_steady_cost"),
             "tracking_mse": row.get("tracking_mse"),
             "tracking_iae": row.get("tracking_iae"),
             "constraint_violation_count": row.get("constraint_violation_count"),
@@ -70,7 +69,7 @@ def _sort_value(metric: str | None, value):
     if value is None:
         return float("inf")
     if metric in {
-        "tracking_cost", "tracking_error_cost", "tracking_move_cost", "tracking_steady_cost",
+        "tracking_cost", "tracking_error_cost", "tracking_move_cost",
         "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae", "tracking_overshoot",
         "tracking_settling_time", "constraint_violation_count",
         "constraint_violation_severity", "action_violation_count",
@@ -134,7 +133,7 @@ def _tracking_comparison_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[st
     for scenario, task in benchmark_cases:
         scenario_rows = [row for row in tracking_rows if _benchmark_case_key(row) == (scenario, task)]
         values = {
-            str(row.get("controller") or "controller"): _float_or_none(row.get("tracking_error_cost"))
+            str(row.get("controller") or "controller"): _float_or_none(row.get("tracking_cost"))
             for row in scenario_rows
         }
         runtime_seconds = {
@@ -149,27 +148,27 @@ def _tracking_comparison_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[st
             "scenario": scenario,
             "task": task,
             "best_controller": best_controller,
-            "best_tracking_error_cost": best_value,
+            "best_tracking_cost": best_value,
             "best_runtime_total_seconds": runtime_seconds.get(best_controller),
         }
         oracle_value = values.get("NMPC-oracle")
         row["oracle_gap_vs_best"] = None if oracle_value is None else oracle_value - best_value
         for controller in controllers:
-            row[f"{controller}_tracking_error_cost"] = values.get(controller)
+            row[f"{controller}_tracking_cost"] = values.get(controller)
             row[f"{controller}_runtime_total_seconds"] = runtime_seconds.get(controller)
         out.append(row)
     return out
 
 
 def _write_tracking_comparison_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
-    base = ["scenario", "task", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
+    base = ["scenario", "task", "best_controller", "best_tracking_cost", "best_runtime_total_seconds", "oracle_gap_vs_best"]
     controllers = []
     for row in rows:
         for key in row:
-            if key.endswith("_tracking_error_cost") and key not in {"best_tracking_error_cost"}:
-                controllers.append(key[: -len("_tracking_error_cost")])
+            if key.endswith("_tracking_cost") and key not in {"best_tracking_cost"}:
+                controllers.append(key[: -len("_tracking_cost")])
     controllers = list(dict.fromkeys(controllers))
-    columns = base + [column for controller in controllers for column in (f"{controller}_tracking_error_cost", f"{controller}_runtime_total_seconds")]
+    columns = base + [column for controller in controllers for column in (f"{controller}_tracking_cost", f"{controller}_runtime_total_seconds")]
     _write_summary_csv(path, rows, columns)
 
 
@@ -210,7 +209,7 @@ FULL_SUMMARY_COLUMNS = [
     "objective", "objective_source", "objective_status", "action_mode", "controller",
     "control_structure", "execution_status", "metric", "normalized_score", "profit", "production",
     "return", "track", "tracking_cost", "tracking_return", "tracking_error_cost",
-    "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "energy_kwh", "constraint",
+    "tracking_move_cost", "tracking_mse", "tracking_iae", "energy_kwh", "constraint",
     "constraint_violation_count", "constraint_violation_severity",
     "safety_margin_min",
     "runtime_seconds_per_step", "episodes", "seed_list",
@@ -223,7 +222,7 @@ OBJECTIVE_SUMMARY_COLUMNS = {
         "objective_source", "objective_status", "controller", "control_structure",
         "execution_status",
         "metric", "tracking_cost", "tracking_return", "tracking_error_cost",
-        "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "track", "normalized_score", "energy_kwh",
+        "tracking_move_cost", "tracking_mse", "tracking_iae", "track", "normalized_score", "energy_kwh",
         "constraint_violation_count", "constraint_violation_severity",
         "runtime_seconds_per_step", "episodes", "seed_list",
     ],
@@ -263,7 +262,7 @@ def _write_learning_curve_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> 
     preferred = [
         "step", "timesteps", "phase", "metric", "metric_value", "normalized_score", "profit",
         "return", "track", "tracking_cost", "tracking_return", "tracking_error_cost",
-        "tracking_move_cost", "tracking_steady_cost", "tracking_mse", "tracking_iae", "constraint_violation_count",
+        "tracking_move_cost", "tracking_mse", "tracking_iae", "constraint_violation_count",
         "constraint_violation_severity", "runtime_total_seconds",
     ]
     keys = list(dict.fromkeys(

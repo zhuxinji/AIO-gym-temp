@@ -6,8 +6,8 @@ Import these APIs from the top-level `aiogym` package unless noted otherwise.
 
 For terminology and current built-in coverage, see [Concepts](concepts.md) and
 the [Capability matrix](capabilities.md). The [Documentation index](index.md)
-links model cards, selected scenario case studies, validation records, and
-internal historical material.
+links canonical scenario documents, validation records, and internal historical
+material.
 
 ## Choose the right layer
 
@@ -17,7 +17,7 @@ internal historical material.
 | Inspect or simulate process equations | `aiogym.make_model(...)` | Scenario/model only |
 | Train or interact through Gymnasium | `aiogym.make_env(...)` | Scenario plus optional task and objective |
 | Inspect bundled experiments | `aiogym.list_tasks(...)`, `aiogym.load_task_profile(...)` | Task declarations |
-| Compare controllers on one experiment | `aiogym.run_benchmark(...)` or `aiogym benchmark run` | One scenario/task/objective protocol |
+| Compare controllers on one experiment | `aiogym.run_benchmark(...)` or `aiogym benchmark` | One scenario/task/objective protocol |
 | Run a published matrix of experiments | `aiogym benchmark suite` | Multiple resolved benchmark cases |
 
 The concepts are intentionally separate:
@@ -45,9 +45,7 @@ These functions return sorted tuples of canonical IDs. Scenario and controller
 results include runtime custom registrations. Task IDs use the complete
 `scenario/name` form; suite IDs are the built-in JSON names without `.json`.
 
-The older `SCENARIOS`, `list_task_profiles()`, `registered_controllers()`, and
-suite CLI `builtin_suites()` surfaces remain available for compatibility. New
-user code should prefer the four consistently named discovery functions.
+These four consistently named discovery functions are the supported catalog API.
 
 The unified CLI exposes the same catalog and groups the remaining workflows:
 
@@ -59,11 +57,9 @@ aiogym list controllers
 aiogym benchmark --help
 aiogym train --help
 aiogym artifacts --help
-aiogym model-cards --help
 ```
 
-Legacy console scripts remain compatibility aliases, so existing automation
-does not need to migrate immediately.
+The unified `aiogym` executable is the only installed console entry point.
 
 ## Models
 
@@ -123,13 +119,24 @@ The environment's `auto_events` option only controls generic automatically gener
 within-episode events. A named task can set it to `false` and still apply its own
 deterministic setpoint and disturbance schedule.
 
-The former `dynamic` input remains a deprecated compatibility alias. Supplying
-both names with different values fails instead of silently choosing one; new
-configuration and artifact metadata use only `auto_events`.
+`auto_events` is the only accepted field; removed names are rejected.
 
 Use `model_params={...}` when the numerical plant parameters should differ from
 the scenario defaults. Initial state, setpoints, disturbance schedules, and
 `control_dt` change the experiment without changing the underlying equations.
+Named-task setpoints can be replaced directly:
+
+```python
+env = aiogym.make_env(
+    "quadruple",
+    task="minimum-phase",
+    episode_steps=360,
+    initial_setpoint=[12.2629675195507, 12.783158403008972],
+    setpoint_schedule=[
+        {"at_step": 0, "values": [14.2629675195507, 12.783158403008972]}
+    ],
+)
+```
 
 ## Tasks
 
@@ -151,8 +158,7 @@ env = aiogym.make_env(
 
 Task files live under `aiogym/models/tasks/builtin/<scenario>/`. They are
 validated, versioned experiment declarations bound to model scenarios rather
-than executable model implementations. The former
-`aiogym.evaluation.task_profiles` import path remains a compatibility facade.
+than executable model implementations.
 
 ## Objective resolution
 
@@ -204,7 +210,7 @@ payload = aiogym.run_benchmark({
 The equivalent command-line workflow is:
 
 ```bash
-aiogym benchmark run \
+aiogym benchmark \
   --scenario cascade-recirculating \
   --task temperature-step \
   --controllers pid,mpc \
@@ -212,7 +218,9 @@ aiogym benchmark run \
   --artifact-dir runs/recirculating-temperature-step
 ```
 
-Use `aiogym benchmark run --help` for all runtime overrides.
+Use `aiogym benchmark --help` for named-task defaults and runtime
+overrides. `--setpoint-step STEP:VALUE1,VALUE2` is repeatable; providing it
+replaces the task's default schedule.
 
 The command writes the same standard artifact directory as `run_benchmark()` and
 the suite runner, including `benchmark.json`, structured config, metadata,
@@ -221,18 +229,7 @@ timestamped directory under `runs/` relative to the current working directory.
 Set `AIOGYM_RUNS_DIR` to change that shared default root. Explicit API and CLI
 paths such as `output_dir` and `--artifact-dir` always take precedence.
 
-For compatibility, `--out FILE.json` retains the former single-JSON contract and
-implies `--format legacy-json`. It can also be selected explicitly:
-
-```bash
-aiogym benchmark run \
-  --scenario cstr \
-  --controllers pid,mpc \
-  --format legacy-json \
-  --out runs/cstr_controllers.json
-```
-
-New automation should consume the standard artifact directory so it can use
+Automation should consume the standard artifact directory so it can use
 `aiogym artifacts check` and `aiogym artifacts report` directly.
 
 ## Benchmark suites
@@ -295,7 +292,7 @@ additional matrix:
   "cases": [
     {
       "scenario": "quadruple",
-      "task": "minimum-phase-classic",
+      "task": "minimum-phase",
       "objective": "tracking"
     },
     {
@@ -325,11 +322,11 @@ case, singular fields select one value while plural fields create a local axis:
 | Controller | `controllers` | `controller` or `controllers` |
 | Task | `task` | `task` |
 | Action mode | `action_mode` | `action_mode` |
-| Environment | direct environment keys or `environment` | direct environment keys or `environment` |
+| Environment | direct environment keys or `environment` | direct environment keys or `environment`, including `initial_setpoint` and `setpoint_schedule` |
 | Controller tuning | `controller_configs` | `controller_configs` |
 | Timing | `episode_steps`, `control_dt` | `episode_steps`, `control_dt` |
 
-The source format accepts both singular and plural case fields for compatibility.
+The source schema accepts singular and plural case fields for case expansion.
 After expansion, each canonical case always has one `scenario`, one task
 identity, one `objective`, one `controller`, one environment specification, and
 one seed list.
@@ -418,10 +415,9 @@ selected objective and record the internal choice as `resolved_reward_mode`.
 SB3 evaluation defaults to the training objective unless `--eval-objective` is
 provided explicitly.
 
-`--reward-mode economic|tracking|kpi` remains a deprecated compatibility alias.
-Supplying it together with a conflicting `--objective` fails instead of silently
-overriding either value. The low-level `AIOGymNativeEnv(reward_mode=...)`
-constructor remains available for framework integrations.
+Training commands accept `--objective`. The low-level
+`AIOGymNativeEnv(reward_mode=...)` constructor uses `reward_mode` to select its
+internal reward computation for framework integrations.
 
 ## Advanced resolved specifications
 

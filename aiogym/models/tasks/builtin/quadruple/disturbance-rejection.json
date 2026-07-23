@@ -6,6 +6,9 @@
   "description": "Deterministic recovery from common pump-capacity loss and outlet restriction at the P- operating point.",
   "default_objective": "robustness",
   "supported_objectives": ["tracking", "kpi", "robustness", "safety"],
+  "objectives": {
+    "tracking": {"tracking_q_y": 0.7, "tracking_r_move": 0.3}
+  },
   "environment": {
     "control_dt": 1.0,
     "episode_steps": 900,
@@ -16,6 +19,10 @@
     "randomize_plant": false,
     "plant_drift": false,
     "integral_obs": false,
+    "disturbance_obs": false,
+    "previous_action_obs": true,
+    "normalize_observations": true,
+    "tracking_error_obs": true,
     "terminate_on_runaway": false,
     "noise": false,
     "noise_pct": 0.01

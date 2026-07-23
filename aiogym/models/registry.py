@@ -3,7 +3,11 @@ import math
 from numbers import Real
 from typing import Mapping
 
-from .._internal.identifiers import internal_scenario_id, scenario_catalog_text
+from .._internal.identifiers import (
+    internal_scenario_id,
+    require_canonical_scenario_id,
+    scenario_catalog_text,
+)
 from .core import ProcessModelContract, _is_model_instance
 from .scenarios import (
     CascadeModel,
@@ -28,7 +32,6 @@ MODELS = {
     "crystallization": CrystallizationModel,
 }
 BUILTIN_MODELS = dict(MODELS)
-SCENARIOS = list(MODELS.keys())
 
 
 def gym_id_name(scenario, model_factory=None):
@@ -41,10 +44,6 @@ def gym_id_name(scenario, model_factory=None):
 
 def builtin_gym_ids():
     return {scenario: gym_id_name(scenario, factory) for scenario, factory in BUILTIN_MODELS.items()}
-
-
-def _refresh_scenarios():
-    SCENARIOS[:] = list(MODELS.keys())
 
 
 def validate_model_contract(model):
@@ -104,7 +103,6 @@ def register_model(name, model_factory, *, replace=False):
         MODELS[name] = model_factory
     else:
         raise TypeError("model_factory must be a model instance, class, or zero-argument factory")
-    _refresh_scenarios()
 
 
 def _validate_registered_name(name, model):
@@ -190,7 +188,6 @@ def unregister_model(name):
     if resolved in BUILTIN_MODELS:
         raise ValueError(f"built-in model '{name}' cannot be unregistered")
     MODELS.pop(resolved, None)
-    _refresh_scenarios()
 
 
 def make_model(scenario="cascade"):
@@ -199,6 +196,7 @@ def make_model(scenario="cascade"):
     if isinstance(scenario, type) or (callable(scenario) and not isinstance(scenario, str)):
         return validate_model_contract(scenario())
     requested = scenario
+    require_canonical_scenario_id(requested)
     scenario = internal_scenario_id(scenario)
     if scenario not in MODELS:
         available = scenario_catalog_text(tuple(MODELS))

@@ -6,9 +6,9 @@ from typing import Sequence
 
 import numpy as np
 
-from .._internal.serialization import jsonable as _jsonable
-from ..controllers import as_controller, build_context, validate_action
-from .aggregation import _aggregate_metric_keys, result_schema
+from ..._internal.serialization import jsonable as _jsonable
+from ...controllers import as_controller, build_context, validate_action
+from ..results import _aggregate_metric_keys, evaluate_task_acceptance, result_schema
 from .metadata import (
     _aggregate_controller_diagnostics,
     _controller_diagnostics,
@@ -18,18 +18,18 @@ from .metadata import (
     _model_metadata,
     _reproducibility_metadata,
 )
-from .metrics.economic import economic_step_metrics
-from .metrics.safety import action_bound_metrics as _action_bound_metrics
-from .metrics.safety import safety_step_metrics as _safety_step_metrics
-from .metrics.tracking import tracking_step_metrics as _tracking_step_metrics
-from .metric_catalog import (
+from ..metrics.economic import economic_step_metrics
+from ..metrics.safety import action_bound_metrics as _action_bound_metrics
+from ..metrics.safety import safety_step_metrics as _safety_step_metrics
+from ..metrics.tracking import tracking_step_metrics as _tracking_step_metrics
+from ..metric_catalog import (
     EVALUATION_SCHEMA_VERSION,
     metric_definitions,
     metric_direction,
     primary_metric_for_objective,
 )
-from .objective_specs import ObjectiveSpec, objective_spec
-from .protocols import BenchmarkProtocol, _empty_episode_totals
+from ..objective_specs import ObjectiveSpec, objective_spec
+from ..protocols import BenchmarkProtocol, _empty_episode_totals
 
 
 def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
@@ -108,7 +108,6 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
                 totals[key] += value
             for key in (
                 "tracking_cost", "tracking_return", "tracking_error_cost", "tracking_move_cost",
-                "tracking_steady_cost",
                 "tracking_mse", "tracking_iae", "tracking_ise", "tracking_itae",
             ):
                 totals[key] += tracking[key]
@@ -146,7 +145,7 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
     if protocol is not None:
         task_meta = protocol.metadata()["task_identity"]
     else:
-        from ..models.tasks import task_identity
+        from ...models.tasks import task_identity
 
         task_meta = task_identity(getattr(env, "task_profile", None))
     primary_metric = primary_metric_for_objective(objective)
@@ -206,8 +205,6 @@ def evaluate_controller(agent, env, episodes: int = 20, seed: int = 0,
     result["execution_status"] = (
         "degraded" if result["controller_status"] == "degraded" else "passed"
     )
-    from .task_acceptance import evaluate_task_acceptance
-
     acceptance = evaluate_task_acceptance(
         protocol.task if protocol is not None else getattr(env, "task_profile", None),
         result,

@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import importlib.util
 import json
 
 import pytest
 
 import aiogym
 from aiogym.cli import suite_benchmark
-from aiogym.cli.suite_benchmark import builtin_suites, load_suite
+from aiogym.cli.suite_benchmark import load_suite
 from aiogym.evaluation import finalize_benchmark_artifacts, resolve_protocol
 
 
@@ -18,43 +19,38 @@ def test_public_catalog_lists_current_canonical_ids():
     assert len(aiogym.list_scenarios()) == 8
 
     tasks = aiogym.list_tasks()
-    assert tasks == aiogym.list_task_profiles()
-    assert len(tasks) == 11
+    assert not hasattr(aiogym, "list_task_profiles")
+    assert len(tasks) == 9
     assert aiogym.list_tasks("cascade") == (
         "cascade/continuous-benchmark",
     )
     assert aiogym.list_tasks("cstr") == ()
-    assert aiogym.list_tasks("cascade-recirculating") == aiogym.list_tasks(
-        "cascade_recirculating"
-    )
+    with pytest.raises(ValueError, match="not canonical"):
+        aiogym.list_tasks("cascade_recirculating")
 
     suites = aiogym.list_suites()
-    assert suites == builtin_suites()
     assert len(suites) == 17
     assert "standard-baselines" in suites
 
-    assert aiogym.list_controllers() == aiogym.registered_controllers()
+    assert not hasattr(aiogym, "registered_controllers")
     assert aiogym.list_controllers() == (
         "mpc", "onnx", "oracle", "pid", "policy", "sb3",
     )
 
 
-def test_task_runtime_is_owned_by_models_with_evaluation_compatibility():
-    import aiogym.evaluation.task_profiles as compatibility
+def test_task_runtime_is_owned_by_models_without_evaluation_facade():
     import aiogym.models.tasks as model_tasks
     from aiogym.evaluation import evaluate_task_acceptance
 
     assert aiogym.load_task_profile is model_tasks.load_task_profile
-    assert compatibility.load_task_profile is model_tasks.load_task_profile
-    assert compatibility.resolve_environment_options is model_tasks.resolve_environment_options
+    assert importlib.util.find_spec("aiogym.evaluation.task_profiles") is None
     assert model_tasks.load_task_profile.__module__ == "aiogym.models.tasks.registry"
     assert model_tasks.validate_task_profile.__module__ == "aiogym.models.tasks.schema"
-    assert evaluate_task_acceptance.__module__ == "aiogym.evaluation.task_acceptance"
-    assert compatibility.evaluate_task_acceptance is evaluate_task_acceptance
+    assert evaluate_task_acceptance.__module__ == "aiogym.evaluation.results"
 
     builtin_dir = Path(model_tasks.__file__).with_name("builtin")
     assert builtin_dir.is_dir()
-    assert len(tuple(builtin_dir.glob("*/*.json"))) == 11
+    assert len(tuple(builtin_dir.glob("*/*.json"))) == 9
 
 
 def test_public_catalog_tracks_runtime_registrations():
@@ -73,24 +69,15 @@ def test_public_catalog_tracks_runtime_registrations():
     assert "catalog_test_controller" not in aiogym.list_controllers()
 
 
-def test_scenario_task_and_suite_aliases_resolve_to_canonical_ids():
-    snake_model = aiogym.make_model("cascade_recirculating")
-    kebab_model = aiogym.make_model("cascade-recirculating")
-    assert type(snake_model) is type(kebab_model)
-    assert snake_model.scenario == kebab_model.scenario == "cascade_recirculating"
-
-    snake_task = aiogym.load_task_profile(
-        "cascade_recirculating/commissioning"
-    )
-    kebab_task = aiogym.load_task_profile(
-        "cascade-recirculating/commissioning"
-    )
-    assert snake_task == kebab_task
-
-    assert load_suite("standard_baselines") == load_suite("standard-baselines")
-    assert resolve_protocol(
-        "cascade_recirculating", "tracking", {"task": "commissioning"}
-    ).scenario == "cascade-recirculating"
+def test_noncanonical_scenario_task_and_suite_ids_are_rejected():
+    with pytest.raises(ValueError, match="not canonical"):
+        aiogym.make_model("cascade_recirculating")
+    with pytest.raises(ValueError, match="not canonical"):
+        aiogym.load_task_profile("cascade_recirculating/commissioning")
+    with pytest.raises(FileNotFoundError, match="unknown suite ID"):
+        load_suite("standard_baselines")
+    with pytest.raises(ValueError, match="not canonical"):
+        resolve_protocol("cascade_recirculating", "tracking", {"task": "commissioning"})
 
 
 def test_builtin_suite_reuse_resolves_to_self_contained_declarations():
@@ -100,7 +87,7 @@ def test_builtin_suite_reuse_resolves_to_self_contained_declarations():
 
     assert inherited["controllers"] == ["pid", "mpc", "oracle"]
     assert inherited["cases"] == base["cases"]
-    assert quadruple["cases"][0]["task"] == "minimum-phase-classic"
+    assert quadruple["cases"][0]["task"] == "minimum-phase"
     assert quadruple["cases"][0]["controller_configs"]["pid"] == {
         "profile": "quadruple-minimum-phase-benchmark"
     }
@@ -253,17 +240,19 @@ def test_standard_artifacts_serialize_canonical_scenario_ids(tmp_path):
     finalize_benchmark_artifacts(tmp_path, payload)
 
     benchmark = json.loads((tmp_path / "benchmark.json").read_text())
-    model_card = json.loads((tmp_path / "metadata" / "model_card.json").read_text())
+    model_metadata = json.loads(
+        (tmp_path / "metadata" / "model_metadata.json").read_text()
+    )
     assert benchmark["scenario"] == "cascade-recirculating"
     assert benchmark["config"]["scenario"] == "cascade-recirculating"
     assert benchmark["benchmark_config"]["scenario"] == "cascade-recirculating"
-    assert model_card["scenario"] == "cascade-recirculating"
+    assert model_metadata["scenario"] == "cascade-recirculating"
 
 
 def test_unknown_ids_show_their_canonical_catalogs():
     with pytest.raises(
         ValueError,
-        match="available scenario IDs:.*cascade-recirculating.*alias: cascade_recirculating",
+        match="available scenario IDs:.*cascade-recirculating",
     ):
         aiogym.make_model("missing-scenario")
 

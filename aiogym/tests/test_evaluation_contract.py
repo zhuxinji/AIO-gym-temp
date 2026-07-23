@@ -7,7 +7,7 @@ def test_controller_evaluation_protocol():
                                        auto_events=False, randomize=False,
                                        randomize_setpoints=False, randomize_plant=False,
                                        plant_drift=False)
-    names = set(registered_controllers())
+    names = set(list_controllers())
     registry_ok = {"pid", "mpc", "oracle", "policy", "sb3", "onnx"}.issubset(names)
     expected_keys = {"name", "action_mode", "control_structure", "parameters", "scenarios"}
     controller_scenarios = {
@@ -189,11 +189,11 @@ def test_benchmark_config_and_report_schema():
     tracking_meta = protocols["tracking"].metadata()
     tracking_env_kwargs = protocols["tracking"].env_kwargs()
     protocol_ok = (
-        tracking_metrics[0] == "tracking_error_cost"
+        tracking_metrics[0] == "tracking_cost"
         and all(key.startswith("tracking_") for key in tracking_metrics)
         and "energy_kwh" not in tracking_metrics
         and "constraint_violation_count" not in tracking_metrics
-        and tracking_meta["primary_metric"] == "tracking_error_cost"
+        and tracking_meta["primary_metric"] == "tracking_cost"
         and tracking_meta["primary_metric_direction"] == "minimize"
         and tracking_meta["env_reward_mode"] == "tracking"
         and "reward_mode" not in tracking_meta
@@ -212,7 +212,7 @@ def test_benchmark_config_and_report_schema():
         and config_meta["controller"] == "pid"
         and config_meta["seed_list"] == [11, 12]
         and config_meta["episode_steps"] == 3
-        and config_meta["primary_metric"] == "tracking_error_cost"
+        and config_meta["primary_metric"] == "tracking_cost"
         and config_meta["primary_metric_direction"] == "minimize"
         and config_meta["protocol"]["env_reward_mode"] == "tracking"
         and "reward_mode" not in config_meta["protocol"]
@@ -229,7 +229,7 @@ def test_benchmark_config_and_report_schema():
     report = build_evaluation_report([result])
     report_ok = (
         {"tracking", "economic", "safety", "robustness"}.issubset(report)
-        and result["metric"] == "tracking_error_cost"
+        and result["metric"] == "tracking_cost"
         and result["metric_direction"] == "minimize"
         and report["tracking"][0]["controller"] == "PID"
         and "tracking_cost" in report["tracking"][0]
@@ -254,14 +254,10 @@ def test_kpi_tracking_setpoint_alignment():
     _, reward, _, _, info = env.step(np.full(env.action_space.shape[0], 0.5, np.float32))
     raw_level_err = abs(info["y"][0] - env.y_sp[0])
     raw_temp_err = abs(info["y"][1] - env.y_sp[1])
-    expected_error_cost = raw_level_err ** 2 + raw_temp_err ** 2
-    expected_cost = (
-        expected_error_cost
-        + info["tracking_move_cost"]
-        + info["tracking_steady_cost"]
-    )
     normalized_level_err = raw_level_err / (5.0 - 1.8)
     normalized_temp_err = raw_temp_err / (372.0 - 364.0)
+    expected_error_cost = normalized_level_err ** 2 + normalized_temp_err ** 2
+    expected_cost = expected_error_cost + info["tracking_move_cost"]
     mean_output_err = 0.5 * (normalized_temp_err + normalized_level_err)
     report = env.scorer.report()
     tracking = _tracking_step_metrics(info, {"y_sp": env.y_sp}, 0.0, env.control_dt, env)
@@ -335,7 +331,7 @@ def test_pure_tracking_reward_mode():
         and "pump_kw" not in info
         and info["constraint"] >= 0.0
     )
-    metric_ok = metric_for_reward_mode("tracking") == "return" and primary_metric_for_objective("tracking") == "tracking_error_cost"
+    metric_ok = metric_for_reward_mode("tracking") == "return" and primary_metric_for_objective("tracking") == "tracking_cost"
     check("Pure SP tracking reward excludes energy and constraints", pure_reward_ok and diagnostics_ok and metric_ok)
 
 
@@ -365,8 +361,14 @@ def test_setpoint_randomization_uses_model_bounds():
 def test_benchmark_suite_configs():
     """Named benchmark suites are data configs, not hidden script constants."""
     from aiogym.evaluation import plot_results
-    from aiogym.cli.suite_benchmark import SUMMARY_COLUMNS, artifact_dir_for, build_summary_table, effective_suite_config, load_suite
-    from aiogym.evaluation.artifacts import write_benchmark_artifacts
+    from aiogym.cli.suite_benchmark import load_suite
+    from aiogym.evaluation.suite import (
+        SUMMARY_COLUMNS,
+        artifact_dir_for,
+        build_summary_table,
+        effective_suite_config,
+    )
+    from aiogym.evaluation.artifact import write_benchmark_artifacts
 
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     cfg_dir = os.path.join(root, "aiogym", "evaluation", "suites")
@@ -549,7 +551,7 @@ def test_benchmark_suite_configs():
         report_path = os.path.join(tmpdir, "report.md")
         report_text = aiogym.render_benchmark_report(tmpdir, out_path=report_path)
         suite_artifacts_ok = True
-        for key in ("benchmark", "input_config", "benchmark_config", "model_cards_manifest",
+        for key in ("benchmark", "input_config", "benchmark_config", "model_metadata_manifest",
                     "rows", "summary_csv", "tracking_comparison", "leaderboard", "all_summary_csv", "all_leaderboard", "results", "report",
                     "training", "learning_curve", "learning_curve_csv"):
             suite_artifacts_ok = suite_artifacts_ok and os.path.exists(artifacts[key])
@@ -573,8 +575,8 @@ def test_benchmark_suite_configs():
         suite_artifacts_ok = suite_artifacts_ok and "tracking_cost" in tracking_header and "tracking_mse" in tracking_header and "tracking_iae" in tracking_header and "profit" not in tracking_header
         suite_artifacts_ok = suite_artifacts_ok and "profit" in economic_header and "tracking_mse" not in economic_header
         suite_artifacts_ok = suite_artifacts_ok and {"profit", "tracking_cost", "tracking_mse", "tracking_iae"}.issubset(all_header)
-        suite_artifacts_ok = suite_artifacts_ok and {"scenario", "best_controller", "best_tracking_error_cost", "best_runtime_total_seconds"}.issubset(set(tracking_comparison_header))
-        suite_artifacts_ok = suite_artifacts_ok and "PID_tracking_error_cost" in tracking_comparison_header and "PID_runtime_total_seconds" in tracking_comparison_header
+        suite_artifacts_ok = suite_artifacts_ok and {"scenario", "best_controller", "best_tracking_cost", "best_runtime_total_seconds"}.issubset(set(tracking_comparison_header))
+        suite_artifacts_ok = suite_artifacts_ok and "PID_tracking_cost" in tracking_comparison_header and "PID_runtime_total_seconds" in tracking_comparison_header
         suite_artifacts_ok = suite_artifacts_ok and "cstr" in tracking_comparison_rows and "hvac" in tracking_comparison_rows
         suite_artifacts_ok = suite_artifacts_ok and set(figures["summary_by_scenario"]) == {"tracking", "economic"}
         suite_artifacts_ok = suite_artifacts_ok and set(figures["summary_by_scenario"]["tracking"]) == {"cstr", "hvac"}
@@ -590,18 +592,24 @@ def test_benchmark_suite_configs():
             leaderboard_svg = f.read()
         with open(figures["tracking_comparison"]) as f:
             tracking_comparison_svg = f.read()
+        with open(figures["learning_curve"]) as f:
+            learning_curve_svg = f.read()
         suite_artifacts_ok = suite_artifacts_ok and all(
             label in tracking_summary_svg
-            for label in ("Tracking Cost", "Tracking Error Cost", "Move Cost", "Steady-input Cost")
+            for label in ("Tracking Cost", "Tracking Error Cost", "Move Cost")
         )
         suite_artifacts_ok = suite_artifacts_ok and "Normalized Tracking MSE" not in tracking_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "Normalized Tracking IAE" not in tracking_summary_svg and "Profit" not in tracking_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "Profit" in economic_summary_svg and "Tracking Cost" not in economic_summary_svg
         suite_artifacts_ok = suite_artifacts_ok and "cstr / tracking" in leaderboard_svg and "cstr / economic" in leaderboard_svg
         suite_artifacts_ok = suite_artifacts_ok and "tracking comparison" in tracking_comparison_svg
-        suite_artifacts_ok = suite_artifacts_ok and "Tracking error cost" in tracking_comparison_svg
+        suite_artifacts_ok = suite_artifacts_ok and "Normalized tracking cost" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and "Total runtime" in tracking_comparison_svg
         suite_artifacts_ok = suite_artifacts_ok and "Oracle gap" in tracking_comparison_svg
+        suite_artifacts_ok = suite_artifacts_ok and "tracking_cost" in learning_curve_svg
+        suite_artifacts_ok = suite_artifacts_ok and "reward" not in learning_curve_svg
+        suite_artifacts_ok = suite_artifacts_ok and "metric_value" not in learning_curve_svg
+        suite_artifacts_ok = suite_artifacts_ok and ">0</text>" in learning_curve_svg
         suite_artifacts_ok = suite_artifacts_ok and os.path.exists(report_path)
         suite_artifacts_ok = suite_artifacts_ok and "AIO-Gym Benchmark Report" in report_text
         suite_artifacts_ok = suite_artifacts_ok and "Tracking Comparison" in report_text
@@ -610,15 +618,15 @@ def test_benchmark_suite_configs():
         suite_artifacts_ok = suite_artifacts_ok and "training/learning_curve.json" in report_text
         check_result = aiogym.check_benchmark_artifacts(tmpdir)
         suite_artifacts_ok = suite_artifacts_ok and check_result["ok"]
-        with open(artifacts["model_cards_manifest"]) as f:
+        with open(artifacts["model_metadata_manifest"]) as f:
             manifest = json.load(f)
         suite_artifacts_ok = suite_artifacts_ok and set(manifest["scenarios"]) == {"cstr", "hvac"}
-        stale_card = os.path.join(tmpdir, "metadata", "model_cards", "cascade.json")
+        stale_card = os.path.join(tmpdir, "metadata", "models", "cascade.json")
         with open(stale_card, "w") as f:
             json.dump({"scenario": "cascade"}, f)
         stale_result = aiogym.check_benchmark_artifacts(tmpdir)
         suite_artifacts_ok = suite_artifacts_ok and not stale_result["ok"]
-        suite_artifacts_ok = suite_artifacts_ok and any(row["name"] == "stale_model_cards" for row in stale_result["failed"])
+        suite_artifacts_ok = suite_artifacts_ok and any(row["name"] == "stale_model_metadata" for row in stale_result["failed"])
         single_payload = {
             "benchmark": "public_benchmark",
             "scenario": "cstr",
@@ -629,8 +637,8 @@ def test_benchmark_suite_configs():
             "report": {},
         }
         single_artifacts = write_benchmark_artifacts(tmpdir, single_payload)
-        stale_hvac_card = os.path.join(tmpdir, "metadata", "model_cards", "hvac.json")
-        suite_artifacts_ok = suite_artifacts_ok and os.path.exists(single_artifacts["model_card"])
+        stale_hvac_card = os.path.join(tmpdir, "metadata", "models", "hvac.json")
+        suite_artifacts_ok = suite_artifacts_ok and os.path.exists(single_artifacts["model_metadata"])
         suite_artifacts_ok = suite_artifacts_ok and not os.path.exists(stale_hvac_card)
 
     check("benchmark suite configs declare controller permissions", configs_ok and summary_ok and suite_artifacts_ok)

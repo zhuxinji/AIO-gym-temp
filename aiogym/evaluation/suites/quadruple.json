@@ -1,5 +1,5 @@
 {
-  "description": "All formal quadruple-tank control tasks, each evaluated with PID, MPC, and NMPC Oracle under task-specific profiles and separate rankings.",
+  "description": "The four formal quadruple-tank control tasks, each evaluated with PID, MPC, and NMPC Oracle under task-specific profiles and separate rankings.",
   "scenarios": ["quadruple"],
   "objectives": ["tracking", "robustness"],
   "controllers": ["pid", "mpc", "oracle"],
@@ -7,8 +7,6 @@
   "cases": [
     {"case_ref": "quadruple/minimum-phase"},
     {"case_ref": "quadruple/nonminimum-phase"},
-    {"case_ref": "quadruple/pminus-reference"},
-    {"case_ref": "quadruple/pplus-reference"},
     {"case_ref": "quadruple/zero-boundary"},
     {"case_ref": "quadruple/disturbance-rejection"}
   ]

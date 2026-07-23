@@ -1,6 +1,6 @@
 # PDF-derived recirculating heated-tank cascade
 
-`cascade_recirculating` is the closed-loop retrofit scenario derived from the
+`cascade-recirculating` is the closed-loop retrofit scenario derived from the
 design proposal `三级水箱加热系统.pdf`. It is separate from the historical
 open `cascade` benchmark because it has a different mass-flow topology, four
 instead of seven actuators, one instead of three heaters, passive overflow
@@ -12,7 +12,7 @@ returns, and no product-flow economics.
 import aiogym
 
 env = aiogym.make_env(
-    "cascade_recirculating",
+    "cascade-recirculating",
     task="commissioning",
     objective="tracking",
     seed=7,
@@ -44,22 +44,21 @@ Use the single benchmark when developing or comparing controllers on one fixed
 experiment. Omitting `--objective` uses the selected task's default:
 
 ```bash
-aiogym-single-benchmark \
-  --scenario cascade_recirculating \
+aiogym benchmark \
+  --scenario cascade-recirculating \
   --task temperature-step \
   --controllers pid,mpc \
   --episodes 3 \
-  --save-rollouts \
-  --out runs/cascade-recirculating-temperature-step.json
+  --save-rollouts
 ```
 
 This command compares both controllers only on
-`(cascade_recirculating, temperature-step, tracking)`.
+`(cascade-recirculating, temperature-step, tracking)`.
 
 Use the built-in suite for a formal multi-task comparison:
 
 ```bash
-aiogym-suite-benchmark \
+aiogym benchmark suite \
   --suite cascade-recirculating \
   --episodes 3
 ```

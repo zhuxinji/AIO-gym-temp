@@ -1,7 +1,8 @@
 # Task profiles
 
 Task profiles declare scenario-specific timing and reserve stable sections for
-initial conditions, setpoints, disturbances, constraints, operation, and acceptance rules.
+initial conditions, setpoints, disturbances, constraints, operation, objective
+options, observation semantics, and acceptance rules.
 They are opt-in, versioned inputs rather than hidden environment defaults.
 Schema and discovery APIs are provided by `aiogym.models.tasks`; evaluation
 only consumes resolved tasks and evaluates declared acceptance thresholds.
@@ -12,7 +13,7 @@ advances through the scenario's differential equations. A reproducible task can
 therefore set `auto_events: false` while declaring deterministic changes under
 `setpoints.schedule` or `disturbances`.
 
-The former `dynamic` field is accepted as a deprecated compatibility alias.
+`auto_events` is the only accepted field for automatic event generation.
 
 Tasks may declare `default_objective` and `supported_objectives`. Objective
 resolution uses runtime/API override, case config, suite config, then the task
@@ -23,7 +24,11 @@ Direct environments keep their own documented interactive defaults. Named task
 profiles represent reproducible experiments and should record their benchmark
 source explicitly.
 
-`quadruple/minimum-phase-classic` is the first reference-derived task. It uses
+The quadruple tasks own their normalized tracking weights and learned-policy
+observation contract. Runtime and CLI values are optional overrides; omitted
+values resolve from the task before falling back to the global defaults.
+
+`quadruple/minimum-phase` is the first reference-derived task. It uses
 the minimum-phase Johansson configuration, an exact nonlinear equilibrium, and
 two deterministic lower-tank setpoint moves.
 
@@ -43,7 +48,7 @@ uses an assumed `4.0e-4 m3/s` throughput target and
 minimum flow for economic benchmarking. This value is a reproducible benchmark
 assumption, not a device rating or plant-validated operating limit.
 
-`cascade_recirculating` is a separate closed-loop hardware-design scenario. Its
+`cascade-recirculating` is a separate closed-loop hardware-design scenario. Its
 `commissioning`, `temperature-step`, `disturbance-rejection`, and
 `safety-recovery` tasks support tracking/KPI/robustness/safety objectives only.
 They deliberately do not inherit `cascade` production economics because the PDF

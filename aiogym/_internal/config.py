@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import warnings
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -10,22 +9,23 @@ from typing import Any, Mapping, Sequence
 PROTOCOL_KEYS = frozenset({
     "objective",
     "env_reward_mode",
-    "reward_mode",
     "action_mode",
     "control_dt",
     "episode_steps",
     "task",
     "auto_events",
-    "dynamic",
     "randomize",
     "randomize_setpoints",
     "randomize_plant",
     "plant_drift",
     "integral_obs",
+    "disturbance_obs",
+    "previous_action_obs",
+    "normalize_observations",
+    "tracking_error_obs",
     "terminate_on_runaway",
     "tracking_q_y",
     "tracking_r_move",
-    "tracking_r_steady",
     "noise",
     "noise_pct",
     "model_params",
@@ -34,50 +34,16 @@ PROTOCOL_KEYS = frozenset({
 
 def resolve_auto_events(
     auto_events: bool | None = None,
-    dynamic: bool | None = None,
     *,
     default: bool | None = None,
-    warn_legacy: bool = False,
 ) -> bool | None:
-    """Resolve the public automatic-event flag and its deprecated alias."""
+    """Validate and resolve the automatic-event flag."""
 
-    for name, value in (("auto_events", auto_events), ("dynamic", dynamic)):
-        if value is not None and not isinstance(value, bool):
-            raise TypeError(f"{name} must be a boolean")
-    if auto_events is not None and dynamic is not None and auto_events != dynamic:
-        raise ValueError(
-            f"auto_events {auto_events!r} conflicts with deprecated dynamic {dynamic!r}"
-        )
-    if warn_legacy and dynamic is not None:
-        warnings.warn(
-            "dynamic is deprecated for automatic event generation; use auto_events instead",
-            FutureWarning,
-            stacklevel=2,
-        )
+    if auto_events is not None and not isinstance(auto_events, bool):
+        raise TypeError("auto_events must be a boolean")
     if auto_events is not None:
         return auto_events
-    if dynamic is not None:
-        return dynamic
     return default
-
-
-def canonicalize_auto_events(
-    data: Mapping[str, Any],
-    *,
-    warn_legacy: bool = False,
-) -> dict[str, Any]:
-    """Return a mapping using only the canonical ``auto_events`` field."""
-
-    result = dict(data)
-    if "auto_events" not in result and "dynamic" not in result:
-        return result
-    result["auto_events"] = resolve_auto_events(
-        result.get("auto_events"),
-        result.get("dynamic"),
-        warn_legacy=warn_legacy,
-    )
-    result.pop("dynamic", None)
-    return result
 
 
 def load_config(config: str | Path | Mapping[str, Any] | None) -> dict[str, Any]:
@@ -121,9 +87,8 @@ def protocol_data(data: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def protocol_env_overrides(data: Mapping[str, Any]) -> dict[str, Any]:
-    overrides = {
+    return {
         key: value
         for key, value in data.items()
-        if key not in {"objective", "reward_mode", "env_reward_mode"}
+        if key not in {"objective", "env_reward_mode"}
     }
-    return canonicalize_auto_events(overrides)

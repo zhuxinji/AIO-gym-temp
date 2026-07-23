@@ -28,11 +28,10 @@ METRIC_DEFINITIONS = {
     "runtime_seconds": "wall-clock seconds spent evaluating one episode",
     "runtime_total_seconds": "total wall-clock seconds spent evaluating all episodes",
     "runtime_seconds_per_step": "wall-clock seconds per environment control step",
-    "tracking_cost": "cumulative tracking cost: raw squared setpoint error plus physical-input move and nominal steady-input deviation penalties",
+    "tracking_cost": "cumulative dimensionless tracking cost: weighted normalized squared output error plus weighted normalized squared input move, using the protocol Q and R",
     "tracking_return": "negative cumulative tracking_cost, matching the tracking reward returned by the environment",
-    "tracking_error_cost": "cumulative raw squared setpoint-tracking error over all control steps and tracked outputs",
-    "tracking_move_cost": "cumulative squared control move in physical actuator units",
-    "tracking_steady_cost": "cumulative squared deviation from the model-resolved nominal steady input in physical actuator units; zero when no resolver is available",
+    "tracking_error_cost": "cumulative squared setpoint-tracking error normalized by each controlled-output range and weighted by the protocol Q",
+    "tracking_move_cost": "cumulative squared control move normalized by each actuator range and weighted by the protocol R",
     "tracking_mse": "mean squared raw tracking error over time and tracked outputs",
     "tracking_iae": "integral absolute raw tracking error",
     "tracking_ise": "integral squared raw tracking error",
@@ -58,8 +57,8 @@ METRIC_DEFINITIONS = {
 
 PROTOCOL_METRICS = {
     "tracking": (
-        "tracking_error_cost", "tracking_cost", "tracking_return", "tracking_move_cost",
-        "tracking_steady_cost", "tracking_mse", "tracking_iae", "tracking_ise",
+        "tracking_cost", "tracking_error_cost", "tracking_return", "tracking_move_cost",
+        "tracking_mse", "tracking_iae", "tracking_ise",
         "tracking_itae", "tracking_overshoot", "tracking_settling_time",
     ),
     "economic": (
@@ -90,7 +89,7 @@ PROTOCOL_METRICS = {
 }
 
 PRIMARY_METRICS = {
-    "tracking": "tracking_error_cost",
+    "tracking": "tracking_cost",
     "economic": "profit",
     "kpi": "normalized_score",
     "robustness": "normalized_score",
@@ -99,7 +98,7 @@ PRIMARY_METRICS = {
 
 METRIC_DIRECTIONS = {
     "tracking_cost": "minimize", "tracking_error_cost": "minimize",
-    "tracking_move_cost": "minimize", "tracking_steady_cost": "minimize",
+    "tracking_move_cost": "minimize",
     "tracking_return": "maximize", "tracking_mse": "minimize",
     "tracking_iae": "minimize", "tracking_ise": "minimize",
     "tracking_itae": "minimize", "tracking_overshoot": "minimize",

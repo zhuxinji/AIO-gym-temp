@@ -27,27 +27,26 @@ class EnvironmentSpec:
     action_mode: str = "actuator"
     control_dt: float = 0.5
     episode_steps: int = 400
+    initial_setpoint: Any = None
+    setpoint_schedule: Any = None
     auto_events: bool | None = None
-    dynamic: bool | None = None
     randomize: bool = False
     randomize_setpoints: bool = False
     randomize_plant: bool = False
     plant_drift: bool = False
     integral_obs: bool = False
+    disturbance_obs: bool = True
+    previous_action_obs: bool = False
+    normalize_observations: bool = False
+    tracking_error_obs: bool = False
     terminate_on_runaway: bool = False
     noise: bool = False
     noise_pct: float = 0.01
     model_params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        auto_events = resolve_auto_events(
-            self.auto_events,
-            self.dynamic,
-            default=False,
-            warn_legacy=self.dynamic is not None,
-        )
+        auto_events = resolve_auto_events(self.auto_events, default=False)
         object.__setattr__(self, "auto_events", auto_events)
-        object.__setattr__(self, "dynamic", auto_events)
 
     @classmethod
     def from_protocol(cls, protocol: BenchmarkProtocol) -> "EnvironmentSpec":
@@ -57,12 +56,18 @@ class EnvironmentSpec:
             action_mode=str(protocol.action_mode),
             control_dt=float(protocol.control_dt),
             episode_steps=int(protocol.episode_steps),
+            initial_setpoint=protocol.initial_setpoint,
+            setpoint_schedule=protocol.setpoint_schedule,
             auto_events=bool(protocol.auto_events),
             randomize=bool(protocol.randomize),
             randomize_setpoints=bool(protocol.randomize_setpoints),
             randomize_plant=bool(protocol.randomize_plant),
             plant_drift=bool(protocol.plant_drift),
             integral_obs=bool(protocol.integral_obs),
+            disturbance_obs=protocol.disturbance_obs,
+            previous_action_obs=protocol.previous_action_obs,
+            normalize_observations=protocol.normalize_observations,
+            tracking_error_obs=protocol.tracking_error_obs,
             terminate_on_runaway=bool(protocol.terminate_on_runaway),
             noise=bool(protocol.noise),
             noise_pct=float(protocol.noise_pct),
@@ -72,7 +77,6 @@ class EnvironmentSpec:
     def env_kwargs(self, objective: ObjectiveSpec) -> dict[str, Any]:
         data = asdict(self)
         data.pop("scenario")
-        data.pop("dynamic")
         data["reward_mode"] = objective.reward_mode
         data.update(dict(objective.reward_options))
         return data
@@ -84,7 +88,6 @@ class EnvironmentSpec:
 
     def metadata(self) -> dict[str, Any]:
         data = asdict(self)
-        data.pop("dynamic")
         return _jsonable(data)
 
 
@@ -136,6 +139,7 @@ class BenchmarkCase:
         from ..models.tasks import task_identity
 
         task_meta = task_identity(self.environment.task)
+        protocol_meta = self.protocol.metadata() if self.protocol is not None else None
         metrics = PROTOCOL_METRICS.get(self.objective.name, ())
         primary_metric = self.objective.primary_metric
         return {
@@ -156,7 +160,7 @@ class BenchmarkCase:
             "primary_metric": primary_metric,
             "primary_metric_direction": metric_direction(primary_metric),
             "episode_steps": self.environment.episode_steps,
-            "protocol": self.protocol.metadata() if self.protocol is not None else None,
+            "protocol": protocol_meta,
             "metric_definitions": {
                 key: METRIC_DEFINITIONS[key]
                 for key in metrics

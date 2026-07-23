@@ -6,8 +6,8 @@ import subprocess
 
 import numpy as np
 
-from .._internal.serialization import jsonable as _jsonable
-from .metric_catalog import EVALUATION_SCHEMA_VERSION
+from ..._internal.serialization import jsonable as _jsonable
+from ..metric_catalog import EVALUATION_SCHEMA_VERSION
 
 
 def _env_metadata(env):

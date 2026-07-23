@@ -2,11 +2,12 @@
 
 from .registry import (
     configure_model_for_task,
-    list_task_profiles,
+    list_tasks,
     load_task_profile,
     resolve_environment_options,
     task_environment,
     task_identity,
+    task_objective_options,
     task_operation,
 )
 from .schema import (
@@ -23,11 +24,12 @@ __all__ = [
     "TASK_OPERATION_FIELDS",
     "TASK_PROFILE_SCHEMA_VERSION",
     "configure_model_for_task",
-    "list_task_profiles",
+    "list_tasks",
     "load_task_profile",
     "resolve_environment_options",
     "task_environment",
     "task_identity",
+    "task_objective_options",
     "task_operation",
     "validate_task_profile",
 ]
