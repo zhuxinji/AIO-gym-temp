@@ -224,11 +224,9 @@ task:
 aiogym benchmark suite --suite quadruple --episodes 1
 ```
 
-Run only the paper-reference decentralized-PI reproductions, or run the
-zero-boundary and deterministic-disturbance subsets:
+Run the zero-boundary or deterministic-disturbance subsets:
 
 ```bash
-aiogym benchmark suite --suite quadruple-paper-reference --episodes 1
 aiogym benchmark suite --suite quadruple-zero-boundary --episodes 1
 aiogym benchmark suite --suite quadruple-disturbance-rejection --episodes 1
 ```

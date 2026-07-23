@@ -477,37 +477,6 @@ def test_cascade_recirculating_suite_uses_formal_tasks_and_task_objectives():
     assert "legacy-default" not in by_task
 
 
-def test_quadruple_paper_reference_suite_contains_only_paper_pi_cases():
-    from aiogym.cli.suite_benchmark import build_cases
-
-    args = SimpleNamespace(
-        suite="quadruple-paper-reference",
-        scenarios=None,
-        objectives=None,
-        controllers=None,
-        seed_list=None,
-        seed=7,
-        episodes=1,
-        episode_steps=None,
-        control_dt=None,
-        sb3_path=None,
-        sb3_algo="sac",
-        onnx_path=None,
-    )
-    _, cases = build_cases(args)
-    assert [(case["task"], case["controller"]) for case in cases] == [
-        ("minimum-phase", "pid"),
-        ("nonminimum-phase", "pid"),
-    ]
-    assert [case["protocol"].episode_steps for case in cases] == [360, 3600]
-    assert [case["controller_config"]["profile"] for case in cases] == [
-        "quadruple-minimum-phase",
-        "quadruple-nonminimum-phase",
-    ]
-    assert "quadruple" in aiogym.list_suites()
-    assert "quadruple-all" not in aiogym.list_suites()
-
-
 def test_single_benchmark_passes_oracle_specific_profile():
     from aiogym.cli.single_benchmark import controller_specs
 
@@ -659,7 +628,7 @@ def test_summary_bars_preserve_small_nonzero_value_labels(tmp_path):
     assert ">0.00</text>" not in svg
 
 
-def test_quadruple_paper_reference_plot_uses_four_paper_signals(tmp_path):
+def test_quadruple_tracking_plot_uses_controlled_levels_and_pump_signals(tmp_path):
     from aiogym.evaluation.artifact.svg import plot_tracking_control
 
     rollout = {
@@ -679,7 +648,7 @@ def test_quadruple_paper_reference_plot_uses_four_paper_signals(tmp_path):
             },
         ],
     }
-    path = tmp_path / "paper-reference.svg"
+    path = tmp_path / "quadruple-tracking.svg"
     plot_tracking_control(
         [rollout], path, "quadruple", task="minimum-phase"
     )

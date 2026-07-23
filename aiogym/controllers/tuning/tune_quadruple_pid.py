@@ -41,7 +41,7 @@ FAMILIES = {
     },
     "disturbance-rejection": {
         "tasks": [("disturbance-rejection", "robustness")],
-        "baseline_profile": "quadruple-minimum-phase",
+        "baseline_profile": "quadruple-disturbance-rejection",
         "bias": 0.3,
         "kp_bounds": (0.01, 0.5),
         "ki_bounds": (0.0001, 0.05),

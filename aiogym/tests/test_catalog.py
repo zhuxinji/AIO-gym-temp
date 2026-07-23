@@ -29,7 +29,8 @@ def test_public_catalog_lists_current_canonical_ids():
         aiogym.list_tasks("cascade_recirculating")
 
     suites = aiogym.list_suites()
-    assert len(suites) == 17
+    assert len(suites) == 16
+    assert "quadruple-paper-reference" not in suites
     assert "standard-baselines" in suites
 
     assert not hasattr(aiogym, "registered_controllers")

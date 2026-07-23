@@ -135,7 +135,7 @@ def test_nonminimum_phase_task_has_rhp_zero_and_matched_controller_profile():
         "pid",
         model=env.model,
         scenario="quadruple",
-        config={"profile": "quadruple-nonminimum-phase"},
+        config={"profile": "quadruple-nonminimum-phase-benchmark"},
     )
     nominal_action = controller.compute(
         env.model.measurement(env.integ.x, env._env()), {"y_sp": env.y_sp}, 1.0
@@ -401,7 +401,7 @@ def test_oracle_replays_the_optimized_plan_between_periodic_solves(monkeypatch):
         ),
     ],
 )
-def test_paper_reference_steps_are_active_in_initial_context(
+def test_custom_reference_steps_are_active_in_initial_context(
     task, horizon, phase, initial_action, setpoint
 ):
     protocol = aiogym.BenchmarkProtocol.tracking(
